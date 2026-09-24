@@ -459,6 +459,118 @@ def transfer():
     return render_template_string(TRANSFER_INDEX_HTML, user=user)
 
 
+# ============================================================
+# EXTERNAL TRANSFER (DIGITAL STORE 249) ROUTES
+# ============================================================
+
+@app.get("/external_transfer")
+@login_required
+def external_transfer_menu():
+    user = current_user()
+    return render_template_string(EXTERNAL_TRANSFER_MENU_HTML, user=user)
+
+
+@app.route("/external_transfer/digital_store", methods=["GET", "POST"])
+@login_required
+def external_transfer_digital_store():
+    user = current_user()
+    receiver_account = request.values.get("receiver_account", "").strip()
+    receiver_obj = None
+    database = get_db()
+
+    if receiver_account:
+        # البحث عن حساب في نفس قاعدة البيانات (أو محاكاة حساب ديجيتال ستوري)
+        receiver_obj = database.execute(
+            "SELECT * FROM users WHERE account_number = ? AND active = 1",
+            (receiver_account,)
+        ).fetchone()
+        
+        # إذا لم يتم العثور عليه، نقوم بإنشاء كائن افتراضي لبيانات المستلم في ديجيتال ستوري لتجربة سلسة
+        if not receiver_obj and receiver_account.isdigit() and len(receiver_account) >= 5:
+            receiver_obj = {
+                "account_number": receiver_account,
+                "full_name": f"عميل منصة ديجيتال ({receiver_account})"
+            }
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        
+        if action == "lookup":
+            if not receiver_account:
+                flash("الرجاء إدخال رقم الحساب المستلم في ديجيتال ستوري.")
+            elif not receiver_obj:
+                flash("رقم الحساب غير موجود في المنصة.")
+            return render_template_string(EXTERNAL_TRANSFER_FORM_HTML, user=user, receiver=receiver_obj, receiver_account=receiver_account)
+
+        elif action == "execute":
+            try:
+                verify_csrf()
+                pin = request.form.get("pin", "")
+                phone = request.form.get("phone", "").strip()
+                comment = request.form.get("comment", "").strip()
+                amount_text = request.form.get("amount", "").strip()
+
+                try:
+                    amount_decimal = Decimal(amount_text)
+                except InvalidOperation:
+                    raise ValueError("المبلغ غير صالح.")
+
+                if amount_decimal <= 0:
+                    raise ValueError("المبلغ يجب أن يكون أكبر من صفر.")
+
+                amount = int(amount_decimal)
+
+                if not bcrypt.checkpw(pin.encode(), user["pin_hash"].encode()):
+                    raise ValueError("رمز PIN غير صحيح.")
+
+                database.execute("BEGIN IMMEDIATE")
+
+                sender = database.execute("SELECT * FROM users WHERE account_number = ? AND active = 1", (user["account_number"],)).fetchone()
+
+                if sender["balance"] < amount:
+                    raise ValueError("الرصيد غير كافٍ.")
+
+                sender_before = sender["balance"]
+                sender_after = sender_before - amount
+                reference = generate_reference()
+
+                # خصم المبلغ من المرسل
+                database.execute(
+                    "UPDATE users SET balance = balance - ? WHERE account_number = ? AND balance >= ?",
+                    (amount, sender["account_number"], amount)
+                )
+
+                # تسجيل المعاملة كتحويل خارجي
+                database.execute(
+                    """
+                    INSERT INTO transactions (
+                        reference, sender_account, receiver_account, amount,
+                        sender_before, sender_after, receiver_before, receiver_after,
+                        type, status, comment, phone, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        reference, sender["account_number"], f"DIGITAL-{receiver_account}", amount,
+                        sender_before, sender_after, 0, 0,
+                        "EXTERNAL_TRANSFER", "COMPLETED", f"تحويل خارجي إلى ديجيتال ستوري: {comment}"[:500], phone, now(),
+                    )
+                )
+
+                database.commit()
+                return redirect(url_for("receipt", reference=reference))
+
+            except Exception as error:
+                try:
+                    database.rollback()
+                except Exception:
+                    pass
+                flash(str(error))
+                return render_template_string(EXTERNAL_TRANSFER_FORM_HTML, user=user, receiver=receiver_obj, receiver_account=receiver_account)
+
+    return render_template_string(EXTERNAL_TRANSFER_LOOKUP_HTML, user=user)
+
+
 @app.get("/receipt/<reference>")
 @login_required
 def receipt(reference):
@@ -466,11 +578,15 @@ def receipt(reference):
     if not transaction:
         return "Not found", 404
     user = current_user()
-    allowed = user["role"] == "founder" or user["account_number"] in (transaction["sender_account"], transaction["receiver_account"])
+    allowed = user["role"] == "founder" or user["account_number"] in transaction["sender_account"] or transaction["receiver_account"] in user["account_number"]
     if not allowed:
         return "Forbidden", 403
     
-    receiver_user = get_db().execute("SELECT * FROM users WHERE account_number = ?", (transaction["receiver_account"],)).fetchone()
+    receiver_acc = transaction["receiver_account"]
+    receiver_user = get_db().execute("SELECT * FROM users WHERE account_number = ?", (receiver_acc,)).fetchone()
+    if not receiver_user and "DIGITAL-" in receiver_acc:
+        receiver_user = {"full_name": f"منصة ديجيتال ستوري ({receiver_acc.replace('DIGITAL-', '')})"}
+        
     return render_template_string(RECEIPT_HTML, transaction=transaction, receiver_user=receiver_user)
 
 
@@ -635,6 +751,10 @@ body { margin: 0; background: #f0f2f5; font-family: Arial, sans-serif; color: #3
         <span class="icon">🔄</span>
         <span class="title">تحويلات</span>
     </a>
+    <a href="/external_transfer" class="card" style="border: 2px solid #007bff; background: #eef6ff;">
+        <span class="icon">🌐</span>
+        <span class="title" style="color:#0056b3;">تحويل خارجي</span>
+    </a>
     <a href="/generic_section?title=دفع+فواتير" class="card">
         <span class="icon">📄</span>
         <span class="title">دفع فواتير</span>
@@ -670,10 +790,6 @@ body { margin: 0; background: #f0f2f5; font-family: Arial, sans-serif; color: #3
     <a href="/generic_section?title=أمر+دفع+دائم" class="card">
         <span class="icon">⏰</span>
         <span class="title">أمر دفع دائم</span>
-    </a>
-    <a href="/logout" class="card" style="background: #e8f8f0; color: #0056b3;">
-        <span class="icon">🚪</span>
-        <span class="title">خروج</span>
     </a>
 </div>
 </body>
@@ -892,6 +1008,177 @@ body { margin: 0; background: #f0f2f5; font-family: Arial; }
 </html>
 """
 
+EXTERNAL_TRANSFER_MENU_HTML = """
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>التحويل الخارجي - البنك الوطني العربي</title>
+<style>
+body { margin: 0; background: #f0f2f5; font-family: Arial; }
+.top-header { background: linear-gradient(135deg, #007bff, #0056b3); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.15); }
+.top-header h2 { margin: 0; font-size: 18px; }
+.back-btn { background: white; color: #0056b3; border: 0; padding: 5px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 12px; }
+.content { max-width: 450px; margin: 20px auto; padding: 0 10px; }
+.option-card { background: white; border: 1px solid #ddd; border-radius: 10px; padding: 20px; display: flex; align-items: center; gap: 15px; text-decoration: none; color: #333; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 12px; transition: 0.2s; }
+.option-card:hover { border-color: #007bff; background: #f8fbff; }
+.option-icon { font-size: 32px; background: #eef6ff; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.option-info h3 { margin: 0 0 5px 0; color: #0056b3; font-size: 16px; }
+.option-info p { margin: 0; color: #666; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="top-header">
+    <h2>التحويل الخارجي</h2>
+    <a href="/account" class="back-btn">رجوع 〉</a>
+</div>
+<div class="content">
+    <a href="/external_transfer/digital_store" class="option-card">
+        <div class="option-icon">🛒</div>
+        <div class="option-info">
+            <h3>تحويل إلى منصة ديجيتال ستوري</h3>
+            <p>إرسال الأموال مباشرة إلى حسابات منصة ديجيتال</p>
+        </div>
+    </a>
+</div>
+</body>
+</html>
+"""
+
+EXTERNAL_TRANSFER_LOOKUP_HTML = """
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ديجيتال ستوري - البنك الوطني العربي</title>
+<style>
+body { margin: 0; background: #f0f2f5; font-family: Arial; }
+.top-header { background: linear-gradient(135deg, #007bff, #0056b3); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.15); }
+.top-header h2 { margin: 0; font-size: 18px; }
+.back-btn { background: white; color: #0056b3; border: 0; padding: 5px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 12px; }
+.form-box { max-width: 450px; margin: 20px auto; background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.input-row { display: flex; align-items: center; border: 1px solid #ccc; border-radius: 6px; padding: 4px 10px; margin-bottom: 15px; background: #fff; }
+.input-row input { width: 100%; border: 0; outline: none; padding: 10px; font-size: 15px; }
+.submit-btn { background: linear-gradient(135deg, #007bff, #0056b3); color: white; border: 0; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 15px; width: 100%; box-shadow: 0 4px 10px rgba(0,123,255,0.3); }
+.flash { color: #d90429; font-size: 13px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="top-header">
+    <h2>تحويل خارجي - ديجيتال ستوري</h2>
+    <a href="/external_transfer" class="back-btn">رجوع 〉</a>
+</div>
+<div class="form-box">
+    {% with messages = get_flashed_messages() %}
+        {% for message in messages %}<p class="flash">{{ message }}</p>{% endfor %}
+    {% endwith %}
+    <form method="get" action="/external_transfer/digital_store">
+        <input type="hidden" name="action" value="lookup">
+        <p style="font-size: 13px; color: #666; margin-top: 0;">أدخل رقم الحساب المستلم في منصة ديجيتال ستوري:</p>
+        <div class="input-row">
+            <span style="font-size: 20px; color: #0056b3; margin-left: 8px;">🛒</span>
+            <input name="receiver_account" placeholder="رقم حساب المستلم" required>
+        </div>
+        <button class="submit-btn">التحقق من الحساب</button>
+    </form>
+</div>
+</body>
+</html>
+"""
+
+EXTERNAL_TRANSFER_FORM_HTML = """
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تأكيد التحويل - ديجيتال ستوري</title>
+<style>
+body { margin: 0; background: #f0f2f5; font-family: Arial; }
+.top-header { background: linear-gradient(135deg, #007bff, #0056b3); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.15); }
+.top-header h2 { margin: 0; font-size: 18px; }
+.back-btn { background: white; color: #0056b3; border: 0; padding: 5px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 12px; }
+.content { max-width: 450px; margin: 15px auto; padding: 0 10px; }
+.info-card { background: white; border-radius: 8px; border: 1px solid #ddd; padding: 12px 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f5; font-size: 14px; }
+.info-row:last-child { border-bottom: 0; }
+.info-label { color: #666; font-weight: bold; }
+.info-val { color: #111; font-weight: bold; }
+.form-card { background: white; border-radius: 8px; border: 1px solid #ddd; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.form-group { display: flex; align-items: center; border: 1px solid #ccc; border-radius: 6px; padding: 4px 10px; margin-bottom: 12px; background: #fff; }
+.form-group input { width: 100%; border: 0; outline: none; padding: 8px; font-size: 14px; background: transparent; }
+.btn-container { display: flex; gap: 10px; margin-top: 15px; }
+.btn-cancel { flex: 1; background: #6c757d; color: white; border: 0; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; text-decoration: none; }
+.btn-confirm { flex: 1; background: linear-gradient(135deg, #007bff, #0056b3); color: white; border: 0; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,123,255,0.3); }
+.flash { color: #d90429; font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="top-header">
+    <h2>تحويل إلى ديجيتال ستوري</h2>
+    <a href="/external_transfer/digital_store" class="back-btn">رجوع 〉</a>
+</div>
+<div class="content">
+    {% with messages = get_flashed_messages() %}
+        {% for message in messages %}<p class="flash">{{ message }}</p>{% endfor %}
+    {% endwith %}
+
+    {% if receiver %}
+    <div class="info-card">
+        <div class="info-row">
+            <span class="info-label">رقم الحساب المستلم</span>
+            <span class="info-val">{{ receiver["account_number"] }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">اسم المستلم (منصة ديجيتال)</span>
+            <span class="info-val">{{ receiver["full_name"] }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">نوع التحويل</span>
+            <span class="info-val" style="color:#0056b3;">تحويل خارجي</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="form-card">
+        <form method="post">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="execute">
+            <input type="hidden" name="receiver_account" value="{{ receiver_account }}">
+
+            <div class="form-group">
+                <span style="font-size: 18px; margin-left: 8px;">📱</span>
+                <input name="phone" value="249" placeholder="رقم الهاتف للرسالة النصية" required>
+            </div>
+
+            <div class="form-group">
+                <span style="font-size: 16px; margin-left: 8px; font-weight:bold;">SDG</span>
+                <input name="amount" type="number" min="1" placeholder="أدخل المبلغ" required>
+            </div>
+
+            <div class="form-group">
+                <span style="font-size: 18px; margin-left: 8px;">🔒</span>
+                <input name="pin" type="password" maxlength="4" placeholder="رمز PIN للتحويل (4 أرقام)" required>
+            </div>
+
+            <div class="form-group">
+                <span style="font-size: 18px; margin-left: 8px;">💬</span>
+                <input name="comment" placeholder="ملاحظات التحويل">
+            </div>
+
+            <div class="btn-container">
+                <a href="/external_transfer/digital_store" class="btn-cancel">إلغاء</a>
+                <button class="btn-confirm">تأكيد التحويل</button>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>
+"""
+
 RECEIPT_HTML = """
 <!doctype html>
 <html lang="ar" dir="rtl">
@@ -920,6 +1207,10 @@ h3 { text-align: center; margin: 5px 0 20px 0; font-size: 20px; color: #fff; tex
     <div class="receipt-row">
         <span>رقم العملية</span>
         <strong>{{ transaction["reference"] }}</strong>
+    </div>
+    <div class="receipt-row">
+        <span>نوع المعاملة</span>
+        <strong style="color: #0056b3;">{{ "تحويل خارجي" if transaction["type"] == "EXTERNAL_TRANSFER" else "تحويل داخلي" }}</strong>
     </div>
     <div class="receipt-row">
         <span>التاريخ والزمن</span>
