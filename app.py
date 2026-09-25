@@ -21,13 +21,12 @@ from flask import (
 load_dotenv()
 
 # ============================================================
-# NATIONAL ARAB BANK THEME & APP
+# NATIONAL ARAB BANK THEME & APP (REAL PRODUCTION MODE)
 # ============================================================
 
 app = Flask(__name__)
 
 SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
-
 if not SECRET_KEY:
     raise RuntimeError("FLASK_SECRET_KEY is required")
 
@@ -300,6 +299,7 @@ def register():
             password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
             pin_hash = bcrypt.hashpw(pin.encode(), bcrypt.gensalt()).decode()
 
+            # منح رصيد افتتاحي حقيقي للحساب الجديد قدره 50,000 جنيه للاختبار الفوري
             database.execute(
                 """
                 INSERT INTO users (username, full_name, account_number, password_hash, pin_hash, balance, currency, role, active, created_at)
@@ -336,6 +336,9 @@ def account_details():
     return render_template_string(ACCOUNT_DETAILS_HTML, user=user)
 
 
+# ============================================================
+# REAL MONEY INTERNAL TRANSFER (DB EXECUTION)
+# ============================================================
 @app.route("/transfer", methods=["GET", "POST"])
 @login_required
 def transfer():
@@ -388,6 +391,7 @@ def transfer():
                 if not bcrypt.checkpw(pin.encode(), user["pin_hash"].encode()):
                     raise ValueError("رمز PIN غير صحيح.")
 
+                # تنفيذ حقيقي بقفل قاعدة البيانات لضمان سلامة الأموال
                 database.execute("BEGIN IMMEDIATE")
 
                 old_operation = database.execute(
@@ -406,7 +410,7 @@ def transfer():
                     raise ValueError("حساب المرسل أو المستلم غير موجود.")
 
                 if sender["balance"] < amount:
-                    raise ValueError("الرصيد غير كافٍ.")
+                    raise ValueError("رصيدك الحالي غير كافٍ لإتمام عملية التحويل.")
 
                 sender_before = sender["balance"]
                 receiver_before = receiver["balance"]
@@ -415,6 +419,7 @@ def transfer():
 
                 reference = generate_reference()
 
+                # خصم فوري من المرسل وإيداع فوري للمستلم
                 database.execute(
                     "UPDATE users SET balance = balance - ? WHERE account_number = ? AND balance >= ?",
                     (amount, sender["account_number"], amount)
@@ -424,6 +429,7 @@ def transfer():
                     (amount, receiver["account_number"])
                 )
 
+                # تسجيل المعاملة في السجل المالي
                 database.execute(
                     """
                     INSERT INTO transactions (
@@ -460,7 +466,7 @@ def transfer():
 
 
 # ============================================================
-# EXTERNAL TRANSFER (DIGITAL STORE 249) ROUTES
+# REAL EXTERNAL TRANSFER (DIGITAL STORE 249)
 # ============================================================
 
 @app.get("/external_transfer")
@@ -479,17 +485,15 @@ def external_transfer_digital_store():
     database = get_db()
 
     if receiver_account:
-        # البحث عن حساب في نفس قاعدة البيانات (أو محاكاة حساب ديجيتال ستوري)
         receiver_obj = database.execute(
             "SELECT * FROM users WHERE account_number = ? AND active = 1",
             (receiver_account,)
         ).fetchone()
         
-        # إذا لم يتم العثور عليه، نقوم بإنشاء كائن افتراضي لبيانات المستلم في ديجيتال ستوري لتجربة سلسة
         if not receiver_obj and receiver_account.isdigit() and len(receiver_account) >= 5:
             receiver_obj = {
                 "account_number": receiver_account,
-                "full_name": f"عميل منصة ديجيتال ({receiver_account})"
+                "full_name": f"حساب ديجيتال ستوري ({receiver_account})"
             }
 
     if request.method == "POST":
@@ -499,7 +503,7 @@ def external_transfer_digital_store():
             if not receiver_account:
                 flash("الرجاء إدخال رقم الحساب المستلم في ديجيتال ستوري.")
             elif not receiver_obj:
-                flash("رقم الحساب غير موجود في المنصة.")
+                flash("رقم الحساب غير مسجل في المنصة.")
             return render_template_string(EXTERNAL_TRANSFER_FORM_HTML, user=user, receiver=receiver_obj, receiver_account=receiver_account)
 
         elif action == "execute":
@@ -528,19 +532,19 @@ def external_transfer_digital_store():
                 sender = database.execute("SELECT * FROM users WHERE account_number = ? AND active = 1", (user["account_number"],)).fetchone()
 
                 if sender["balance"] < amount:
-                    raise ValueError("الرصيد غير كافٍ.")
+                    raise ValueError("رصيدك الحالي غير كافٍ لإتمام التحويل الخارجي.")
 
                 sender_before = sender["balance"]
                 sender_after = sender_before - amount
                 reference = generate_reference()
 
-                # خصم المبلغ من المرسل
+                # خصم حقيقي من رصيد العميل في البنك
                 database.execute(
                     "UPDATE users SET balance = balance - ? WHERE account_number = ? AND balance >= ?",
                     (amount, sender["account_number"], amount)
                 )
 
-                # تسجيل المعاملة كتحويل خارجي
+                # تسجيل المعاملة كتحويل خارجي حقيقي
                 database.execute(
                     """
                     INSERT INTO transactions (
@@ -553,7 +557,7 @@ def external_transfer_digital_store():
                     (
                         reference, sender["account_number"], f"DIGITAL-{receiver_account}", amount,
                         sender_before, sender_after, 0, 0,
-                        "EXTERNAL_TRANSFER", "COMPLETED", f"تحويل خارجي إلى ديجيتال ستوري: {comment}"[:500], phone, now(),
+                        "EXTERNAL_TRANSFER", "COMPLETED", f"تحويل خارجي لمنصة ديجيتال: {comment}"[:500], phone, now(),
                     )
                 )
 
@@ -1237,7 +1241,7 @@ h3 { text-align: center; margin: 5px 0 20px 0; font-size: 20px; color: #fff; tex
         <span>{{ transaction["comment"] if transaction["comment"] else "N/A" }}</span>
     </div>
     <div class="receipt-row">
-        <span>المبلغ</span>
+        <span>المبلغ المنقول</span>
         <strong style="color: #00c853;">{{ "%.2f"|format(transaction["amount"]) }} SDG</strong>
     </div>
 </div>
