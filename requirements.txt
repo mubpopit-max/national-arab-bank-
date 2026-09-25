@@ -1,0 +1,5 @@
+Flask
+bcrypt
+python-dotenv
+waitress
+gunicorn
