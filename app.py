@@ -27,7 +27,7 @@ from flask import (
 
 load_dotenv()
 
-from vortex.database import init_vortex_db
+from vortex.vortex.database import init_vortex_db
 # ============================================================
 # NATIONAL ARAB BANK
 #
@@ -5718,8 +5718,10 @@ style="color:#0056b3;text-decoration:none;font-weight:bold"
 
 
 with app.app_context():
-
     init_db()
+    init_vortex_db()
+
+    
 
 
 if __name__ == "__main__":
