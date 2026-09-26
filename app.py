@@ -27,7 +27,7 @@ from flask import (
 
 load_dotenv()
 
-
+from vortex.database import init_vortex_db
 # ============================================================
 # NATIONAL ARAB BANK
 #
