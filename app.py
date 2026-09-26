@@ -22,8 +22,9 @@ from flask import (
     url_for,
     render_template_string,
     flash,
+    send_from_directory,
 )
-
+from werkzeug.utils import secure_filename
 
 load_dotenv()
 
@@ -32,10 +33,7 @@ from vortex.vortex.database import init_vortex_db
 # NATIONAL ARAB BANK
 #
 # Production-Oriented Version
-# DIGITAL STORE 249 API Integration
-#
-# ملاحظة:
-# تم الحفاظ على واجهة البنك HTML/CSS كما هي.
+# DIGITAL STORE 249 API Integration & Account Funding System
 # ============================================================
 
 
@@ -51,6 +49,14 @@ if not SECRET_KEY:
 
 
 app.secret_key = SECRET_KEY
+
+UPLOAD_FOLDER = os.path.abspath("static/uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 app.config.update(
@@ -74,6 +80,7 @@ DATABASE = os.getenv(
 FOUNDER_USERNAME = "founder"
 
 FOUNDER_ACCOUNT = "5147234"
+FUNDING_RECEIVE_ACCOUNT = "8147243"
 
 FOUNDER_INITIAL_BALANCE = 3_000_000_000_000
 
@@ -277,6 +284,38 @@ def init_db():
         );
 
 
+        CREATE TABLE IF NOT EXISTS funding_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            account_number TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK(amount > 0),
+            method TEXT NOT NULL,
+            operation_number TEXT UNIQUE NOT NULL,
+            receipt_image_path TEXT NOT NULL,
+            note TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            founder_note TEXT,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT
+        );
+
+
+        CREATE TABLE IF NOT EXISTS founder_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference TEXT NOT NULL,
+            type TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            before_balance INTEGER NOT NULL,
+            after_balance INTEGER NOT NULL,
+            beneficiary_account TEXT,
+            beneficiary_name TEXT,
+            actor_username TEXT NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL
+        );
+
+
         CREATE INDEX IF NOT EXISTS idx_transactions_sender
         ON transactions(sender_account);
 
@@ -307,6 +346,14 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_external_status
         ON external_transfers(status);
+
+
+        CREATE INDEX IF NOT EXISTS idx_funding_requests_ref
+        ON funding_requests(reference);
+
+
+        CREATE INDEX IF NOT EXISTS idx_funding_requests_op
+        ON funding_requests(operation_number);
         """
     )
 
@@ -500,6 +547,9 @@ def generate_account_number():
             first_digit
             + remaining_digits
         )
+
+        if account_number == FUNDING_RECEIVE_ACCOUNT:
+            continue
 
         if not re.fullmatch(
             r"\d{7}",
@@ -734,6 +784,28 @@ def login_required(function):
             return redirect(
                 url_for("login")
             )
+
+        return function(
+            *args,
+            **kwargs
+        )
+
+    return wrapper
+
+
+def founder_required(function):
+
+    @wraps(function)
+    def wrapper(
+        *args,
+        **kwargs,
+    ):
+
+        user = current_user()
+
+        if not user or user["role"] != "founder":
+
+            return "Forbidden", 403
 
         return function(
             *args,
@@ -1303,6 +1375,544 @@ def account_details():
 
 
 # ============================================================
+# ACCOUNT FUNDING (تغذية الحساب)
+# ============================================================
+
+
+@app.route(
+    "/account/funding",
+    methods=["GET", "POST"],
+)
+@login_required
+def account_funding():
+
+    user = current_user()
+    database = get_db()
+
+    if request.method == "POST":
+
+        try:
+
+            verify_csrf()
+
+            amount = parse_amount(
+                request.form.get("amount", "")
+            )
+
+            method = request.form.get(
+                "method", "BANKAK"
+            ).strip()
+
+            operation_number = request.form.get(
+                "operation_number", ""
+            ).strip()
+
+            note = request.form.get(
+                "note", ""
+            ).strip()
+
+            file = request.files.get("receipt_image")
+
+            if not operation_number:
+
+                raise ValueError(
+                    "رقم العملية إلزامي."
+                )
+
+            if not file or not file.filename:
+
+                raise ValueError(
+                    "صورة إشعار التحويل إلزامية."
+                )
+
+            if not allowed_file(file.filename):
+
+                raise ValueError(
+                    "امتداد الملف غير مسموح به. يرجى رفع صورة (PNG, JPG, JPEG, WEBP)."
+                )
+
+            existing_op = database.execute(
+                """
+                SELECT 1
+                FROM funding_requests
+                WHERE operation_number = ?
+                """,
+                (
+                    operation_number,
+                ),
+            ).fetchone()
+
+            if existing_op:
+
+                raise ValueError(
+                    "رقم العملية هذا تم تسجيله مسبقاً."
+                )
+
+            file_ext = (
+                file.filename.rsplit(".", 1)[1]
+                .lower()
+            )
+
+            secure_filename_str = (
+                f"rec_{secrets.token_hex(16)}.{file_ext}"
+            )
+
+            file_path = os.path.join(
+                UPLOAD_FOLDER,
+                secure_filename_str,
+            )
+
+            file.save(file_path)
+
+            reference = generate_reference()
+
+            database.execute(
+                """
+                INSERT INTO funding_requests (
+                    reference,
+                    username,
+                    account_number,
+                    amount,
+                    method,
+                    operation_number,
+                    receipt_image_path,
+                    note,
+                    status,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                """,
+                (
+                    reference,
+                    user["username"],
+                    user["account_number"],
+                    amount,
+                    method,
+                    operation_number,
+                    secure_filename_str,
+                    note[:500],
+                    now(),
+                ),
+            )
+
+            create_notification(
+                database,
+                user["username"],
+                "طلب تغذية حساب",
+                (
+                    f"تم إرسال طلب تغذية بقيمة "
+                    f"{money(amount)} SDG "
+                    f"بانتظار مراجعة المؤسس."
+                ),
+                reference,
+            )
+
+            database.commit()
+
+            flash(
+                "تم إرسال طلب تغذية الحساب بنجاح وهو قيد المراجعة."
+            )
+
+            return redirect(
+                url_for("account_funding")
+            )
+
+        except Exception as error:
+
+            flash(
+                str(error)
+            )
+
+    user_requests = database.execute(
+        """
+        SELECT *
+        FROM funding_requests
+        WHERE username = ?
+        ORDER BY id DESC
+        LIMIT 50
+        """,
+        (
+            user["username"],
+        ),
+    ).fetchall()
+
+    return render_template_string(
+        FUNDING_HTML,
+        user=user,
+        receive_account=FUNDING_RECEIVE_ACCOUNT,
+        user_requests=user_requests,
+    )
+
+
+# ============================================================
+# FOUNDER PANEL
+# ============================================================
+
+
+@app.route(
+    "/founder/panel",
+    methods=["GET", "POST"],
+)
+@login_required
+@founder_required
+def founder_panel():
+
+    database = get_db()
+
+    if request.method == "POST":
+
+        try:
+
+            verify_csrf()
+
+            action = request.form.get(
+                "action", ""
+            ).strip()
+
+            funding_id = request.form.get(
+                "funding_id", ""
+            ).strip()
+
+            founder_note = request.form.get(
+                "founder_note", ""
+            ).strip()
+
+            if not funding_id:
+
+                raise ValueError(
+                    "معرف الطلب مفقود."
+                )
+
+            req = database.execute(
+                """
+                SELECT *
+                FROM funding_requests
+                WHERE id = ?
+                """,
+                (
+                    funding_id,
+                ),
+            ).fetchone()
+
+            if not req:
+
+                raise ValueError(
+                    "طلب التغذية غير موجود."
+                )
+
+            if req["status"] != "PENDING":
+
+                raise ValueError(
+                    "هذا الطلب تم التعامل معه مسبقاً."
+                )
+
+            if action == "reject":
+
+                database.execute(
+                    """
+                    UPDATE funding_requests
+                    SET
+                        status = 'REJECTED',
+                        founder_note = ?,
+                        reviewed_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        founder_note[:500],
+                        now(),
+                        req["id"],
+                    ),
+                )
+
+                create_notification(
+                    database,
+                    req["username"],
+                    "رفض طلب تغذية الحساب",
+                    (
+                        f"تم رفض طلب التغذية مرجع "
+                        f"{req['reference']}. "
+                        f"الملاحظة: {founder_note or 'N/A'}"
+                    ),
+                    req["reference"],
+                )
+
+                database.commit()
+
+                flash(
+                    "تم رفض الطلب بنجاح."
+                )
+
+                return redirect(
+                    url_for("founder_panel")
+                )
+
+            if action == "approve":
+
+                begin_transaction(database)
+
+                founder_user = database.execute(
+                    """
+                    SELECT *
+                    FROM users
+                    WHERE username = ?
+                      AND role = 'founder'
+                    """,
+                    (
+                        FOUNDER_USERNAME,
+                    ),
+                ).fetchone()
+
+                customer_user = database.execute(
+                    """
+                    SELECT *
+                    FROM users
+                    WHERE account_number = ?
+                      AND active = 1
+                    """,
+                    (
+                        req["account_number"],
+                    ),
+                ).fetchone()
+
+                if not founder_user:
+
+                    raise ValueError(
+                        "حساب المؤسس غير موجود."
+                    )
+
+                if not customer_user:
+
+                    raise ValueError(
+                        "حساب العميل المستفيد غير موجود أو معطل."
+                    )
+
+                amount = int(req["amount"])
+                founder_before = int(
+                    founder_user["balance"]
+                )
+                customer_before = int(
+                    customer_user["balance"]
+                )
+
+                if founder_before < amount:
+
+                    raise ValueError(
+                        "رصيد المؤسس غير كافٍ لإتمام الاعتماد."
+                    )
+
+                founder_after = (
+                    founder_before - amount
+                )
+                customer_after = (
+                    customer_before + amount
+                )
+
+                up_founder = database.execute(
+                    """
+                    UPDATE users
+                    SET balance = balance - ?
+                    WHERE username = ?
+                      AND balance >= ?
+                    """,
+                    (
+                        amount,
+                        FOUNDER_USERNAME,
+                        amount,
+                    ),
+                )
+
+                if up_founder.rowcount != 1:
+
+                    raise ValueError(
+                        "تعذر خصم المبلغ من حساب المؤسس."
+                    )
+
+                up_customer = database.execute(
+                    """
+                    UPDATE users
+                    SET balance = balance + ?
+                    WHERE account_number = ?
+                    """,
+                    (
+                        amount,
+                        req["account_number"],
+                    ),
+                )
+
+                if up_customer.rowcount != 1:
+
+                    raise ValueError(
+                        "تعذر إضافة المبلغ لحساب العميل."
+                    )
+
+                database.execute(
+                    """
+                    UPDATE funding_requests
+                    SET
+                        status = 'APPROVED',
+                        founder_note = ?,
+                        reviewed_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        founder_note[:500],
+                        now(),
+                        req["id"],
+                    ),
+                )
+
+                database.execute(
+                    """
+                    INSERT INTO transactions (
+                        reference,
+                        sender_account,
+                        receiver_account,
+                        amount,
+                        sender_before,
+                        sender_after,
+                        receiver_before,
+                        receiver_after,
+                        type,
+                        status,
+                        comment,
+                        phone,
+                        created_at
+                    )
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?
+                    )
+                    """,
+                    (
+                        req["reference"],
+                        FOUNDER_ACCOUNT,
+                        req["account_number"],
+                        amount,
+                        founder_before,
+                        founder_after,
+                        customer_before,
+                        customer_after,
+                        "ACCOUNT_FUNDING",
+                        "COMPLETED",
+                        f"تغذية حساب معتمدة - بعملية {req['operation_number']}",
+                        "",
+                        now(),
+                    ),
+                )
+
+                database.execute(
+                    """
+                    INSERT INTO founder_ledger (
+                        reference,
+                        type,
+                        amount,
+                        before_balance,
+                        after_balance,
+                        beneficiary_account,
+                        beneficiary_name,
+                        actor_username,
+                        note,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        req["reference"],
+                        "FUNDING_APPROVAL",
+                        amount,
+                        founder_before,
+                        founder_after,
+                        customer_user["account_number"],
+                        customer_user["full_name"],
+                        FOUNDER_USERNAME,
+                        founder_note[:500],
+                        now(),
+                    ),
+                )
+
+                create_notification(
+                    database,
+                    req["username"],
+                    "اعتماد تغذية الحساب",
+                    (
+                        f"تم اعتماد طلب تغذية حسابك بقيمة "
+                        f"{money(amount)} SDG "
+                        f"وإضافتها لرصيدك بنجاح."
+                    ),
+                    req["reference"],
+                )
+
+                commit_safely(database)
+
+                flash(
+                    "تم اعتماد الطلب وتنفيذ العملية المالية بنجاح."
+                )
+
+                return redirect(
+                    url_for("founder_panel")
+                )
+
+        except Exception as error:
+
+            rollback_safely(database)
+
+            flash(
+                str(error)
+            )
+
+    pending_requests = database.execute(
+        """
+        SELECT *
+        FROM funding_requests
+        WHERE status = 'PENDING'
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
+    all_requests = database.execute(
+        """
+        SELECT *
+        FROM funding_requests
+        ORDER BY id DESC
+        LIMIT 100
+        """
+    ).fetchall()
+
+    founder_user = database.execute(
+        """
+        SELECT *
+        FROM users
+        WHERE username = ?
+        """,
+        (
+            FOUNDER_USERNAME,
+        ),
+    ).fetchone()
+
+    return render_template_string(
+        FOUNDER_PANEL_HTML,
+        founder_user=founder_user,
+        pending_requests=pending_requests,
+        all_requests=all_requests,
+    )
+
+
+@app.get(
+    "/founder/receipt_image/<filename>"
+)
+@login_required
+@founder_required
+def founder_receipt_image(filename):
+
+    filename = secure_filename(filename)
+
+    return send_from_directory(
+        UPLOAD_FOLDER,
+        filename,
+    )
+
+
+# ============================================================
 # INTERNAL TRANSFER
 # ============================================================
 
@@ -1361,7 +1971,7 @@ def transfer():
             elif not receiver_obj:
 
                 flash(
-                    "رقم الحساب غير موجود أو غير نشط."
+                    "رقم الحساب موجود غير موجود أو غير نشط."
                 )
 
             elif (
@@ -2433,8 +3043,6 @@ def external_transfer_digital_store():
                         ),
                     )
 
-                    # استرجاع مبلغ البنك لأن الطرف الآخر أكد
-                    # فشل العملية ولم يقبل المبلغ.
                     database.execute(
                         """
                         UPDATE users
@@ -2775,10 +3383,6 @@ def api_digital_store_inbound_transfer():
         )
 
 
-        # ----------------------------------------------------
-        # منع تكرار المفتاح
-        # ----------------------------------------------------
-
         old_operation = database.execute(
             """
             SELECT *
@@ -2805,10 +3409,6 @@ def api_digital_store_inbound_transfer():
             }
 
 
-        # ----------------------------------------------------
-        # منع تكرار المرجع
-        # ----------------------------------------------------
-
         existing_reference = database.execute(
             """
             SELECT *
@@ -2832,10 +3432,6 @@ def api_digital_store_inbound_transfer():
                     reference,
             }
 
-
-        # ----------------------------------------------------
-        # البحث عن حساب البنك
-        # ----------------------------------------------------
 
         receiver = database.execute(
             """
@@ -3457,8 +4053,7 @@ def generic_section():
 # ============================================================
 # HTML
 #
-# الواجهات التالية هي نفس الواجهات التي أرسلتها.
-# لا يتم تعديل التصميم.
+# الواجهات الأصلية تماماً - بدون رصيد في الواجهة الرئيسية
 # ============================================================
 
 
@@ -3829,12 +4424,12 @@ body {
     margin-top:3px;
 }
 
-.bal {
-    font-size:16px;
+.welcome-msg {
+    font-size:15px;
     font-weight:bold;
-    color:#00a65a;
-    background:#e8f8f0;
-    padding:6px 12px;
+    color:#0056b3;
+    background:#eef6ff;
+    padding:8px 14px;
     border-radius:6px;
 }
 
@@ -3884,6 +4479,10 @@ body {
 
 <div class="menu-icons">
 
+{% if user["role"] == "founder" %}
+<a href="/founder/panel" title="لوحة المؤسس" style="font-size:16px;background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:4px;">👑 المؤسس</a>
+{% endif %}
+
 <a href="/notifications">
 🔔
 </a>
@@ -3910,8 +4509,8 @@ body {
 
 </div>
 
-<div class="bal">
-{{ money(user["balance"]) }} جنيه
+<div class="welcome-msg">
+أهلاً بك، {{ user["full_name"] }}
 </div>
 
 </div>
@@ -3926,6 +4525,19 @@ class="card"
 <span class="icon">👤</span>
 <span class="title">
 تفاصيل الحساب
+</span>
+
+</a>
+
+
+<a
+href="/account/funding"
+class="card"
+>
+
+<span class="icon">💰</span>
+<span class="title">
+تغذية حسابي
 </span>
 
 </a>
@@ -4272,6 +4884,342 @@ class="action-btn"
 </div>
 
 </div>
+
+</div>
+
+</body>
+</html>
+"""
+
+
+FUNDING_HTML = """
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تغذية الحساب - البنك الوطني العربي</title>
+<style>
+body {
+    margin:0;
+    background:#f0f2f5;
+    font-family:Arial;
+}
+.top-header {
+    background:linear-gradient(135deg,#007bff,#0056b3);
+    padding:12px 15px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    color:white;
+}
+.top-header h2 {
+    margin:0;
+    font-size:18px;
+}
+.back-btn {
+    background:white;
+    color:#0056b3;
+    padding:5px 12px;
+    border-radius:4px;
+    text-decoration:none;
+    font-weight:bold;
+    font-size:12px;
+}
+.form-box {
+    max-width:450px;
+    margin:20px auto;
+    background:white;
+    padding:20px;
+    border-radius:8px;
+    border:1px solid #ddd;
+}
+.input-row {
+    margin-bottom:12px;
+}
+.input-row label {
+    display:block;
+    font-size:13px;
+    font-weight:bold;
+    color:#0056b3;
+    margin-bottom:5px;
+}
+.input-row input, .input-row select, .input-row textarea {
+    width:100%;
+    box-sizing:border-box;
+    border:1px solid #ccc;
+    border-radius:6px;
+    padding:10px;
+    font-size:14px;
+}
+.submit-btn {
+    background:linear-gradient(135deg,#007bff,#0056b3);
+    color:white;
+    border:0;
+    padding:12px;
+    border-radius:6px;
+    font-weight:bold;
+    width:100%;
+    cursor:pointer;
+}
+.flash {
+    color:#d90429;
+    font-size:13px;
+    font-weight:bold;
+    text-align:center;
+    margin-bottom:10px;
+}
+.info-box {
+    background:#eef6ff;
+    color:#0056b3;
+    padding:12px;
+    border-radius:6px;
+    font-size:13px;
+    line-height:1.6;
+    margin-bottom:15px;
+    text-align:center;
+}
+.requests-list {
+    max-width:450px;
+    margin:20px auto;
+    background:white;
+    padding:15px;
+    border-radius:8px;
+    border:1px solid #ddd;
+}
+.req-item {
+    border-bottom:1px solid #eee;
+    padding:10px 0;
+    font-size:13px;
+}
+.req-item:last-child {
+    border-bottom:0;
+}
+</style>
+</head>
+<body>
+
+<div class="top-header">
+    <h2>تغذية الحساب</h2>
+    <a href="/account" class="back-btn">رجوع 〉</a>
+</div>
+
+<div class="form-box">
+    {% with messages = get_flashed_messages() %}
+        {% for message in messages %}
+            <p class="flash">{{ message }}</p>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="info-box">
+        <strong>حساب الاستقبال المعتمد للتحويل:</strong><br>
+        <span style="font-size:20px;font-weight:bold;color:#00a65a;">NATIONAL ARAB BANK</span><br>
+        رقم الحساب: <strong style="font-size:18px;">{{ receive_account }}</strong><br>
+        <small>يرجى التحويل أولاً ثم إدخال رقم العملية ورفع الإشعار أدناه.</small>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+
+        <div class="input-row">
+            <label>طريقة الدفع</label>
+            <select name="method">
+                <option value="BANKAK">بنكك (BANKAK)</option>
+                <option value="MY_CASHI">ماي كاشي (MY_CASHI)</option>
+                <option value="BANK_TRANSFER">تحويل بنكي مباشر (BANK TRANSFER)</option>
+            </select>
+        </div>
+
+        <div class="input-row">
+            <label>المبلغ (SDG)</label>
+            <input type="number" name="amount" min="1" step="1" placeholder="أدخل المبلغ المحول" required>
+        </div>
+
+        <div class="input-row">
+            <label>رقم العملية (إلزامي) *</label>
+            <input type="text" name="operation_number" placeholder="أدخل رقم العملية البنكية" required>
+        </div>
+
+        <div class="input-row">
+            <label>صورة إشعار التحويل (إلزامي) *</label>
+            <input type="file" name="receipt_image" accept="image/png, image/jpeg, image/jpg, image/webp" required>
+        </div>
+
+        <div class="input-row">
+            <label>ملاحظات (اختياري)</label>
+            <textarea name="note" placeholder="أي تفاصيل إضافية..." rows="2"></textarea>
+        </div>
+
+        <button type="submit" class="submit-btn">إرسال طلب التغذية</button>
+    </form>
+</div>
+
+<div class="requests-list">
+    <h3 style="font-size:15px;color:#0056b3;margin-top:0;">طلبات التغذية السابقة</h3>
+    {% for req in user_requests %}
+        <div class="req-item">
+            <div><strong>مرجع الطلب:</strong> {{ req["reference"] }}</div>
+            <div><strong>المبلغ:</strong> {{ money(req["amount"]) }} SDG</div>
+            <div><strong>رقم العملية:</strong> {{ req["operation_number"] }}</div>
+            <div><strong>الحالة:</strong> 
+                <span style="color: {% if req['status'] == 'APPROVED' %}#00a65a{% elif req['status'] == 'REJECTED' %}#d90429{% else %}#ffc107{% endif %}; font-weight:bold;">
+                    {{ req["status"] }}
+                </span>
+            </div>
+            <small style="color:#888;">{{ req["created_at"][:19] }}</small>
+        </div>
+    {% else %}
+        <p style="font-size:13px;color:#666;text-align:center;">لا توجد طلبات تغذية سابقة.</p>
+    {% endfor %}
+</div>
+
+</body>
+</html>
+"""
+
+
+FOUNDER_PANEL_HTML = """
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>لوحة المؤسس - مراجعة التغذية</title>
+<style>
+body {
+    margin:0;
+    background:#f0f2f5;
+    font-family:Arial;
+}
+.top-header {
+    background:linear-gradient(135deg,#0056b3,#003366);
+    padding:12px 15px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    color:white;
+}
+.top-header h2 {
+    margin:0;
+    font-size:18px;
+}
+.back-btn {
+    background:white;
+    color:#0056b3;
+    padding:5px 12px;
+    border-radius:4px;
+    text-decoration:none;
+    font-weight:bold;
+    font-size:12px;
+}
+.content {
+    max-width:700px;
+    margin:20px auto;
+    padding:0 10px;
+}
+.card {
+    background:white;
+    border-radius:8px;
+    border:1px solid #ddd;
+    padding:20px;
+    margin-bottom:15px;
+}
+.flash {
+    color:#d90429;
+    font-weight:bold;
+    font-size:13px;
+    text-align:center;
+    margin-bottom:10px;
+}
+table {
+    width:100%;
+    border-collapse:collapse;
+    margin-top:10px;
+    font-size:13px;
+}
+th, td {
+    border:1px solid #ddd;
+    padding:8px;
+    text-align:right;
+}
+th {
+    background:#f8f9fa;
+    color:#0056b3;
+}
+.btn-approve {
+    background:#00a65a;
+    color:white;
+    border:0;
+    padding:6px 12px;
+    border-radius:4px;
+    cursor:pointer;
+    font-weight:bold;
+}
+.btn-reject {
+    background:#d90429;
+    color:white;
+    border:0;
+    padding:6px 12px;
+    border-radius:4px;
+    cursor:pointer;
+    font-weight:bold;
+}
+.actions-form {
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+}
+</style>
+</head>
+<body>
+
+<div class="top-header">
+    <h2>لوحة المؤسس - مراجعة طلبات التغذية</h2>
+    <a href="/account" class="back-btn">رجوع للبنك 〉</a>
+</div>
+
+<div class="content">
+
+    {% with messages = get_flashed_messages() %}
+        {% for message in messages %}
+            <p class="flash">{{ message }}</p>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+        <h3 style="margin-top:0;color:#0056b3;">حساب المؤسس</h3>
+        <p><strong>رقم الحساب:</strong> {{ founder_user["account_number"] }}</p>
+        <p><strong>الرصيد الحالي:</strong> <span style="color:#00a65a;font-weight:bold;">{{ money(founder_user["balance"]) }} SDG</span></p>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0;color:#0056b3;">الطلبات المعلقة ({{ pending_requests|length }})</h3>
+        {% if pending_requests %}
+            {% for req in pending_requests %}
+                <div style="border-bottom:1px solid #eee; padding:15px 0;">
+                    <p><strong>مرجع الطلب:</strong> {{ req["reference"] }}</p>
+                    <p><strong>اسم المستخدم:</strong> {{ req["username"] }} | <strong>رقم الحساب:</strong> {{ req["account_number"] }}</p>
+                    <p><strong>المبلغ:</strong> <span style="color:#00a65a;font-weight:bold;">{{ money(req["amount"]) }} SDG</span></p>
+                    <p><strong>طريقة الدفع:</strong> {{ req["method"] }} | <strong>رقم العملية:</strong> {{ req["operation_number"] }}</p>
+                    <p><strong>إشعار التحويل:</strong> <a href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" style="color:#0056b3;font-weight:bold;">عرض صورة الإشعار</a></p>
+                    <p><strong>ملاحظة العميل:</strong> {{ req["note"] or 'لا توجد ملاحظات' }}</p>
+                    <p><strong>وقت الطلب:</strong> {{ req["created_at"][:19] }}</p>
+
+                    <form method="post" class="actions-form">
+                        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                        <input type="hidden" name="funding_id" value="{{ req['id'] }}">
+                        <input type="text" name="founder_note" placeholder="ملاحظة المؤسس عند الاعتماد أو الرفض" style="padding:6px;border:1px solid #ccc;border-radius:4px;">
+                        <div style="display:flex;gap:10px;margin-top:5px;">
+                            <button type="submit" name="action" value="approve" class="btn-approve">اعتماد وإضافة الرصيد</button>
+                            <button type="submit" name="action" value="reject" class="btn-reject">رفض الطلب</button>
+                        </div>
+                    </form>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="color:#666;text-align:center;">لا توجد طلبات تغذية معلقة حالياً.</p>
+        {% endif %}
+    </div>
 
 </div>
 
@@ -5227,7 +6175,7 @@ h3 {
 {{
     "تحويل خارجي"
     if transaction["type"] == "EXTERNAL_TRANSFER"
-    else "تحويل داخلي"
+    else ("تغذية حساب" if transaction["type"] == "ACCOUNT_FUNDING" else "تحويل داخلي")
 }}
 
 </strong>
@@ -5737,4 +6685,4 @@ if __name__ == "__main__":
                 "5000",
             )
         ),
-                )
+    )
