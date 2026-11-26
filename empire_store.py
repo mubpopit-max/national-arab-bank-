@@ -438,13 +438,24 @@ def payment_reference():
         audit(u["username"],"BINANCE_REFERENCE_SUBMITTED","payment",r)
         flash("تم تسجيل رقم التحويل. سيظل الطلب معلقاً حتى التحقق من حساب الاستقبال.")
         return redirect(url_for("empire.wallet"))
-    rows=db().execute("SELECT reference,amount,currency,quantity_epc,created_at FROM es_payments WHERE username=? AND status='PENDING' AND method='BINANCE_USDT' ORDER BY id DESC",(u["username"],)).fetchall()
+    rows=db().execute("SELECT reference,amount,currency,quantity_epc,operation_id,created_at FROM es_payments WHERE username=? AND status='PENDING' AND method='BINANCE_USDT' ORDER BY id DESC",(u["username"],)).fetchall()
     body=render_template_string("""<section class='panel'><h1>ربط تحويل Binance</h1><p>حوّل إلى Binance ID: <b>{{bid or 'لم يضبطه المالك بعد'}}</b>. أدخل رقم التحويل الحقيقي بعد إتمامه.</p>
     {% for x in rows %}<article class='panel'><p>المرجع {{x['reference']}} · {{x['amount']/1000000}} USDT · EPC المطلوبة {{x['quantity_epc']}}</p>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'>
-    <label>رقم التحويل من Binance</label><input name='operation_id' maxlength='100' required><button>إرسال للمراجعة</button></form></article>{% else %}<p>لا توجد طلبات Binance معلقة.</p>{% endfor %}</section>""",
+    <label>رقم التحويل من Binance</label><input name='operation_id' maxlength='100' required><button>إرسال للمراجعة</button></form>{% if not x['operation_id'] %}<form method='post' action='/store/payment/cancel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>إلغاء الطلب</button></form>{% endif %}</article>{% else %}<p>لا توجد طلبات Binance معلقة.</p>{% endfor %}</section>""",
       bid=setting("binance_id"),rows=rows,csrf=session.get("csrf",""))
     return page("تحويل Binance",body)
+
+@empire_bp.post("/payment/cancel")
+@login_required
+def cancel_payment():
+    csrf(); u=user(); r=request.form.get("reference","")
+    changed=db().execute("UPDATE es_payments SET status='REJECTED',reviewer=?,reviewed_at=? WHERE reference=? AND username=? AND status='PENDING' AND operation_id IS NULL",
+                         (u["username"],now(),r,u["username"])).rowcount
+    if changed!=1: abort(409,"لا يمكن إلغاء هذا الطلب بعد إرسال رقم التحويل أو مراجعته")
+    audit(u["username"],"PAYMENT_CANCELLED","payment",r)
+    flash("تم إلغاء طلب الشراء وإتاحة الكمية المحجوزة من EPC.")
+    return redirect(url_for("empire.wallet"))
 
 @empire_bp.post("/topups/pay")
 @login_required
@@ -762,10 +773,14 @@ def buy_epc():
             micros=int(setting("epc_price_usdt_micros","0"))
             if micros<=0: abort(503,"يجب على المالك ضبط سعر EPC مقابل USDT أولاً")
             amount=qty*micros
-            assert_epc_capacity(qty)
-            r=ref()
-            db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,quantity_epc,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','USDT',?,?,'EPC_PURCHASE',?,?)",
-                         (r,u["username"],amount,qty,"Binance ID: "+bid,now()))
+            r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
+            try:
+                assert_epc_capacity(qty)
+                d.execute("INSERT INTO es_payments(reference,username,method,currency,amount,quantity_epc,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','USDT',?,?,'EPC_PURCHASE',?,?)",
+                          (r,u["username"],amount,qty,"Binance ID: "+bid,now()))
+                audit(u["username"],"EPC_BINANCE_ORDER_CREATED","payment",r)
+                d.commit()
+            except Exception: d.rollback(); raise
             flash("تم إنشاء طلب شراء. حوّل USDT إلى Binance ID المعروض، ثم أرسل رقم التحويل في نموذج ربط إثبات الدفع. لن تصدر EPC قبل التحقق اليدوي.")
             session["last_epc_payment_ref"]=r
         else: abort(400)
