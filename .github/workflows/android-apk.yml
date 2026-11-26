@@ -32,7 +32,9 @@ jobs:
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses
+          set -o pipefail
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
