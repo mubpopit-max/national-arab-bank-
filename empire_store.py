@@ -15,7 +15,7 @@ from werkzeug.utils import secure_filename
 
 empire_bp = Blueprint("empire", __name__, url_prefix="/store")
 DATABASE = os.getenv("NAB_DATABASE", "national_arab_bank.db")
-IMAGE_DIR = os.path.abspath(os.path.join("static", "uploads", "empire"))
+IMAGE_DIR = os.path.abspath(os.getenv("EMPIRE_IMAGE_DIR", os.path.join("static", "uploads", "empire")))
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
 def now():
