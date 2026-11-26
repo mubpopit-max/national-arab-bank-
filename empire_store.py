@@ -289,12 +289,87 @@ def page(title,body,**ctx):
     form{max-width:100%}button{font-family:inherit}.flash{padding:12px 15px;border:1px solid rgba(82,214,162,.25);border-radius:13px;background:rgba(82,214,162,.08);color:#baf4dc}
     footer{margin-top:28px;padding:20px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
     .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);align-items:center;gap:18px}.hero-copy{position:relative;z-index:2}.hero-character{position:relative;min-height:280px;display:grid;place-items:center;isolation:isolate}.hero-character:before{content:'';position:absolute;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,35,83,.42),rgba(125,53,255,.18) 55%,transparent 72%);filter:blur(8px);z-index:-1}.hero-character svg{width:min(100%,330px);height:auto;filter:drop-shadow(0 12px 28px rgba(255,22,75,.24))}.hero-kicker{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(255,86,117,.35);border-radius:99px;background:rgba(125,22,64,.2);color:#ffb2c1;font-size:12px;font-weight:800}.hero h1 span{color:#ff7899;text-shadow:0 0 25px rgba(255,40,95,.22)}.hero p{position:relative;z-index:2}.hero .grid{position:relative;z-index:2}@media(max-width:640px){.hero{grid-template-columns:1fr}.hero-character{grid-row:1;min-height:190px}.hero-character svg{width:220px}.hero-copy{text-align:center}.hero .grid{margin-right:auto;margin-left:auto}}\n    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
+    
+    /* Native-wallet app shell inspired by Bravo's information hierarchy */
+    body{padding-bottom:calc(82px + env(safe-area-inset-bottom));background:#f3f5f9;color:#182033;line-height:1.55}
+    header{padding:15px 18px;background:#fff;color:#172033;border-bottom:1px solid #e7eaf0;box-shadow:0 2px 12px rgba(20,30,55,.04)}
+    .brand{font-size:19px;color:#172033}.brand:before{background:linear-gradient(135deg,#185a9d,#2479c8);color:#fff}
+    header small{color:#7b8496}
+    main{max-width:760px;margin:14px auto 28px;padding:0 14px}
+    .nav{display:none}
+    .wallet-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:18px 19px;border-radius:22px;background:linear-gradient(125deg,#07518d,#087db5 65%,#13a3b0);color:#fff;box-shadow:0 12px 28px rgba(7,81,141,.18)}
+    .wallet-top .eyebrow{font-size:12px;color:#d8efff}.wallet-top .amount{font-size:27px;font-weight:900;direction:ltr;text-align:right;line-height:1.2}.wallet-top .currency{font-size:12px;color:#d8efff}
+    .wallet-top .urc-line{margin-top:5px;font-size:12px;color:#d8efff}.wallet-top .wallet-link{padding:9px 13px;border:1px solid rgba(255,255,255,.35);border-radius:12px;color:#fff;font-size:12px;font-weight:800;white-space:nowrap}
+    .app-bottom{position:fixed;z-index:100;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);border-top:1px solid #e6eaf0;box-shadow:0 -5px 24px rgba(20,30,55,.08);backdrop-filter:blur(16px)}
+    .app-bottom a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;color:#7b8496;font-size:10px;font-weight:800}
+    .app-bottom a .ico{font-size:20px;line-height:1.25}.app-bottom a.active{color:#0865a4}
+    .panel{background:#fff;color:#182033;border:1px solid #e9edf3;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 4px 16px rgba(22,35,58,.045)}
+    .panel p{color:#647084}.muted,small{color:#7b8496}
+    h1,h2,h3{color:#182033}h1{font-size:23px}h2{font-size:18px}h3{font-size:16px}
+    .service-card{min-height:112px;padding:14px;background:#fff;border:1px solid #e9edf3;border-radius:17px;box-shadow:0 3px 12px rgba(22,35,58,.035);color:#182033}
+    .service-card strong{color:#182033;font-size:14px}.service-card span{font-size:11px;color:#7b8496}
+    .service-icon{width:42px;height:42px;border-radius:13px;background:#edf5fc;font-size:21px}
+    .metric{background:#f4f8fc;border-color:#e5edf5}.metric strong{color:#155f99}
+    .btn,button{background:#0874b5;box-shadow:0 5px 14px rgba(8,116,181,.14);border-radius:12px}
+    .btn.secondary{background:#eef4f9;color:#175d8e;border-color:#e1ebf4}
+    input,textarea,select{background:#f8fafc;color:#182033;border-color:#dce4ed}
+    label{color:#3c485a}.tag{color:#0874b5;background:#edf6fc;border-color:#d9eaf7}
+    .empty-state{color:#7b8496;border-color:#dfe6ee}
+    .hero{display:none}
+    footer{display:none}
+    @media(min-width:760px){main{margin-top:22px}.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #e6eaf0;border-bottom:0;border-radius:18px 18px 0 0}}
+
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/exchange'>صرف العملات</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
+    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div><div class='urc-line'>رصيد العملة الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main></body></html>"""
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav><script>
+(function(){
+  const main=document.querySelector('main');
+  const bottom=document.querySelector('.app-bottom');
+  if(!main||!bottom)return;
+  function markActive(path){
+    bottom.querySelectorAll('a').forEach(a=>{
+      a.classList.toggle('active',new URL(a.href,location.href).pathname===path);
+    });
+  }
+  async function navigate(url,push){
+    const target=new URL(url,location.href);
+    if(target.origin!==location.origin||!target.pathname.startsWith('/store/'))return;
+    main.style.opacity='.55';
+    try{
+      const response=await fetch(target.href,{headers:{'X-Requested-With':'EmpireApp'}});
+      if(!response.ok)throw new Error('navigation failed');
+      const html=await response.text();
+      const doc=new DOMParser().parseFromString(html,'text/html');
+      const next=doc.querySelector('main');
+      if(!next)throw new Error('missing screen');
+      main.innerHTML=next.innerHTML;
+      document.title=doc.title;
+      if(push)history.pushState({},'',target.href);
+      main.style.opacity='1';
+      window.scrollTo({top:0,behavior:'instant'});
+      markActive(target.pathname);
+    }catch(e){
+      main.style.opacity='1';
+      location.href=target.href;
+    }
+  }
+  document.addEventListener('click',e=>{
+    const a=e.target.closest('a[href]');
+    if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||a.target||a.hasAttribute('download'))return;
+    const url=new URL(a.href,location.href);
+    if(url.origin===location.origin&&url.pathname.startsWith('/store/')){
+      e.preventDefault();navigate(url.href,true);
+    }
+  });
+  window.addEventListener('popstate',()=>navigate(location.href,false));
+  markActive(location.pathname);
+})();
+</script></body></html>"""
     current=user()
     ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
+    ctx.setdefault("wallet_sdg", balance(current["username"],"SDG") if current else 0)
+    ctx.setdefault("wallet_urc", balance(current["username"],"URC") if current else 0)
     return render_template_string(shell,title=title,body=body,**ctx)
 
 @empire_bp.get("/healthz")
@@ -329,36 +404,29 @@ def offline():
 @login_required
 def home():
     u=user()
-    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' ORDER BY id DESC LIMIT 8").fetchall()
-    body=render_template_string("""<section class='hero'><div class='hero-copy'><span class='hero-kicker'>✦ حارس الإمبراطورية · قوة بحر الدماء</span><h1>قوة تتجاوز المستحيل<br><span>وعالم كامل بين يديك</span></h1>
-    <p>اكتشف خدمات الإمبراطورية إستوري، اشحن ألعابك وتسوق بأمان وسط تجربة رقمية بطابع أسطوري.</p><div class='grid' style='max-width:650px;margin-top:22px'>
-    <a class='btn' href='/store/topups'>استكشف شحن الألعاب</a><a class='btn secondary' href='/store/marketplace'>تصفح السوق</a></div></div>
-    <div class='hero-character' role='img' aria-label='محارب أصلي بقوة بحر الدماء'>
-    <svg viewBox='0 0 360 390' xmlns='http://www.w3.org/2000/svg' aria-hidden='true'>
-    <defs><linearGradient id='armor' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#30205f'/><stop offset='.48' stop-color='#11172d'/><stop offset='1' stop-color='#70204d'/></linearGradient><linearGradient id='gold' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#fff0a5'/><stop offset='.45' stop-color='#dcae55'/><stop offset='1' stop-color='#75451d'/></linearGradient><linearGradient id='blood' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#ff315d'/><stop offset='1' stop-color='#850b37'/></linearGradient></defs>
-    <path d='M36 315C3 270 42 235 17 191c44 18 54 48 57 77 13-44 2-76 25-111 21 52 9 92 1 119 35-35 38-77 72-103-2 57-14 90-38 126 50-27 69-71 85-115 25 57 3 106-31 143 53-19 78-55 103-95 8 66-30 112-81 144Z' fill='url(#blood)' opacity='.82'/>
-    <path d='M87 362c12-72 17-125 40-167 17-31 35-48 55-55 28 9 51 30 68 64 20 42 25 99 31 158l-62 20H142Z' fill='url(#armor)' stroke='#9a4a86' stroke-width='3'/>
-    <path d='M115 218 78 278l55 31 38-61ZM245 218l38 60-54 31-38-61Z' fill='#15172d' stroke='url(#gold)' stroke-width='7'/>
-    <path d='M132 151c-10-51 13-99 51-111 44-14 83 20 82 70l-10 52-30 37-67-5Z' fill='#151323' stroke='#b94b72' stroke-width='4'/>
-    <path d='M133 113c-25-39-5-83 28-100-2 28 13 32 22 44 12-33 39-47 71-42-12 19-10 34 10 52-23-7-37-4-50 10l-25 34Z' fill='#171225'/>
-    <path d='M145 121c15-19 31-26 48-23l-18 19-23 13ZM224 119c14-11 29-11 42-3l-24 15-18-1Z' fill='#ff365d'/>
-    <path d='M181 139c17 8 32 8 47-2l-8 26-23 14-20-16Z' fill='#9b345d'/>
-    <path d='M180 177 160 205l28 31 18-17 19 17 26-31-22-28-25 12Z' fill='url(#gold)' stroke='#ffe6a0' stroke-width='2'/>
-    <path d='m202 184 0-30m-18 15 18-15 18 15' fill='none' stroke='#ffdb7b' stroke-width='6' stroke-linecap='round'/>
-    <path d='M147 243 180 226l22 31 22-31 36 17-19 82-38 20-39-20Z' fill='#101629' stroke='url(#gold)' stroke-width='4'/>
-    <path d='M182 258h39l-19 46Z' fill='url(#blood)' stroke='#ff7899' stroke-width='2'/>
-    <path d='M48 175c-17-31-3-55 17-71-3 24 9 31 19 41-1-29 16-48 37-58-8 29 0 48 19 65-34 3-57 12-92 23ZM282 191c30-30 23-58 5-82 0 25-15 31-26 39 6-29-8-52-27-65 3 30-8 47-29 61 34 8 55 20 77 47Z' fill='url(#blood)' opacity='.9'/>
-    <circle cx='174' cy='126' r='4' fill='#ffecb2'/><circle cx='241' cy='126' r='4' fill='#ffecb2'/>
-    <path d='M104 342h150' stroke='#ffcf72' stroke-width='3' stroke-linecap='round' opacity='.75'/><path d='M126 355h106' stroke='#ff3d72' stroke-width='2' stroke-linecap='round'/>
-    </svg></div></section>
-    <section class='panel'><h2>اكتشف خدماتنا</h2><div class='grid'>
-    <a class='service-card' href='/store/topups'><span class='service-icon'>🎮</span><strong>شحن الألعاب</strong><span>باقات وخدمات ألعابك المفضلة</span></a>
-    <a class='service-card' href='/store/marketplace'><span class='service-icon'>🛍️</span><strong>السوق الرقمي</strong><span>تصفح العروض وأضف إعلانك</span></a>
-    <a class='service-card' href='/store/wallet'><span class='service-icon'>👛</span><strong>المحفظة</strong><span>تابع رصيدك وعملياتك بسهولة</span></a>
-    <a class='service-card' href='/store/agents'><span class='service-icon'>🤝</span><strong>برنامج الوكلاء</strong><span>انضم إلى شبكة شركائنا</span></a></div></section>
-    <section class='panel'><h2>أحدث العروض</h2><div class='grid'>{% for x in rows %}
-    <article class='panel'>{% if x['image_path'] %}<img src='/store/listing-image/{{x['id']}}' alt='صورة العرض' style='width:100%;max-height:220px;object-fit:cover;border-radius:10px'>{% endif %}<span class='tag'>{{x['game']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b></article>
-    {% else %}<div class='empty-state'>لا توجد عروض متاحة الآن. عد إلينا قريباً لاكتشاف الجديد.</div>{% endfor %}</div></section>""",rows=rows)
+    sdg=balance(u["username"],"SDG")
+    urc=balance(u["username"],"URC")
+    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 4",("user:"+u["username"],)).fetchall()
+    body=render_template_string("""<section class='panel' style='padding:18px'>
+    <div style='display:flex;justify-content:space-between;align-items:center;gap:8px'><div><small>مرحباً بعودتك</small><h1 style='margin:2px 0'>{{name}}</h1></div><span class='tag'>Empire E-Story</span></div>
+    <div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px'>
+      <div style='padding:13px;border-radius:14px;background:#f1f7fc'><small>رصيد SDG</small><div style='font-size:20px;font-weight:900;color:#125e96'>{{'{:,}'.format(sdg)}}</div></div>
+      <div style='padding:13px;border-radius:14px;background:#f5f3ff'><small>رصيد URC</small><div style='font-size:20px;font-weight:900;color:#6548a8'>{{'{:,}'.format(urc)}}</div></div>
+    </div></section>
+    <section class='panel'><h2>الخدمات الرئيسية</h2><div class='grid'>
+      <a class='service-card' href='/store/transfer-epc'><span class='service-icon'>↗</span><strong>تحويل الأموال</strong><span>إرسال واستقبال URC</span></a>
+      <a class='service-card' href='/store/exchange'><span class='service-icon'>⇄</span><strong>صرف العملات</strong><span>URC و SDG</span></a>
+      <a class='service-card' href='/store/deposit'><span class='service-icon'>＋</span><strong>إيداع رصيد</strong><span>إضافة رصيد SDG</span></a>
+      <a class='service-card' href='/store/withdrawal'><span class='service-icon'>⇩</span><strong>سحب رصيد</strong><span>طلب سحب من المحفظة</span></a>
+      <a class='service-card' href='/store/topups'><span class='service-icon'>🎮</span><strong>شحن الألعاب</strong><span>باقات وخدمات الألعاب</span></a>
+      <a class='service-card' href='/store/marketplace'><span class='service-icon'>▦</span><strong>السوق الرقمي</strong><span>تصفح العروض الرقمية</span></a>
+      <a class='service-card' href='/store/agents'><span class='service-icon'>♧</span><strong>الوكلاء</strong><span>خدمات الوكلاء</span></a>
+      <a class='service-card' href='/store/orders'><span class='service-icon'>☷</span><strong>طلباتي</strong><span>متابعة حالة الطلبات</span></a>
+    </div></section>
+    <section class='panel'><div style='display:flex;justify-content:space-between;align-items:center'><h2 style='margin:0'>آخر العمليات</h2><a href='/store/wallet'>عرض الكل</a></div>
+    {% for x in rows %}<div style='display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf0f4'><div><b>{{x['memo']}}</b><div><small>{{x['created_at'][:16]}}</small></div></div><b dir='ltr'>{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class='empty-state'>لا توجد عمليات حديثة.</div>{% endfor %}</section>
+    {% if is_founder %}<section class='panel'><h2>إدارة المؤسس</h2><a class='btn' href='/store/admin'>فتح لوحة التحكم الشاملة</a></section>{% endif %}""",
+      name=u["full_name"],sdg=sdg,urc=urc,rows=rows,is_founder=u["role"]=="founder")
     return page("الرئيسية",body)
 
 @empire_bp.get("/wallet")
