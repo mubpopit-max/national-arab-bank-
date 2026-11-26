@@ -877,31 +877,39 @@ def transfer_epc():
 def transfer_receipt(reference):
     u=user()
     rows=db().execute("SELECT account,currency,delta,memo,created_at FROM es_ledger WHERE reference=? ORDER BY line_no",(reference,)).fetchall()
-    if len(rows)!=2 or any(not row["account"].startswith("user:") for row in rows):
-        abort(404)
+    if len(rows)!=2 or any(not row["account"].startswith("user:") for row in rows): abort(404)
     debit=next((row for row in rows if row["delta"]<0),None)
     credit=next((row for row in rows if row["delta"]>0),None)
-    if not debit or not credit or debit["currency"]!=credit["currency"]:
-        abort(404)
+    if not debit or not credit or debit["currency"]!=credit["currency"]: abort(404)
     sender=debit["account"][5:]; recipient=credit["account"][5:]
-    if u["username"] not in (sender,recipient):
-        abort(404)
+    if u["username"] not in (sender,recipient): abort(404)
+    detail=db().execute("SELECT * FROM es_transfer_details WHERE reference=?",(reference,)).fetchone()
+    if not detail: abort(404)
+    sender_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(sender,)).fetchone()
+    recipient_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(recipient,)).fetchone()
     amount=credit["delta"]
-    body=render_template_string("""<section class='panel receipt-card'>
-      <div class='receipt-head'><span class='receipt-mark'>✓</span><span class='tag'>عملية مكتملة</span><h1>تم التحويل بنجاح</h1>
-      <p>تم تنفيذ التحويل وتسجيله في سجل المعاملات.</p></div>
-      <div class='receipt-amount'><small>المبلغ المحوّل</small><strong>{{'{:,}'.format(amount)}} <small>{{currency}}</small></strong></div>
-      <div class='receipt-details'>
-        <div><small>رقم العملية الفريد</small><b dir='ltr'>{{reference}}</b></div>
-        <div><small>من</small><b>{{sender}}</b></div>
-        <div><small>إلى</small><b>{{recipient}}</b></div>
-        <div><small>تاريخ ووقت العملية (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
-        <div><small>الحالة</small><b class='receipt-success'>مكتملة · مؤكدة في السجل</b></div>
+    body=render_template_string("""<section class='panel transfer-receipt'>
+      <div class='receipt-flag'><i></i><i></i><i></i><i></i></div>
+      <div style='text-align:center'><span class='tag'>إشعار تحويل رسمي</span><div style='font-size:42px;color:#16844f'>✓</div>
+      <h1>تم التحويل بنجاح</h1><p>الإمبراطورية إستوري · خدمة مالية سودانية</p></div>
+      <div style='background:#edf7f1;border:1px solid #d1eadb;border-radius:16px;padding:17px;text-align:center;margin:14px 0'>
+        <small>قيمة التحويل</small><div style='font-size:30px;font-weight:900;color:#145c3a'>{{'{:,}'.format(amount)}} {{currency}}</div><b style='color:#16844f'>عملية مكتملة</b>
       </div>
-      <p class='muted receipt-note'>هذا الإيصال يثبت تسجيل العملية داخل محفظة الإمبراطورية إستوري. لا يعرض أرصدة أي طرف.</p>
-      <div class='receipt-actions'><button type='button' onclick='window.print()'>طباعة / حفظ الإيصال</button><a class='btn secondary' href='/store/wallet'>العودة إلى المحفظة</a></div>
-    </section>""",amount=amount,currency=credit["currency"],reference=reference,sender=sender,recipient=recipient,created_at=credit["created_at"])
-    return page("إيصال التحويل",body)
+      <div style='display:grid;gap:11px'>
+        <div><small>من المرسل</small><b>{{sender_name}} · {{sender_account}}</b></div>
+        <div><small>إلى المستلم</small><b>{{recipient_name}} · {{recipient_account}}</b></div>
+        <div><small>ملاحظات المرسل</small><b>{{note or 'لا توجد ملاحظات'}}</b></div>
+        <div><small>رقم العملية</small><b dir='ltr'>{{reference}}</b></div>
+        <div><small>تاريخ ووقت العملية (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
+      </div>
+      <p class='muted' style='margin-top:15px'>هذا إشعار يثبت تسجيل التحويل داخل محفظة الإمبراطورية إستوري. لا يعرض أرصدة أطراف العملية.</p>
+      <div style='display:flex;gap:8px;flex-wrap:wrap'><button type='button' onclick='window.print()'>حفظ الإشعار / PDF</button><a class='btn secondary' href='/store/'>الرئيسية</a></div>
+    </section>""",
+      amount=amount,currency=credit["currency"],reference=reference,
+      sender_name=sender_user["full_name"],sender_account=sender_user["account_number"],
+      recipient_name=recipient_user["full_name"],recipient_account=recipient_user["account_number"],
+      note=detail["note"],created_at=credit["created_at"])
+    return page("إشعار التحويل",body)
 
 @empire_bp.route("/exchange",methods=["GET","POST"])
 @login_required
