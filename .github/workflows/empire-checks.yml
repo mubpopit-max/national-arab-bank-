@@ -1,0 +1,49 @@
+name: Empire E-Story checks
+
+on:
+  push:
+    branches: [empire-estory-development]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    env:
+      FLASK_SECRET_KEY: ci-only-secret-key-not-for-production
+      FOUNDER_PASSWORD: CI-only-password-123!
+      FOUNDER_PIN: "1234"
+      NAB_DATABASE: /tmp/empire-ci.db
+      SESSION_COOKIE_SECURE: "0"
+      EMPIRE_DATA_ENCRYPTION_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q app.py empire_store.py wsgi.py vortex tests
+      - run: python -m unittest discover -s tests -v
+      - name: Application and commerce schema smoke check
+        run: |
+          python - <<'PY'
+          import app
+          rules = {rule.rule for rule in app.app.url_map.iter_rules()}
+          assert "/store/" in rules
+          assert "/store/marketplace" in rules
+          assert "/store/wallet" in rules
+          assert "/store/admin" in rules
+          assert "/store/admin/withdrawals" in rules
+          assert "/store/transfer-epc" in rules
+          assert "/store/healthz" in rules
+          with app.app.app_context():
+              from empire_store import db
+              names = {r["name"] for r in db().execute(
+                  "SELECT name FROM sqlite_master WHERE type='table'"
+              ).fetchall()}
+              required = {"es_listings", "es_market_orders", "es_ledger",
+                          "es_payments", "es_agents", "es_topup_orders", "es_withdrawals", "es_products"}
+              assert required.issubset(names), required - names
+          print("Empire E-Story application and commerce schema initialized.")
+          PY
