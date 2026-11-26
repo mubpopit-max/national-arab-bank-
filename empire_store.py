@@ -299,7 +299,7 @@ def page(title,body,**ctx):
     .nav{display:none}
     .wallet-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:18px 19px;border-radius:22px;background:linear-gradient(125deg,#07518d,#087db5 65%,#13a3b0);color:#fff;box-shadow:0 12px 28px rgba(7,81,141,.18)}
     .wallet-top .eyebrow{font-size:12px;color:#d8efff}.wallet-top .amount{font-size:27px;font-weight:900;direction:ltr;text-align:right;line-height:1.2}.wallet-top .currency{font-size:12px;color:#d8efff}
-    .wallet-top .wallet-link{padding:9px 13px;border:1px solid rgba(255,255,255,.35);border-radius:12px;color:#fff;font-size:12px;font-weight:800;white-space:nowrap}
+    .wallet-top .urc-line{margin-top:5px;font-size:12px;color:#d8efff}.wallet-top .wallet-link{padding:9px 13px;border:1px solid rgba(255,255,255,.35);border-radius:12px;color:#fff;font-size:12px;font-weight:800;white-space:nowrap}
     .app-bottom{position:fixed;z-index:100;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);border-top:1px solid #e6eaf0;box-shadow:0 -5px 24px rgba(20,30,55,.08);backdrop-filter:blur(16px)}
     .app-bottom a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;color:#7b8496;font-size:10px;font-weight:800}
     .app-bottom a .ico{font-size:20px;line-height:1.25}.app-bottom a.active{color:#0865a4}
@@ -320,12 +320,13 @@ def page(title,body,**ctx):
     @media(min-width:760px){main{margin-top:22px}.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #e6eaf0;border-bottom:0;border-radius:18px 18px 0 0}}
 
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
+    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div><div class='urc-line'>رصيد العملة الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav></body></html>"""
     current=user()
     ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
     ctx.setdefault("wallet_sdg", balance(current["username"],"SDG") if current else 0)
+    ctx.setdefault("wallet_urc", balance(current["username"],"URC") if current else 0)
     return render_template_string(shell,title=title,body=body,**ctx)
 
 @empire_bp.get("/healthz")
