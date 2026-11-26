@@ -3,11 +3,12 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
-    NAB_DATABASE=/data/empire_estory.db
+    NAB_DATABASE=/data/empire_estory.db \
+    EMPIRE_IMAGE_DIR=/data/uploads/empire
 
 WORKDIR /app
 
-RUN useradd --create-home --uid 10001 appuser && mkdir -p /data /app/static/uploads/empire
+RUN useradd --create-home --uid 10001 appuser && mkdir -p /data/uploads/empire /app/static/uploads/empire
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 COPY --chown=appuser:appuser . .
