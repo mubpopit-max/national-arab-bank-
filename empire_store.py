@@ -317,8 +317,6 @@ def admin_agents():
 
 def register_empire_store(app):
     app.register_blueprint(empire_bp)
-    with app.app_context():
-        init_empire_store_db()
 
     @app.teardown_appcontext
     def close_empire_db(exception=None):
@@ -326,3 +324,6 @@ def register_empire_store(app):
         conn = g.pop("empire_db", None)
         if conn is not None:
             conn.close()
+
+    with app.app_context():
+        init_empire_store_db()
