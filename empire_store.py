@@ -4,15 +4,19 @@ Uses a separate double-entry store ledger in the existing SQLite database.
 No legacy bank balance is imported or treated as store money. External payment
 verification is manual until a supported Binance/payment API is configured.
 """
-import os, re, json, sqlite3, secrets
+import os, re, json, sqlite3, secrets, io
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
-from flask import Blueprint, abort, flash, redirect, render_template_string, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template_string, request, session, url_for, send_from_directory
 from cryptography.fernet import Fernet, InvalidToken
+from PIL import Image
+from werkzeug.utils import secure_filename
 
 empire_bp = Blueprint("empire", __name__, url_prefix="/store")
 DATABASE = os.getenv("NAB_DATABASE", "national_arab_bank.db")
+IMAGE_DIR = os.path.abspath(os.path.join("static", "uploads", "empire"))
+os.makedirs(IMAGE_DIR, exist_ok=True)
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -37,7 +41,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS es_listings(
       id INTEGER PRIMARY KEY, public_id TEXT UNIQUE NOT NULL, seller TEXT NOT NULL,
       game TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL,
-      price_sdg INTEGER NOT NULL CHECK(price_sdg>0),
+      price_sdg INTEGER NOT NULL CHECK(price_sdg>0), image_path TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'PUBLISHED'
         CHECK(status IN ('PUBLISHED','PAUSED','SOLD','REMOVED')),
       created_at TEXT NOT NULL);
@@ -101,6 +105,9 @@ def init_db():
     payment_cols={r["name"] for r in db().execute("PRAGMA table_info(es_payments)").fetchall()}
     if "quantity_epc" not in payment_cols:
         db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
+    listing_cols={r["name"] for r in db().execute("PRAGMA table_info(es_listings)").fetchall()}
+    if "image_path" not in listing_cols:
+        db().execute("ALTER TABLE es_listings ADD COLUMN image_path TEXT NOT NULL DEFAULT ''")
     product_cols={r["name"] for r in db().execute("PRAGMA table_info(es_products)").fetchall()}
     if "cost_sdg" not in product_cols:
         db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
@@ -235,7 +242,7 @@ def home():
     <a class='btn' href='/store/wallet'>محفظتي وEPC</a><a class='btn' href='/store/agents'>برنامج الوكلاء</a></div>
     <p class='muted'>الرصيد التجاري منفصل عن أي رصيد قديم في النظام السابق.</p></section>
     <section class='panel'><h2>أحدث العروض</h2><div class='grid'>{% for x in rows %}
-    <article class='panel'><span class='tag'>{{x['game']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b></article>
+    <article class='panel'>{% if x['image_path'] %}<img src='/store/listing-image/{{x['id']}}' alt='صورة العرض' style='width:100%;max-height:220px;object-fit:cover;border-radius:10px'>{% endif %}<span class='tag'>{{x['game']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b></article>
     {% else %}<p>لا توجد عروض حالياً.</p>{% endfor %}</div></section>""",rows=rows)
     return page("الرئيسية",body)
 
@@ -310,6 +317,12 @@ def marketplace():
     <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد عروض حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
     return page("السوق",body)
 
+@empire_bp.get("/listing-image/<int:listing_id>")
+def listing_image(listing_id):
+    row=db().execute("SELECT image_path FROM es_listings WHERE id=?",(listing_id,)).fetchone()
+    if not row or not row["image_path"]: abort(404)
+    return send_from_directory(IMAGE_DIR,row["image_path"],max_age=3600)
+
 @empire_bp.route("/listing/new",methods=["GET","POST"])
 @login_required
 def listing_new():
@@ -319,12 +332,26 @@ def listing_new():
         title=request.form.get("title","").strip(); desc=request.form.get("description","").strip()
         price=money_int(request.form.get("price_sdg"))
         if not title or len(title)>100 or len(desc)<10 or len(desc)>1500: abort(400)
+        image_path=""
+        uploaded=request.files.get("image")
+        if uploaded and uploaded.filename:
+            raw=uploaded.read(5*1024*1024+1)
+            if len(raw)>5*1024*1024: abort(413,"حجم الصورة يتجاوز 5 ميغابايت")
+            try:
+                source=Image.open(io.BytesIO(raw)); source.verify()
+                source=Image.open(io.BytesIO(raw))
+                if source.width>4000 or source.height>4000: abort(400,"أبعاد الصورة كبيرة جداً")
+                source.convert("RGB").save(os.path.join(IMAGE_DIR,secrets.token_hex(16)+".jpg"),"JPEG",quality=88,optimize=True)
+                image_path=os.listdir(IMAGE_DIR)[-1]
+            except Exception:
+                abort(400,"ملف الصورة غير صالح")
         r=ref()
-        db().execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,status,created_at) VALUES(?,?,'PUBG Mobile',?,?,?,'PUBLISHED',?)",
-                     (r,u["username"],title,desc,price,now()))
+        db().execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at) VALUES(?,?,'PUBG Mobile',?,?,?,?,'PUBLISHED',?)",
+                     (r,u["username"],title,desc,price,image_path,now()))
         audit(u["username"],"LISTING_CREATED","listing",r)
         return redirect(url_for("empire.marketplace"))
-    body=render_template_string("""<section class='panel'><h1>إضافة حساب للبيع</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
+    body=render_template_string("""<section class='panel'><h1>إضافة حساب للبيع</h1><form method='post' enctype='multipart/form-data'><input type='hidden' name='csrf' value='{{csrf}}'>
+    <label>صورة الحساب (اختياري، JPG/PNG/WebP، حتى 5MB)</label><input type='file' name='image' accept='image/jpeg,image/png,image/webp'>
     <label>عنوان العرض</label><input name='title' maxlength='100' required><label>وصف الحساب دون بيانات الدخول</label><textarea name='description' minlength='10' maxlength='1500' required></textarea>
     <label>السعر SDG</label><input name='price_sdg' type='number' min='1' required><button>نشر الإعلان</button></form></section>""",csrf=session.get("csrf",""))
     return page("إعلان جديد",body)
