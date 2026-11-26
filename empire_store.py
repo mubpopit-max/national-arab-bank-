@@ -197,9 +197,11 @@ def page(title,body,**ctx):
     label{color:#d8c68f}.muted,small{color:#aaa}.tag{border:1px solid #80652d;border-radius:30px;padding:4px 9px;color:#e8c878;font-size:12px}
     .nav{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.nav a{padding:7px 10px;border:1px solid #514225;border-radius:8px;text-decoration:none}
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>♛ الإمبراطورية إستوري</div><small>EMPIRE E-STORY · سوقك الرقمي</small></header>
-    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>سوق الحسابات</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a></nav>
+    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>سوق الحسابات</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>مركز المالك</a>{% endif %}</nav>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<p><a href='/account'>حساب المستخدم</a> · <a href='/logout'>خروج</a></p></main></body></html>"""
+    current=user()
+    ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
     return render_template_string(shell,title=title,body=body,**ctx)
 
 @empire_bp.get("/manifest.webmanifest")
@@ -535,10 +537,24 @@ def transfer_epc():
 @login_required
 @founder_required
 def admin():
+    stats={
+      "listings":db().execute("SELECT COUNT(*) n FROM es_listings WHERE status='PUBLISHED'").fetchone()["n"],
+      "escrow":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='escrow:market'").fetchone()["n"],
+      "revenue":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:revenue'").fetchone()["n"],
+      "pending":db().execute("SELECT COUNT(*) n FROM es_payments WHERE status='PENDING'").fetchone()["n"],
+      "agents":db().execute("SELECT COUNT(*) n FROM es_agents WHERE status='APPROVED'").fetchone()["n"],
+      "topups":db().execute("SELECT COUNT(*) n FROM es_topup_orders WHERE status IN ('PAID','ASSIGNED')").fetchone()["n"]
+    }
     body=render_template_string("""<section class='panel'><h1>مركز إدارة الإمبراطورية</h1><div class='grid'>
-    <a class='btn' href='/store/admin/agents'>إدارة الوكلاء</a><a class='btn' href='/store/admin/products'>باقات الشحن</a>
+    <article class='panel'><small>الإعلانات النشطة</small><h2>{{stats['listings']}}</h2></article>
+    <article class='panel'><small>أموال صفقات السوق المحتجزة (SDG)</small><h2>{{'{:,}'.format(stats['escrow'])}}</h2></article>
+    <article class='panel'><small>صافي إيراد المتجر المسجل (SDG)</small><h2>{{'{:,}'.format(stats['revenue'])}}</h2></article>
+    <article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>
+    <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
+    <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div>
+    <div class='grid'><a class='btn' href='/store/admin/agents'>إدارة الوكلاء</a><a class='btn' href='/store/admin/products'>باقات الشحن والتكلفة</a>
     <a class='btn' href='/store/admin/payments'>طلبات الدفع</a><a class='btn' href='/store/admin/disputes'>النزاعات</a>
-    <a class='btn' href='/store/admin/settings'>الإعدادات والأسعار</a><a class='btn' href='/store/admin/audit'>سجل التدقيق</a></div></section>""")
+    <a class='btn' href='/store/admin/settings'>الإعدادات والأسعار</a><a class='btn' href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats)
     return page("الإدارة",body)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
