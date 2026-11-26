@@ -4,9 +4,12 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.Window;
+import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.net.http.SslError;
@@ -17,7 +20,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.view.Window;
 import android.widget.Toast;
 
 public final class MainActivity extends Activity {
@@ -37,6 +39,26 @@ public final class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(9, 9, 9));
+        webView.setOnApplyWindowInsetsListener((view, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                left = bars.left;
+                top = bars.top;
+                right = bars.right;
+                bottom = bars.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(left, top, right, bottom);
+            return insets;
+        });
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
@@ -59,7 +81,10 @@ public final class MainActivity extends Activity {
         webView.setWebViewClient(new SecureWebViewClient());
         webView.setWebChromeClient(new SecureWebChromeClient());
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
-            openExternal(Uri.parse(url));
+            Uri downloadUri = Uri.parse(url);
+            if ("https".equalsIgnoreCase(downloadUri.getScheme())) {
+                openExternal(downloadUri);
+            }
         });
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
 
