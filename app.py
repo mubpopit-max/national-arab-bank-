@@ -6663,6 +6663,17 @@ from empire_store import register_empire_store
 
 register_empire_store(app)
 
+@app.before_request
+def hide_legacy_bank_surface():
+    endpoint = request.endpoint or ""
+    if endpoint in {"login", "register", "logout", "static"} or endpoint.startswith("empire."):
+        return None
+    if request.path.startswith("/static/") or request.path.startswith("/store/"):
+        return None
+    if current_user():
+        return redirect(url_for("empire.home"))
+    return redirect(url_for("login"))
+
 with app.app_context():
     init_db()
     init_vortex_db()
