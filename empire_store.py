@@ -360,57 +360,41 @@ def page(title,body,**ctx):
     .transfer-receipt{border-top:6px solid #16844f!important;background:linear-gradient(180deg,#fff 0%,#f8fbf9 100%)!important}
     .receipt-flag{display:flex;height:7px;border-radius:20px;overflow:hidden;margin:0 0 15px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
     footer{display:none!important}
+    /* Approved Empire E-Story visual system */
+    .app-header{height:82px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 18px!important;background:linear-gradient(180deg,#fff,#f7fbff)!important}
+    .header-brand{flex:1;text-align:center;min-width:0}.header-brand .brand{font-size:21px!important;font-weight:950;white-space:nowrap;color:#123d68!important}.header-brand .brand:before{display:none!important}.header-brand small{margin:0!important;font-size:11px!important;letter-spacing:.2px!important;text-align:center;color:#315a7b!important}
+    .header-menu,.header-alert,.header-avatar{display:grid;place-items:center;width:43px;height:43px;border-radius:50%;background:#eaf3fb;color:#075b9b!important;font-size:22px;font-weight:900}.header-alert{background:#fff1f0;color:#c43d42!important}.header-avatar{background:#e7f5ee;color:#13834c!important}
+    .wallet-top{position:relative;display:grid!important;grid-template-columns:58px 1fr 40px;align-items:center;gap:12px;min-height:166px;margin:12px 0 18px!important;padding:22px 17px!important;border:1px solid rgba(255,255,255,.35)!important;border-radius:27px!important;background:linear-gradient(118deg,#064a83 0%,#086bb0 58%,#087f78 100%)!important;color:#fff!important;box-shadow:0 14px 30px rgba(5,75,126,.22)!important;overflow:hidden}
+    .wallet-top:after{content:'';position:absolute;width:190px;height:190px;left:-55px;top:-85px;border-radius:50%;border:1px solid rgba(255,255,255,.13);box-shadow:0 0 0 22px rgba(255,255,255,.035),0 0 0 44px rgba(255,255,255,.025);pointer-events:none}
+    .wallet-card-icon{display:grid;place-items:center;width:58px;height:58px;border-radius:19px;background:rgba(255,255,255,.16);font-size:34px;color:#fff}.wallet-balance{min-width:0}
+    .wallet-top .eyebrow{font-size:15px!important;font-weight:800;color:#e4f4ff!important;margin-bottom:7px}.wallet-top .amount{font-size:clamp(25px,7vw,38px)!important;font-weight:950!important;direction:ltr;text-align:right;line-height:1.12;color:#fff!important;white-space:nowrap}.wallet-top .amount span{font-size:16px;color:#ffcf37!important}.wallet-top .currency{font-size:11px;color:#d5edfa!important;margin-top:6px}
+    .balance-toggle{width:40px!important;height:40px!important;min-height:40px!important;padding:0!important;border-radius:50%!important;background:rgba(255,255,255,.16)!important;color:#fff!important;font-size:21px!important;box-shadow:none!important}
+    .wallet-secure{position:absolute;bottom:12px;left:17px;display:flex;align-items:center;gap:6px;color:#e4f8ec}.wallet-secure span{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;background:#16a05b;color:white;font-weight:900}.wallet-secure small{color:#e4f8ec!important;font-size:10px}
+    .home-services{margin:0 0 14px}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 13px}.section-heading h2{margin:2px 0 0;font-size:18px!important}.section-kicker{font-size:10px;font-weight:900;color:#16834f;letter-spacing:.2px}.sudan-mark{font-size:24px}
+    .service-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.service-grid .service-card{align-items:center!important;justify-content:flex-start!important;text-align:center;min-width:0;min-height:115px!important;padding:12px 5px!important;gap:8px!important;border-radius:19px!important;box-shadow:0 5px 15px rgba(23,64,92,.055)!important}.service-grid .service-card strong{font-size:11px!important;line-height:1.35!important;overflow-wrap:anywhere}.service-grid .service-icon{width:55px!important;height:55px!important;border-radius:18px!important;font-size:26px!important;font-style:normal!important}
+    .service-icon.store{background:#e6f5fc!important;color:#0878b9}.service-icon.accounts{background:#e6f6ed!important;color:#16854e}.service-icon.transfer{background:#e8f0ff!important;color:#1765cf}.service-icon.coins{background:#fff3d9!important;color:#bd7b08}.service-icon.funding{background:#e7f6ef!important;color:#16854e}.service-icon.profile{background:#eaf1ff!important;color:#245eb5}.service-icon.games{background:#f0eaff!important;color:#7445bd}.service-icon.exchange{background:#e5f5f5!important;color:#087f80}.service-icon.withdraw{background:#fff0ec!important;color:#c25a38}.service-icon.agents{background:#edf3f8!important;color:#43647e}
+    .national-banner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:105px;margin:15px 0;padding:18px 20px;overflow:hidden;border-radius:23px;background:linear-gradient(110deg,#e8f5ff,#fff 48%,#e8f7ee);border:1px solid #dceaf3}.banner-copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:5px}.banner-copy span{font-size:clamp(17px,4.5vw,23px);font-weight:950;color:#123f71}.banner-copy strong{font-size:12px;color:#39718b}.banner-flag{position:relative;width:60px;height:40px;display:flex;flex-direction:column;overflow:hidden;border-radius:5px;transform:rotate(-8deg);box-shadow:0 5px 13px rgba(20,45,65,.15)}.banner-flag i{flex:1}.banner-flag i:nth-child(1){background:#d92732}.banner-flag i:nth-child(2){background:#fff}.banner-flag i:nth-child(3){background:#111}.banner-flag b{position:absolute;left:0;top:0;width:0;height:0;border-top:20px solid transparent;border-bottom:20px solid transparent;border-left:27px solid #16864b}.banner-crown{position:absolute;left:28%;bottom:-20px;font-size:95px;color:rgba(8,103,161,.07);pointer-events:none}
+    .recent-panel{margin-top:13px!important}.view-all{font-size:12px;font-weight:850;white-space:nowrap}.transaction-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #edf1f5}.transaction-row:last-child{border-bottom:0}.transaction-symbol{display:grid;place-items:center;flex:0 0 42px;height:42px;border-radius:50%;background:#e6f6ed;color:#13864e;font-size:23px;font-weight:900}.transaction-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.transaction-info b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1b3e56}.transaction-info small{font-size:10px}.transaction-value{font-size:11px;white-space:nowrap}.transaction-value.in{color:#13864e}.transaction-value.out{color:#c04b4b}.founder-shortcut p{font-size:12px}
+    .app-bottom{grid-template-columns:repeat(5,minmax(0,1fr))!important;min-height:72px}.app-bottom a{font-size:10px!important}.app-bottom a .ico{font-size:22px!important}
+    @media(max-width:430px){.app-header{height:72px;padding:8px 12px!important}.header-brand .brand{font-size:17px!important}.header-brand small{font-size:9px!important}.header-menu,.header-alert,.header-avatar{width:37px;height:37px;font-size:19px}.wallet-top{grid-template-columns:48px 1fr 34px;gap:8px;padding:20px 12px!important;min-height:150px}.wallet-card-icon{width:48px;height:48px;font-size:28px}.wallet-top .amount{font-size:clamp(22px,6.1vw,30px)!important}.wallet-top .amount span{font-size:12px}.balance-toggle{width:34px!important;height:34px!important;min-height:34px!important}.service-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.service-grid .service-card{min-height:104px!important}.service-grid .service-icon{width:48px!important;height:48px!important}.service-grid .service-card strong{font-size:11px!important}.national-banner{min-height:96px;padding:14px}.banner-flag{width:47px;height:32px}.banner-flag b{border-top-width:16px;border-bottom-width:16px;border-left-width:22px}}
+    @media(min-width:431px) and (max-width:650px){.service-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    @media(min-width:760px){main{max-width:900px!important}.service-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.app-bottom{width:min(100%,900px)!important}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
     @media(min-width:760px){.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #dce8f1;border-bottom:0;border-radius:18px 18px 0 0}}
 
-</style></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك المتاح</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div></div><a class='wallet-link' href='/store/wallet'>تفاصيل الرصيد ←</a></section><nav class='nav'>
+</style></head><body><header class='app-header'><a class='header-menu' href='/store/'>☰</a><div class='header-brand'><div class='brand'>♛ Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'>♧</a><a class='header-avatar' href='/account_details' aria-label='الملف الشخصي'>♙</a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'>▣</div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><span id='balanceEye'>◉</span></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>المتجر</a><a href='/store/transfer-epc'><span class='ico'>⇄</span>التحويلات</a><a href='/store/wallet'><span class='ico'>▣</span>عملاتي</a><a href='/account_details'><span class='ico'>♙</span>حسابي</a></nav><script>
 (function(){
-  'use strict';
-  const main=document.querySelector('main');
+  const balance=document.getElementById('sdgBalance'),toggle=document.getElementById('balanceToggle');
+  if(balance&&toggle){
+    const formatted=Number(balance.dataset.balance||'0').toLocaleString('en-US');
+    let hidden=false;try{hidden=localStorage.getItem('empire.balance.hidden')==='1'}catch(_){}
+    function paint(){balance.innerHTML=hidden?'••••••••':formatted+' <span>SDG</span>';toggle.setAttribute('aria-pressed',hidden?'true':'false');toggle.setAttribute('aria-label',hidden?'إظهار الرصيد':'إخفاء الرصيد');document.getElementById('balanceEye').textContent=hidden?'◎':'◉'}
+    toggle.addEventListener('click',function(){hidden=!hidden;try{localStorage.setItem('empire.balance.hidden',hidden?'1':'0')}catch(_){}paint()});paint();
+  }
   const bottom=document.querySelector('.app-bottom');
-  if(!main||!bottom)return;
-  let busy=false, timer=null, controller=null;
-  function markActive(path){
-    bottom.querySelectorAll('a').forEach(a=>{
-      try{a.classList.toggle('active',new URL(a.href,location.href).pathname===path)}catch(_){}
-    });
-  }
-  function restore(){busy=false;main.style.opacity='1';main.style.pointerEvents='';if(timer){clearTimeout(timer);timer=null}if(controller){controller.abort();controller=null}}
-  async function navigate(url,push){
-    const target=new URL(url,location.href);
-    if(target.origin!==location.origin||!target.pathname.startsWith('/store/')){location.assign(target.href);return}
-    if(busy)return;
-    busy=true;main.style.opacity='.72';main.style.pointerEvents='none';
-    controller=new AbortController();
-    timer=setTimeout(()=>{if(busy){restore();location.assign(target.href)}},9000);
-    try{
-      const response=await fetch(target.href,{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{'X-Requested-With':'XMLHttpRequest'}});
-      if(!response.ok)throw new Error('HTTP '+response.status);
-      const html=await response.text();
-      const doc=new DOMParser().parseFromString(html,'text/html');
-      const next=doc.querySelector('main');
-      if(!next)throw new Error('Screen unavailable');
-      main.innerHTML=next.innerHTML;
-      document.title=doc.title||document.title;
-      if(push)history.pushState({app:true},'',target.href);
-      restore();window.scrollTo(0,0);markActive(target.pathname);
-    }catch(err){
-      restore();
-      if(err.name!=='AbortError')location.assign(target.href);
-    }
-  }
-  document.addEventListener('click',e=>{
-    const a=e.target.closest('a[href]');
-    if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||a.target||a.hasAttribute('download'))return;
-    const url=new URL(a.href,location.href);
-    if(url.origin===location.origin&&url.pathname.startsWith('/store/')){
-      e.preventDefault();navigate(url.href,true);
-    }
-  });
-  window.addEventListener('popstate',()=>navigate(location.href,false));
-  markActive(location.pathname);
+  if(bottom){const path=location.pathname;bottom.querySelectorAll('a').forEach(function(a){try{const p=new URL(a.href,location.href).pathname;a.classList.toggle('active',p===path||(p==='/store/'&&path==='/store/'))}catch(_){}})}
 })();
 </script></body></html>"""
     current=user()
@@ -451,27 +435,25 @@ def offline():
 @login_required
 def home():
     u=user()
-    sdg=balance(u["username"],"SDG")
-    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 5",("user:"+u["username"],)).fetchall()
-    body=render_template_string("""<section class='panel'><h2>خدماتك</h2><div class='grid' style='grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
-      <a class='service-card' href='/store/transfer-epc'><i class='service-icon'>⇄</i><strong>التحويلات</strong><span>إرسال واستقبال الأموال</span></a>
-      <a class='service-card' href='/store/accounts'><i class='service-icon'>🎮</i><strong>بيع وشراء حسابات</strong><span>اعرض حسابك أو اشترِ</span></a>
-      <a class='service-card' href='/account/funding'><i class='service-icon'>＋</i><strong>تغذية حسابي</strong><span>إيداع رصيد SDG</span></a>
-      <a class='service-card' href='/account_details'><i class='service-icon'>♙</i><strong>الملف الشخصي</strong><span>بيانات حسابك</span></a>
-      <a class='service-card' href='/store/wallet'><i class='service-icon'>◉</i><strong>عملاتي</strong><span>SDG و URC</span></a>
-      <a class='service-card' href='/store/marketplace'><i class='service-icon'>▦</i><strong>المتجر الشامل</strong><span>تسوق واعرض منتجاتك</span></a>
-      <a class='service-card' href='/store/topups'><i class='service-icon'>🎮</i><strong>شحن الألعاب</strong><span>باقات وخدمات رقمية</span></a>
-      <a class='service-card' href='/store/exchange'><i class='service-icon'>⇄</i><strong>صرف العملات</strong><span>تحويل URC و SDG</span></a>
-      <a class='service-card' href='/store/withdrawal'><i class='service-icon'>↧</i><strong>سحب الرصيد</strong><span>طلبات السحب</span></a>
-      <a class='service-card' href='/store/agents'><i class='service-icon'>♧</i><strong>الوكلاء</strong><span>خدمات الوكلاء</span></a>
-      <a class='service-card' href='/store/orders'><i class='service-icon'>☷</i><strong>طلباتي</strong><span>متابعة المشتريات</span></a>
-      <a class='service-card' href='/store/wallet'><i class='service-icon'>▤</i><strong>كشف الحساب</strong><span>سجل الحركات المالية</span></a>
-    </div></section>
-    <section class='panel'><div style='display:flex;justify-content:space-between;align-items:center'><h2 style='margin:0'>آخر العمليات</h2><a href='/store/wallet'>عرض الكل</a></div>
-    {% for x in rows %}<div style='display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf0f4'><div><b>{{x['memo']}}</b><div><small>{{x['created_at'][:16]}}</small></div></div><b dir='ltr'>{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class='empty-state'>لا توجد عمليات حديثة.</div>{% endfor %}</section>
-    {% if is_founder %}<section class='panel'><h2>مركز المؤسس</h2><a class='btn' href='/store/admin'>لوحة التحكم الشاملة</a></section>{% endif %}""",
-      rows=rows,is_founder=u["role"]=="founder")
+    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 4",("user:"+u["username"],)).fetchall()
+    body=render_template_string("""<section class="home-services"><div class="section-heading"><div><span class="section-kicker">خدمات الإمبراطورية</span><h2>ماذا تريد أن تفعل اليوم؟</h2></div><span class="sudan-mark">🇸🇩</span></div>
+    <div class="service-grid">
+    <a class="service-card" href="/store/marketplace"><i class="service-icon store">▦</i><strong>المتجر</strong></a>
+    <a class="service-card" href="/store/accounts"><i class="service-icon accounts">🛒</i><strong>بيع وشراء الحسابات</strong></a>
+    <a class="service-card" href="/store/transfer-epc"><i class="service-icon transfer">⇄</i><strong>التحويلات</strong></a>
+    <a class="service-card" href="/store/wallet"><i class="service-icon coins">◉</i><strong>عملاتي</strong></a>
+    <a class="service-card" href="/account/funding"><i class="service-icon funding">↥</i><strong>تغذية حسابي</strong></a>
+    <a class="service-card" href="/account_details"><i class="service-icon profile">♙</i><strong>ملفي الشخصي</strong></a>
+    <a class="service-card" href="/store/topups"><i class="service-icon games">🎮</i><strong>الألعاب</strong></a>
+    <a class="service-card" href="/store/exchange"><i class="service-icon exchange">⇄</i><strong>صرف العملات</strong></a>
+    <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw">↧</i><strong>السحب</strong></a>
+    <a class="service-card" href="/store/agents"><i class="service-icon agents">♧</i><strong>الوكلاء</strong></a></div></section>
+    <section class="national-banner"><div class="banner-copy"><span>معاً نبني السودان الرقمي</span><strong>خدمات متكاملة .. أمان وثقة</strong></div><div class="banner-flag" aria-label="علم السودان"><i></i><i></i><i></i><b></b></div><div class="banner-crown">♛</div></section>
+    <section class="panel recent-panel"><div class="section-heading"><div><span class="section-kicker">حسابك أولاً</span><h2>آخر العمليات</h2></div><a class="view-all" href="/store/wallet">عرض الكل ←</a></div>
+    {% for x in rows %}<div class="transaction-row"><span class="transaction-symbol">{{'↗' if x['delta'] < 0 else '↙'}}</span><div class="transaction-info"><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}}</small></div><b class="transaction-value {{'out' if x['delta'] < 0 else 'in'}}" dir="ltr">{{'+' if x['delta'] > 0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class="empty-state">ستظهر هنا آخر حركات محفظتك.</div>{% endfor %}</section>
+    {% if is_founder %}<section class="panel founder-shortcut"><h2>مركز المؤسس</h2><p>إدارة شاملة للمنصة والحسابات والأصول.</p><a class="btn" href="/store/admin">فتح لوحة تحكم المؤسس</a></section>{% endif %}""",rows=rows,is_founder=u["role"]=="founder")
     return page("الرئيسية",body)
+
 
 @empire_bp.get("/wallet")
 @login_required
