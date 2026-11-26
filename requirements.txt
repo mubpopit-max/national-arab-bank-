@@ -3,3 +3,4 @@ bcrypt
 python-dotenv
 waitress
 gunicorn
+cryptography>=44,<47
