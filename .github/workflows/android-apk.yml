@@ -2,7 +2,7 @@ name: Empire E-Story Android APK
 
 on:
   push:
-    branches: [android-app-prep]
+    branches: [main, android-app-prep]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -62,7 +62,7 @@ jobs:
         with:
           tag_name: android-debug-latest
           name: Empire E-Story Android APK (Test)
-          target_commitish: android-app-prep
+          target_commitish: main
           prerelease: true
           make_latest: false
           overwrite_files: true
