@@ -8,7 +8,7 @@ import os, re, json, sqlite3, secrets, io
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
-from flask import Blueprint, abort, flash, redirect, render_template_string, request, session, url_for, send_from_directory
+from flask import Blueprint, abort, flash, redirect, render_template_string, request, session, url_for, send_from_directory, jsonify
 from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 from werkzeug.utils import secure_filename
@@ -147,7 +147,7 @@ def init_db():
 def user():
     username=session.get("username")
     if not username: return None
-    return db().execute("SELECT username,full_name,role,active FROM users WHERE username=?",(username,)).fetchone()
+    return db().execute("SELECT username,full_name,account_number,role,active FROM users WHERE username=?",(username,)).fetchone()
 
 def login_required(fn):
     @wraps(fn)
@@ -320,10 +320,42 @@ def page(title,body,**ctx):
     footer{display:none}
     @media(min-width:760px){main{margin-top:22px}.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #e6eaf0;border-bottom:0;border-radius:18px 18px 0 0}}
 
-    </style></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div><div class='urc-line'>رصيد العملة الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
+    
+    /* Sudan national wallet visual system */
+    :root{color-scheme:light;--bg:#f3f7fb;--surface:#fff;--surface2:#edf5fb;--line:#dce8f1;--text:#172b3a;--muted:#687e8d;--blue:#0875b9;--green:#138a52;--red:#c83d43;--radius:20px}
+    html,body{background:#f3f7fb!important;color:#172b3a!important;font-family:system-ui,-apple-system,'Segoe UI',Tahoma,Arial,sans-serif!important}
+    body{padding-bottom:calc(84px + env(safe-area-inset-bottom));line-height:1.55}
+    header{background:#fff!important;color:#16344a!important;border-bottom:1px solid #dce8f1!important;box-shadow:0 2px 10px rgba(20,60,85,.05)!important;padding:13px 18px!important}
+    .brand,.brand:before{color:#fff!important}.brand{color:#153a55!important;font-size:19px!important}.brand:before{background:linear-gradient(135deg,#0875b9,#138a52)!important}
+    header small{color:#6a8494!important}
+    main{max-width:760px!important;margin:14px auto 24px!important;padding:0 14px!important}
+    .nav{display:none!important}
+    .panel{background:#fff!important;color:#172b3a!important;border:1px solid #e1eaf1!important;border-radius:19px!important;padding:17px!important;margin:12px 0!important;box-shadow:0 3px 12px rgba(20,60,85,.045)!important}
+    h1,h2,h3{color:#173b55!important}p{color:#536b7c!important}.muted,small{color:#6c8190!important}
+    a{color:#0875b9!important}
+    .btn,button{background:#0875b9!important;color:#fff!important;border-radius:13px!important;box-shadow:none!important;transition:none!important}
+    .btn.secondary{background:#edf5fa!important;color:#12618e!important;border:1px solid #d8e7f0!important}
+    input,textarea,select{background:#f8fbfd!important;color:#172b3a!important;border:1px solid #d7e4ed!important;border-radius:12px!important}
+    label{color:#36566c!important}
+    .tag{background:#eaf6ef!important;color:#137344!important;border-color:#cde8d7!important}
+    .hero{display:none!important}
+    .service-card{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;min-height:108px;padding:14px!important;background:#fff!important;border:1px solid #dfebf2!important;border-radius:17px!important;box-shadow:0 3px 10px rgba(22,65,90,.035)!important;color:#183b52!important}
+    .service-card strong{font-size:13px;color:#183b52!important}.service-card span:last-child{font-size:11px;color:#718796!important}
+    .service-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#eaf4fb!important;color:#0875b9;font-size:22px;font-style:normal}
+    .app-bottom{position:fixed;z-index:100;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:#fff!important;border-top:1px solid #dce8f1;box-shadow:0 -3px 14px rgba(20,60,85,.07)!important;backdrop-filter:none!important}
+    .app-bottom a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;color:#6d8290!important;font-size:10px;font-weight:800}
+    .app-bottom a .ico{font-size:20px;line-height:1.2}.app-bottom a.active{color:#0875b9!important}
+    .wallet-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:19px;border-radius:21px;background:linear-gradient(125deg,#07558a,#087bb2 68%,#12865c)!important;color:#fff;box-shadow:0 8px 20px rgba(7,85,138,.14)}
+    .wallet-top .eyebrow,.wallet-top .currency{font-size:12px;color:#e3f4ff!important}.wallet-top .amount{font-size:27px;font-weight:900;direction:ltr;text-align:right;line-height:1.2;color:#fff}.wallet-top .wallet-link{padding:9px 12px;border:1px solid rgba(255,255,255,.45);border-radius:11px;color:#fff!important;font-size:12px;font-weight:800;white-space:nowrap}
+    .transfer-receipt{border-top:6px solid #16844f!important;background:linear-gradient(180deg,#fff 0%,#f8fbf9 100%)!important}
+    .receipt-flag{display:flex;height:7px;border-radius:20px;overflow:hidden;margin:0 0 15px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
+    footer{display:none!important}
+    @media(min-width:760px){.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #dce8f1;border-bottom:0;border-radius:18px 18px 0 0}}
+
+</style></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
+    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك المتاح</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div></div><a class='wallet-link' href='/store/wallet'>تفاصيل الرصيد ←</a></section><nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav><script>
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>المتجر</a><a href='/store/transfer-epc'><span class='ico'>⇄</span>التحويلات</a><a href='/store/wallet'><span class='ico'>▣</span>عملاتي</a><a href='/account_details'><span class='ico'>♙</span>حسابي</a></nav><script>
 (function(){
   'use strict';
   const main=document.querySelector('main');
@@ -410,28 +442,28 @@ def offline():
 def home():
     u=user()
     sdg=balance(u["username"],"SDG")
-    urc=balance(u["username"],"URC")
-    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 4",("user:"+u["username"],)).fetchall()
-    body=render_template_string("""<section class='panel' style='padding:18px'>
-    <div style='display:flex;justify-content:space-between;align-items:center;gap:8px'><div><small>مرحباً بعودتك</small><h1 style='margin:2px 0'>{{name}}</h1></div><span class='tag'>Empire E-Story</span></div>
-    <div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px'>
-      <div style='padding:13px;border-radius:14px;background:#f1f7fc'><small>رصيد SDG</small><div style='font-size:20px;font-weight:900;color:#125e96'>{{'{:,}'.format(sdg)}}</div></div>
-      <div style='padding:13px;border-radius:14px;background:#f5f3ff'><small>رصيد URC</small><div style='font-size:20px;font-weight:900;color:#6548a8'>{{'{:,}'.format(urc)}}</div></div>
-    </div></section>
-    <section class='panel'><h2>الخدمات الرئيسية</h2><div class='grid'>
-      <a class='service-card' href='/store/transfer-epc'><span class='service-icon'>↗</span><strong>تحويل الأموال</strong><span>إرسال واستقبال URC</span></a>
-      <a class='service-card' href='/store/exchange'><span class='service-icon'>⇄</span><strong>صرف العملات</strong><span>URC و SDG</span></a>
-      <a class='service-card' href='/store/deposit'><span class='service-icon'>＋</span><strong>إيداع رصيد</strong><span>إضافة رصيد SDG</span></a>
-      <a class='service-card' href='/store/withdrawal'><span class='service-icon'>⇩</span><strong>سحب رصيد</strong><span>طلب سحب من المحفظة</span></a>
-      <a class='service-card' href='/store/topups'><span class='service-icon'>🎮</span><strong>شحن الألعاب</strong><span>باقات وخدمات الألعاب</span></a>
-      <a class='service-card' href='/store/marketplace'><span class='service-icon'>▦</span><strong>السوق الرقمي</strong><span>تصفح العروض الرقمية</span></a>
-      <a class='service-card' href='/store/agents'><span class='service-icon'>♧</span><strong>الوكلاء</strong><span>خدمات الوكلاء</span></a>
-      <a class='service-card' href='/store/orders'><span class='service-icon'>☷</span><strong>طلباتي</strong><span>متابعة حالة الطلبات</span></a>
+    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 5",("user:"+u["username"],)).fetchall()
+    body=render_template_string("""<section class='panel' style='padding:16px'>
+      <div style='display:flex;align-items:center;justify-content:space-between;gap:8px'><div><small>مرحباً بك في وطنك الرقمي</small><h1 style='margin:2px 0'>{{name}}</h1><small>رقم الحساب: {{account}}</small></div><span class='tag'>🇸🇩 السودان يجمعنا</span></div>
+    </section>
+    <section class='panel'><h2>خدماتك</h2><div class='grid' style='grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
+      <a class='service-card' href='/store/transfer-epc'><i class='service-icon'>⇄</i><strong>التحويلات</strong><span>إرسال واستقبال الأموال</span></a>
+      <a class='service-card' href='/store/accounts'><i class='service-icon'>🎮</i><strong>بيع وشراء حسابات</strong><span>اعرض حسابك أو اشترِ</span></a>
+      <a class='service-card' href='/account/funding'><i class='service-icon'>＋</i><strong>تغذية حسابي</strong><span>إيداع رصيد SDG</span></a>
+      <a class='service-card' href='/account_details'><i class='service-icon'>♙</i><strong>الملف الشخصي</strong><span>بيانات حسابك</span></a>
+      <a class='service-card' href='/store/wallet'><i class='service-icon'>◉</i><strong>عملاتي</strong><span>SDG و URC</span></a>
+      <a class='service-card' href='/store/marketplace'><i class='service-icon'>▦</i><strong>المتجر الشامل</strong><span>تسوق واعرض منتجاتك</span></a>
+      <a class='service-card' href='/store/topups'><i class='service-icon'>🎮</i><strong>شحن الألعاب</strong><span>باقات وخدمات رقمية</span></a>
+      <a class='service-card' href='/store/exchange'><i class='service-icon'>⇄</i><strong>صرف العملات</strong><span>تحويل URC و SDG</span></a>
+      <a class='service-card' href='/store/withdrawal'><i class='service-icon'>↧</i><strong>سحب الرصيد</strong><span>طلبات السحب</span></a>
+      <a class='service-card' href='/store/agents'><i class='service-icon'>♧</i><strong>الوكلاء</strong><span>خدمات الوكلاء</span></a>
+      <a class='service-card' href='/store/orders'><i class='service-icon'>☷</i><strong>طلباتي</strong><span>متابعة المشتريات</span></a>
+      <a class='service-card' href='/store/wallet'><i class='service-icon'>▤</i><strong>كشف الحساب</strong><span>سجل الحركات المالية</span></a>
     </div></section>
     <section class='panel'><div style='display:flex;justify-content:space-between;align-items:center'><h2 style='margin:0'>آخر العمليات</h2><a href='/store/wallet'>عرض الكل</a></div>
     {% for x in rows %}<div style='display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf0f4'><div><b>{{x['memo']}}</b><div><small>{{x['created_at'][:16]}}</small></div></div><b dir='ltr'>{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class='empty-state'>لا توجد عمليات حديثة.</div>{% endfor %}</section>
-    {% if is_founder %}<section class='panel'><h2>إدارة المؤسس</h2><a class='btn' href='/store/admin'>فتح لوحة التحكم الشاملة</a></section>{% endif %}""",
-      name=u["full_name"],sdg=sdg,urc=urc,rows=rows,is_founder=u["role"]=="founder")
+    {% if is_founder %}<section class='panel'><h2>مركز المؤسس</h2><a class='btn' href='/store/admin'>لوحة التحكم الشاملة</a></section>{% endif %}""",
+      name=u["full_name"],account=u["account_number"],rows=rows,is_founder=u["role"]=="founder")
     return page("الرئيسية",body)
 
 @empire_bp.get("/wallet")
