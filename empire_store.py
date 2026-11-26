@@ -701,10 +701,10 @@ def admin_payments():
     u=user()
     if request.method=="POST":
         csrf(); pid=request.form.get("id",""); action=request.form.get("action","")
-        row=db().execute("SELECT * FROM es_payments WHERE id=? AND status='PENDING'",(pid,)).fetchone()
-        if not row: abort(404)
         d=db(); d.execute("BEGIN IMMEDIATE")
         try:
+            row=d.execute("SELECT * FROM es_payments WHERE id=? AND status='PENDING'",(pid,)).fetchone()
+            if not row: raise ValueError("طلب الدفع لم يعد معلقاً")
             if action=="CONFIRMED":
                 if row["currency"]=="USDT" and not row["operation_id"]:
                     raise ValueError("لا يمكن اعتماد تحويل Binance دون رقم عملية")
@@ -716,6 +716,8 @@ def admin_payments():
                     post(row["reference"],[("asset:binance_usdt","USDT",row["amount"]),("external:usdt_receipts","USDT",-row["amount"]),
                                           ("user:"+row["username"],"EPC",epc),("issuer:epc","EPC",-epc)],
                          "تأكيد استلام USDT وإصدار EPC")
+                else:
+                    raise ValueError("نوع طلب الدفع غير مدعوم للاعتماد")
                 d.execute("UPDATE es_payments SET status='CONFIRMED',reviewer=?,reviewed_at=? WHERE id=?",(u["username"],now(),pid))
             elif action=="REJECTED":
                 d.execute("UPDATE es_payments SET status='REJECTED',reviewer=?,reviewed_at=? WHERE id=?",(u["username"],now(),pid))
