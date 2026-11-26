@@ -142,20 +142,7 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id)")
     for k,v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
-    founder=conn.execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
-    if founder:
-        owner=founder["username"]
-        ensure_wallet(owner,"SDG"); ensure_wallet(owner,"URC")
-        if setting("owner_urc_seeded","0")!="1":
-            if balance(owner,"URC")==0:
-                conn.execute("BEGIN IMMEDIATE")
-                try:
-                    post("OWNER-URC-OPENING",[("user:"+owner,"URC",15000000),("issuer:urc","URC",-15000000)],"الرصيد الافتتاحي لأصول المالك")
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-                    raise
-            conn.execute("INSERT INTO es_settings(key,value) VALUES('owner_urc_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+    seed_owner_assets()
 
 def user():
     username=session.get("username")
@@ -221,6 +208,30 @@ def post(reference, entries, memo):
 def balance(username,currency):
     row=db().execute("SELECT balance FROM es_wallets WHERE username=? AND currency=?",(username,currency)).fetchone()
     return row["balance"] if row else 0
+
+def seed_owner_assets():
+    """Create the founder's opening URC allocation once; never alter bank account IDs."""
+    tables={r["name"] for r in db().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "users" not in tables:
+        return False
+    founder=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+    if not founder:
+        return False
+    owner=founder["username"]
+    ensure_wallet(owner,"SDG")
+    ensure_wallet(owner,"URC")
+    if setting("owner_urc_seeded","0")!="1":
+        if balance(owner,"URC")==0:
+            d=db()
+            d.execute("BEGIN IMMEDIATE")
+            try:
+                post("OWNER-URC-OPENING",[("user:"+owner,"URC",15000000),("issuer:urc","URC",-15000000)],"الرصيد الافتتاحي لأصول المالك")
+                d.commit()
+            except Exception:
+                d.rollback()
+                raise
+        db().execute("INSERT INTO es_settings(key,value) VALUES('owner_urc_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+    return True
 
 def assert_epc_capacity(quantity):
     maximum=int(setting("epc_max_supply","15000000"))
@@ -791,6 +802,7 @@ def exchange():
 @login_required
 @founder_required
 def admin_exchange():
+    seed_owner_assets()
     u=user()
     if request.method=="POST":
         csrf()
@@ -839,6 +851,7 @@ def admin_exchange():
 @login_required
 @founder_required
 def admin():
+    seed_owner_assets()
     owner=db().execute("SELECT username,account_number FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
     owner_name=owner["username"] if owner else user()["username"]
     owner_account=owner["account_number"] if owner else "—"
