@@ -318,6 +318,8 @@ def buy_listing():
     if listing["seller"]==u["username"]: abort(400,"لا يمكنك شراء إعلانك")
     r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
     try:
+        listing=d.execute("SELECT * FROM es_listings WHERE id=? AND status='PUBLISHED'",(listing["id"],)).fetchone()
+        if not listing: raise ValueError("الإعلان لم يعد متاحاً")
         post(r,[("user:"+u["username"],"SDG",-listing["price_sdg"]),("escrow:market","SDG",listing["price_sdg"])],"حجز قيمة صفقة سوق")
         d.execute("INSERT INTO es_market_orders(reference,listing_id,buyer,seller,price_sdg,status,created_at,updated_at) VALUES(?,?,?,?,?,'ESCROWED',?,?)",
                   (r,listing["id"],u["username"],listing["seller"],listing["price_sdg"],now(),now()))
@@ -407,6 +409,7 @@ def orders():
         markets.append(item)
     top=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.buyer=? OR t.agent=? ORDER BY t.id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
     agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
+    open_jobs=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.status='PAID' AND t.agent IS NULL ORDER BY t.id LIMIT 50").fetchall() if agent and agent["status"]=="APPROVED" else []
     body=render_template_string("""<section class='panel'><h1>طلباتي</h1><h2>صفقات الحسابات</h2>{% for x in markets %}<article class='panel'><b>{{x['reference']}}</b> · {{x['price_sdg']}} SDG · {{x['status']}}<p>المشتري: {{x['buyer']}} — البائع: {{x['seller']}}</p>
     {% if x['seller']==me and x['status']=='ESCROWED' %}<form method='post' action='/store/order/deliver'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><textarea name='delivery' minlength='10' maxlength='3000' placeholder='بيانات التسليم الآمنة' required></textarea><button>تسليم للمشتري</button></form>{% endif %}
     {% if x['buyer']==me and x['status']=='DELIVERED' %}<div class='panel'><b>بيانات التسليم</b><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>{{x['delivery_text']}}</pre></div><form method='post' action='/store/order/confirm'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تأكيد الاستلام وإطلاق مستحقات البائع</button></form>{% endif %}
@@ -415,7 +418,9 @@ def orders():
     {% if x['buyer']==me and x['status']=='PENDING_PAYMENT' %}<form method='post' action='/store/topups/pay'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>الدفع من محفظة SDG</button></form>{% endif %}
     {% if agent and agent['status']=='APPROVED' and x['status']=='PAID' and not x['agent'] %}<form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب كوكيل</button></form>{% endif %}
     {% if x['agent']==me and x['status']=='ASSIGNED' %}<form method='post' action='/store/agent/topup/complete'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><input name='note' placeholder='مرجع تنفيذ المورد' required><button>تأكيد التنفيذ</button></form>{% endif %}
-    </article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}</section>""",markets=markets,top=top,agent=agent,me=u["username"],csrf=session.get("csrf",""))
+    </article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}
+    {% if agent and agent['status']=='APPROVED' %}<h2>طلبات متاحة للوكلاء</h2>{% for x in open_jobs %}<article class='panel'><p>{{x['reference']}} · {{x['game']}} {{x['title']}} · {{x['amount_sdg']}} SDG · اللاعب {{x['player_id']}}</p>
+    <form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب</button></form></article>{% else %}<p>لا توجد طلبات متاحة.</p>{% endfor %}{% endif %}</section>""",markets=markets,top=top,agent=agent,open_jobs=open_jobs,me=u["username"],csrf=session.get("csrf",""))
     return page("طلباتي",body)
 
 @empire_bp.post("/order/deliver")
@@ -551,6 +556,8 @@ def admin_payments():
         d=db(); d.execute("BEGIN IMMEDIATE")
         try:
             if action=="CONFIRMED":
+                if row["currency"]=="USDT" and not row["operation_id"]:
+                    raise ValueError("لا يمكن اعتماد تحويل Binance دون رقم عملية")
                 if row["purpose"]=="WALLET_DEPOSIT":
                     post(row["reference"],[("user:"+row["username"],"SDG",row["amount"]),("external:verified_deposits","SDG",-row["amount"])],"إيداع SDG مؤكد يدوياً")
                 elif row["purpose"]=="EPC_PURCHASE":
@@ -614,6 +621,8 @@ def admin_settings():
         for k in keys:
             v=request.form.get(k,"").strip()
             if k in ("epc_price_sdg","epc_price_usdt_micros","market_fee_bps") and not re.fullmatch(r"[0-9]{1,12}",v): abort(400)
+            if k in ("epc_price_sdg","epc_price_usdt_micros") and int(v)<1: abort(400)
+            if k=="market_fee_bps" and int(v)>10000: abort(400)
             if k in ("epc_sales_enabled","topups_enabled") and v not in ("0","1"): abort(400)
             db().execute("INSERT INTO es_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(k,v))
         audit(user()["username"],"SETTINGS_UPDATED","settings","global")
