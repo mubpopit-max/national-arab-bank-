@@ -341,8 +341,8 @@ def listing_new():
                 source=Image.open(io.BytesIO(raw)); source.verify()
                 source=Image.open(io.BytesIO(raw))
                 if source.width>4000 or source.height>4000: abort(400,"أبعاد الصورة كبيرة جداً")
-                source.convert("RGB").save(os.path.join(IMAGE_DIR,secrets.token_hex(16)+".jpg"),"JPEG",quality=88,optimize=True)
-                image_path=os.listdir(IMAGE_DIR)[-1]
+                image_path=secrets.token_hex(16)+".jpg"
+                source.convert("RGB").save(os.path.join(IMAGE_DIR,image_path),"JPEG",quality=88,optimize=True)
             except Exception:
                 abort(400,"ملف الصورة غير صالح")
         r=ref()
