@@ -328,17 +328,93 @@ def buy_listing():
     flash("تم حجز المبلغ من محفظتك التجارية. على البائع تسليم الحساب عبر صفحة الطلب.")
     return redirect(url_for("empire.orders"))
 
+@empire_bp.route("/payment/reference",methods=["GET","POST"])
+@login_required
+def payment_reference():
+    u=user()
+    if request.method=="POST":
+        csrf()
+        r=request.form.get("reference","").strip()
+        op=request.form.get("operation_id","").strip()
+        row=db().execute("SELECT * FROM es_payments WHERE reference=? AND username=? AND status='PENDING'",(r,u["username"])).fetchone()
+        if not row or not op or len(op)>100: abort(400)
+        db().execute("UPDATE es_payments SET operation_id=?,proof_note=? WHERE reference=?",(op,"Binance transfer ID submitted by customer",r))
+        audit(u["username"],"BINANCE_REFERENCE_SUBMITTED","payment",r)
+        flash("تم تسجيل رقم التحويل. سيظل الطلب معلقاً حتى التحقق من حساب الاستقبال.")
+        return redirect(url_for("empire.wallet"))
+    rows=db().execute("SELECT reference,amount,currency,quantity_epc,created_at FROM es_payments WHERE username=? AND status='PENDING' AND method='BINANCE_USDT' ORDER BY id DESC",(u["username"],)).fetchall()
+    body=render_template_string("""<section class='panel'><h1>ربط تحويل Binance</h1><p>حوّل إلى Binance ID: <b>{{bid or 'لم يضبطه المالك بعد'}}</b>. أدخل رقم التحويل الحقيقي بعد إتمامه.</p>
+    {% for x in rows %}<article class='panel'><p>المرجع {{x['reference']}} · {{x['amount']/1000000}} USDT · EPC المطلوبة {{x['quantity_epc']}}</p>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'>
+    <label>رقم التحويل من Binance</label><input name='operation_id' maxlength='100' required><button>إرسال للمراجعة</button></form></article>{% else %}<p>لا توجد طلبات Binance معلقة.</p>{% endfor %}</section>""",
+      bid=setting("binance_id"),rows=rows,csrf=session.get("csrf",""))
+    return page("تحويل Binance",body)
+
+@empire_bp.post("/topups/pay")
+@login_required
+def pay_topup():
+    csrf(); u=user(); r=request.form.get("reference","")
+    row=db().execute("SELECT * FROM es_topup_orders WHERE reference=? AND buyer=? AND status='PENDING_PAYMENT'",(r,u["username"])).fetchone()
+    if not row: abort(404)
+    d=db(); d.execute("BEGIN IMMEDIATE")
+    try:
+        post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب")
+        d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=?",(now(),r))
+        audit(u["username"],"TOPUP_PAID","topup",r); d.commit()
+    except Exception: d.rollback(); raise
+    flash("تم دفع طلب الشحن من محفظة المتجر. ينتظر تعيين وكيل لتنفيذه.")
+    return redirect(url_for("empire.orders"))
+
+@empire_bp.post("/agent/topup/claim")
+@login_required
+def claim_topup():
+    csrf(); u=user()
+    agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
+    if not agent or agent["status"]!="APPROVED": abort(403)
+    r=request.form.get("reference","")
+    changed=db().execute("UPDATE es_topup_orders SET status='ASSIGNED',agent=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
+                         (u["username"],now(),r)).rowcount
+    if changed!=1: abort(409,"الطلب لم يعد متاحاً")
+    audit(u["username"],"TOPUP_CLAIMED","topup",r)
+    return redirect(url_for("empire.orders"))
+
+@empire_bp.post("/agent/topup/complete")
+@login_required
+def complete_topup():
+    csrf(); u=user()
+    agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
+    if not agent or agent["status"]!="APPROVED": abort(403)
+    r=request.form.get("reference",""); note=request.form.get("note","").strip()
+    if len(note)<4 or len(note)>300: abort(400)
+    changed=db().execute("UPDATE es_topup_orders SET status='COMPLETED',note=?,updated_at=? WHERE reference=? AND agent=? AND status='ASSIGNED'",
+                         (note,now(),r,u["username"])).rowcount
+    if changed!=1: abort(409)
+    audit(u["username"],"TOPUP_COMPLETED","topup",r,note)
+    return redirect(url_for("empire.orders"))
+
 @empire_bp.get("/orders")
 @login_required
 def orders():
     u=user()
-    markets=db().execute("SELECT * FROM es_market_orders WHERE buyer=? OR seller=? ORDER BY id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
+    market_rows=db().execute("SELECT * FROM es_market_orders WHERE buyer=? OR seller=? ORDER BY id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
+    markets=[]
+    for row in market_rows:
+        item=dict(row); item["delivery_text"]=""
+        if item["buyer"]==u["username"] and item["status"]=="DELIVERED" and item["delivery_cipher"]:
+            try: item["delivery_text"]=encryption().decrypt(item["delivery_cipher"].encode()).decode()
+            except Exception: item["delivery_text"]="تعذر فك بيانات التسليم؛ تواصل مع الدعم."
+        markets.append(item)
     top=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.buyer=? OR t.agent=? ORDER BY t.id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
+    agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
     body=render_template_string("""<section class='panel'><h1>طلباتي</h1><h2>صفقات الحسابات</h2>{% for x in markets %}<article class='panel'><b>{{x['reference']}}</b> · {{x['price_sdg']}} SDG · {{x['status']}}<p>المشتري: {{x['buyer']}} — البائع: {{x['seller']}}</p>
     {% if x['seller']==me and x['status']=='ESCROWED' %}<form method='post' action='/store/order/deliver'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><textarea name='delivery' minlength='10' maxlength='3000' placeholder='بيانات التسليم الآمنة' required></textarea><button>تسليم للمشتري</button></form>{% endif %}
-    {% if x['buyer']==me and x['status']=='DELIVERED' %}<form method='post' action='/store/order/confirm'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تأكيد الاستلام وإطلاق مستحقات البائع</button></form>{% endif %}
+    {% if x['buyer']==me and x['status']=='DELIVERED' %}<div class='panel'><b>بيانات التسليم</b><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>{{x['delivery_text']}}</pre></div><form method='post' action='/store/order/confirm'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تأكيد الاستلام وإطلاق مستحقات البائع</button></form>{% endif %}
     {% if x['status'] in ('ESCROWED','DELIVERED') and (x['buyer']==me or x['seller']==me) %}<form method='post' action='/store/order/dispute'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><input name='reason' maxlength='500' required placeholder='سبب النزاع'><button>فتح نزاع</button></form>{% endif %}</article>{% else %}<p>لا توجد صفقات.</p>{% endfor %}
-    <h2>طلبات شحن الألعاب</h2>{% for x in top %}<p>{{x['reference']}} · {{x['game']}} {{x['title']}} · {{x['status']}} · {{x['amount_sdg']}} SDG</p>{% else %}<p>لا توجد طلبات.</p>{% endfor %}</section>""",markets=markets,top=top,me=u["username"],csrf=session.get("csrf",""))
+    <h2>طلبات شحن الألعاب</h2>{% for x in top %}<article class='panel'><p>{{x['reference']}} · {{x['game']}} {{x['title']}} · {{x['status']}} · {{x['amount_sdg']}} SDG · اللاعب {{x['player_id']}}</p>
+    {% if x['buyer']==me and x['status']=='PENDING_PAYMENT' %}<form method='post' action='/store/topups/pay'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>الدفع من محفظة SDG</button></form>{% endif %}
+    {% if agent and agent['status']=='APPROVED' and x['status']=='PAID' and not x['agent'] %}<form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب كوكيل</button></form>{% endif %}
+    {% if x['agent']==me and x['status']=='ASSIGNED' %}<form method='post' action='/store/agent/topup/complete'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><input name='note' placeholder='مرجع تنفيذ المورد' required><button>تأكيد التنفيذ</button></form>{% endif %}
+    </article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}</section>""",markets=markets,top=top,agent=agent,me=u["username"],csrf=session.get("csrf",""))
     return page("طلباتي",body)
 
 @empire_bp.post("/order/deliver")
