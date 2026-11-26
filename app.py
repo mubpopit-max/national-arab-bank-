@@ -4057,13 +4057,13 @@ LOGIN_HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>البنك الوطني العربي - تسجيل الدخول</title>
+<title>الإمبراطورية إستوري - تسجيل الدخول</title>
 
 <style>
 
 body {
     margin:0;
-    background:linear-gradient(135deg,#0056b3,#003366);
+    background:radial-gradient(circle at top,#2a2417,#080808 70%);
     font-family:Arial,sans-serif;
     display:flex;
     flex-direction:column;
@@ -4105,7 +4105,7 @@ button {
 }
 
 button {
-    background:linear-gradient(135deg,#007bff,#0056b3);
+    background:linear-gradient(135deg,#e5c16b,#9e762b);
     color:white;
     border:0;
     font-weight:bold;
@@ -4127,7 +4127,7 @@ button {
 }
 
 .links a {
-    color:#0056b3;
+    color:#a78338;
     text-decoration:none;
     font-weight:bold;
 }
@@ -4138,7 +4138,7 @@ button {
 <body>
 
 <div class="logo-container">
-    <h1>البنك الوطني العربي</h1>
+    <h1>الإمبراطورية إستوري</h1>
 </div>
 
 <div class="box">
@@ -4205,7 +4205,7 @@ content="width=device-width,initial-scale=1"
 >
 
 <title>
-فتح حساب جديد - البنك الوطني العربي
+إنشاء حساب - الإمبراطورية إستوري
 </title>
 
 <style>
@@ -4258,14 +4258,14 @@ a {
     display:block;
     text-align:center;
     margin-top:15px;
-    color:#0056b3;
+    color:#a78338;
     text-decoration:none;
     font-weight:bold;
 }
 
 .note {
     background:#eef6ff;
-    color:#0056b3;
+    color:#a78338;
     padding:10px;
     border-radius:7px;
     font-size:12px;
@@ -4281,7 +4281,7 @@ a {
 <div class="box">
 
 <h2
-style="text-align:center;color:#0056b3;margin-top:0"
+style="text-align:center;color:#a78338;margin-top:0"
 >
 حساب جديد
 </h2>
@@ -4297,7 +4297,7 @@ style="text-align:center;color:#0056b3;margin-top:0"
 {% endwith %}
 
 <div class="note">
-الرصيد الافتتاحي للحساب الجديد هو 0 جنيه.
+يبدأ الحساب دون رصيد تجاري. تتم إضافة الرصيد بعد التحقق من الدفع.
 <br>
 رقم الحساب الجديد يتكون من 7 أرقام بالضبط.
 </div>
@@ -4363,7 +4363,7 @@ content="width=device-width,initial-scale=1"
 >
 
 <title>
-البنك الوطني العربي - الخدمات المصرفية
+الإمبراطورية إستوري - خدمات المتجر الرقمي
 </title>
 
 <style>
@@ -4409,7 +4409,7 @@ body {
 
 .info div:first-child {
     font-weight:bold;
-    color:#0056b3;
+    color:#a78338;
 }
 
 .info div:last-child {
@@ -4421,7 +4421,7 @@ body {
 .welcome-msg {
     font-size:15px;
     font-weight:bold;
-    color:#0056b3;
+    color:#a78338;
     background:#eef6ff;
     padding:8px 14px;
     border-radius:6px;
@@ -4468,7 +4468,7 @@ body {
 <div class="bank-header">
 
 <div class="logo-text">
-البنك الوطني العربي
+الإمبراطورية إستوري
 </div>
 
 <div class="menu-icons">
@@ -4700,7 +4700,7 @@ content="width=device-width,initial-scale=1"
 >
 
 <title>
-تفاصيل الحساب - البنك الوطني العربي
+تفاصيل الحساب - الإمبراطورية إستوري
 </title>
 
 <style>
@@ -4727,7 +4727,7 @@ body {
 
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -4757,7 +4757,7 @@ body {
 
 .acc-type {
     font-weight:bold;
-    color:#0056b3;
+    color:#a78338;
 }
 
 .acc-nums {
@@ -4892,7 +4892,7 @@ FUNDING_HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>تغذية الحساب - البنك الوطني العربي</title>
+<title>تغذية الحساب - الإمبراطورية إستوري</title>
 <style>
 body {
     margin:0;
@@ -4913,7 +4913,7 @@ body {
 }
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -4935,7 +4935,7 @@ body {
     display:block;
     font-size:13px;
     font-weight:bold;
-    color:#0056b3;
+    color:#a78338;
     margin-bottom:5px;
 }
 .input-row input, .input-row select, .input-row textarea {
@@ -4965,7 +4965,7 @@ body {
 }
 .info-box {
     background:#eef6ff;
-    color:#0056b3;
+    color:#a78338;
     padding:12px;
     border-radius:6px;
     font-size:13px;
@@ -5049,7 +5049,7 @@ body {
 </div>
 
 <div class="requests-list">
-    <h3 style="font-size:15px;color:#0056b3;margin-top:0;">طلبات التغذية السابقة</h3>
+    <h3 style="font-size:15px;color:#a78338;margin-top:0;">طلبات التغذية السابقة</h3>
     {% for req in user_requests %}
         <div class="req-item">
             <div><strong>مرجع الطلب:</strong> {{ req["reference"] }}</div>
@@ -5099,7 +5099,7 @@ body {
 }
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -5138,7 +5138,7 @@ th, td {
 }
 th {
     background:#f8f9fa;
-    color:#0056b3;
+    color:#a78338;
 }
 .btn-approve {
     background:#00a65a;
@@ -5181,13 +5181,13 @@ th {
     {% endwith %}
 
     <div class="card">
-        <h3 style="margin-top:0;color:#0056b3;">حساب المؤسس</h3>
+        <h3 style="margin-top:0;color:#a78338;">حساب المؤسس</h3>
         <p><strong>رقم الحساب:</strong> {{ founder_user["account_number"] }}</p>
         <p><strong>الرصيد الحالي:</strong> <span style="color:#00a65a;font-weight:bold;">{{ money(founder_user["balance"]) }} SDG</span></p>
     </div>
 
     <div class="card">
-        <h3 style="margin-top:0;color:#0056b3;">الطلبات المعلقة ({{ pending_requests|length }})</h3>
+        <h3 style="margin-top:0;color:#a78338;">الطلبات المعلقة ({{ pending_requests|length }})</h3>
         {% if pending_requests %}
             {% for req in pending_requests %}
                 <div style="border-bottom:1px solid #eee; padding:15px 0;">
@@ -5195,7 +5195,7 @@ th {
                     <p><strong>اسم المستخدم:</strong> {{ req["username"] }} | <strong>رقم الحساب:</strong> {{ req["account_number"] }}</p>
                     <p><strong>المبلغ:</strong> <span style="color:#00a65a;font-weight:bold;">{{ money(req["amount"]) }} SDG</span></p>
                     <p><strong>طريقة الدفع:</strong> {{ req["method"] }} | <strong>رقم العملية:</strong> {{ req["operation_number"] }}</p>
-                    <p><strong>إشعار التحويل:</strong> <a href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" style="color:#0056b3;font-weight:bold;">عرض صورة الإشعار</a></p>
+                    <p><strong>إشعار التحويل:</strong> <a href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" style="color:#a78338;font-weight:bold;">عرض صورة الإشعار</a></p>
                     <p><strong>ملاحظة العميل:</strong> {{ req["note"] or 'لا توجد ملاحظات' }}</p>
                     <p><strong>وقت الطلب:</strong> {{ req["created_at"][:19] }}</p>
 
@@ -5258,7 +5258,7 @@ body {
 
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -5432,7 +5432,7 @@ body {
 
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -5751,7 +5751,7 @@ body {
 
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -5781,7 +5781,7 @@ body {
 
 .option-info h3 {
     margin:0 0 5px;
-    color:#0056b3;
+    color:#a78338;
     font-size:16px;
 }
 
@@ -5860,7 +5860,7 @@ content="width=device-width,initial-scale=1"
 >
 
 <title>
-ديجيتال ستوري - البنك الوطني العربي
+ديجيتال ستوري - الإمبراطورية إستوري
 </title>
 
 <style>
@@ -5881,7 +5881,7 @@ body {
 
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -6337,7 +6337,7 @@ body {
 }
 
 a {
-    color:#0056b3;
+    color:#a78338;
     text-decoration:none;
     font-weight:bold;
     display:block;
@@ -6467,7 +6467,7 @@ body {
 }
 
 a {
-    color:#0056b3;
+    color:#a78338;
     text-decoration:none;
     font-weight:bold;
     display:block;
@@ -6555,7 +6555,7 @@ content="width=device-width,initial-scale=1"
 >
 
 <title>
-{{ title }} - البنك الوطني العربي
+{{ title }} - الإمبراطورية إستوري
 </title>
 
 <style>
@@ -6582,7 +6582,7 @@ body {
 
 .back-btn {
     background:white;
-    color:#0056b3;
+    color:#a78338;
     padding:5px 12px;
     border-radius:4px;
     text-decoration:none;
@@ -6634,13 +6634,13 @@ style="color:#666"
 >
 
 هذه الصفحة مخصصة لخدمات {{ title }}
-عبر البنك الوطني العربي.
+عبر الإمبراطورية إستوري.
 
 </p>
 
 <a
 href="/account"
-style="color:#0056b3;text-decoration:none;font-weight:bold"
+style="color:#a78338;text-decoration:none;font-weight:bold"
 >
 
 العودة للرئيسية
