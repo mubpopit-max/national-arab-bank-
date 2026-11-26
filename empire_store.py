@@ -235,7 +235,7 @@ def page(title,body,**ctx):
     .empty-state{padding:24px;text-align:center;border:1px dashed rgba(164,180,255,.24);border-radius:18px;color:var(--muted)}
     form{max-width:100%}button{font-family:inherit}.flash{padding:12px 15px;border:1px solid rgba(82,214,162,.25);border-radius:13px;background:rgba(82,214,162,.08);color:#baf4dc}
     footer{margin-top:28px;padding:20px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
-    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
+    .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);align-items:center;gap:18px}.hero-copy{position:relative;z-index:2}.hero-character{position:relative;min-height:280px;display:grid;place-items:center;isolation:isolate}.hero-character:before{content:'';position:absolute;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,35,83,.42),rgba(125,53,255,.18) 55%,transparent 72%);filter:blur(8px);z-index:-1}.hero-character svg{width:min(100%,330px);height:auto;filter:drop-shadow(0 12px 28px rgba(255,22,75,.24))}.hero-kicker{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(255,86,117,.35);border-radius:99px;background:rgba(125,22,64,.2);color:#ffb2c1;font-size:12px;font-weight:800}.hero h1 span{color:#ff7899;text-shadow:0 0 25px rgba(255,40,95,.22)}.hero p{position:relative;z-index:2}.hero .grid{position:relative;z-index:2}@media(max-width:640px){.hero{grid-template-columns:1fr}.hero-character{grid-row:1;min-height:190px}.hero-character svg{width:220px}.hero-copy{text-align:center}.hero .grid{margin-right:auto;margin-left:auto}}\n    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
     <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
@@ -277,9 +277,27 @@ def offline():
 def home():
     u=user()
     rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' ORDER BY id DESC LIMIT 8").fetchall()
-    body=render_template_string("""<section class='hero'><span class='tag'>مرحباً بك في عالمك الرقمي</span><h1>كل خدماتك الرقمية<br>في مكان واحد</h1>
-    <p>اشحن ألعابك، اكتشف العروض، وتسوق بأمان وسهولة من خلال تجربة مصممة لتناسبك.</p><div class='grid' style='max-width:650px;margin-top:22px'>
-    <a class='btn' href='/store/topups'>استكشف شحن الألعاب</a><a class='btn secondary' href='/store/marketplace'>تصفح السوق</a></div></section>
+    body=render_template_string("""<section class='hero'><div class='hero-copy'><span class='hero-kicker'>✦ حارس الإمبراطورية · قوة بحر الدماء</span><h1>قوة تتجاوز المستحيل<br><span>وعالم كامل بين يديك</span></h1>
+    <p>اكتشف خدمات الإمبراطورية إستوري، اشحن ألعابك وتسوق بأمان وسط تجربة رقمية بطابع أسطوري.</p><div class='grid' style='max-width:650px;margin-top:22px'>
+    <a class='btn' href='/store/topups'>استكشف شحن الألعاب</a><a class='btn secondary' href='/store/marketplace'>تصفح السوق</a></div></div>
+    <div class='hero-character' role='img' aria-label='محارب أصلي بقوة بحر الدماء'>
+    <svg viewBox='0 0 360 390' xmlns='http://www.w3.org/2000/svg' aria-hidden='true'>
+    <defs><linearGradient id='armor' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#30205f'/><stop offset='.48' stop-color='#11172d'/><stop offset='1' stop-color='#70204d'/></linearGradient><linearGradient id='gold' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#fff0a5'/><stop offset='.45' stop-color='#dcae55'/><stop offset='1' stop-color='#75451d'/></linearGradient><linearGradient id='blood' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#ff315d'/><stop offset='1' stop-color='#850b37'/></linearGradient></defs>
+    <path d='M36 315C3 270 42 235 17 191c44 18 54 48 57 77 13-44 2-76 25-111 21 52 9 92 1 119 35-35 38-77 72-103-2 57-14 90-38 126 50-27 69-71 85-115 25 57 3 106-31 143 53-19 78-55 103-95 8 66-30 112-81 144Z' fill='url(#blood)' opacity='.82'/>
+    <path d='M87 362c12-72 17-125 40-167 17-31 35-48 55-55 28 9 51 30 68 64 20 42 25 99 31 158l-62 20H142Z' fill='url(#armor)' stroke='#9a4a86' stroke-width='3'/>
+    <path d='M115 218 78 278l55 31 38-61ZM245 218l38 60-54 31-38-61Z' fill='#15172d' stroke='url(#gold)' stroke-width='7'/>
+    <path d='M132 151c-10-51 13-99 51-111 44-14 83 20 82 70l-10 52-30 37-67-5Z' fill='#151323' stroke='#b94b72' stroke-width='4'/>
+    <path d='M133 113c-25-39-5-83 28-100-2 28 13 32 22 44 12-33 39-47 71-42-12 19-10 34 10 52-23-7-37-4-50 10l-25 34Z' fill='#171225'/>
+    <path d='M145 121c15-19 31-26 48-23l-18 19-23 13ZM224 119c14-11 29-11 42-3l-24 15-18-1Z' fill='#ff365d'/>
+    <path d='M181 139c17 8 32 8 47-2l-8 26-23 14-20-16Z' fill='#9b345d'/>
+    <path d='M180 177 160 205l28 31 18-17 19 17 26-31-22-28-25 12Z' fill='url(#gold)' stroke='#ffe6a0' stroke-width='2'/>
+    <path d='m202 184 0-30m-18 15 18-15 18 15' fill='none' stroke='#ffdb7b' stroke-width='6' stroke-linecap='round'/>
+    <path d='M147 243 180 226l22 31 22-31 36 17-19 82-38 20-39-20Z' fill='#101629' stroke='url(#gold)' stroke-width='4'/>
+    <path d='M182 258h39l-19 46Z' fill='url(#blood)' stroke='#ff7899' stroke-width='2'/>
+    <path d='M48 175c-17-31-3-55 17-71-3 24 9 31 19 41-1-29 16-48 37-58-8 29 0 48 19 65-34 3-57 12-92 23ZM282 191c30-30 23-58 5-82 0 25-15 31-26 39 6-29-8-52-27-65 3 30-8 47-29 61 34 8 55 20 77 47Z' fill='url(#blood)' opacity='.9'/>
+    <circle cx='174' cy='126' r='4' fill='#ffecb2'/><circle cx='241' cy='126' r='4' fill='#ffecb2'/>
+    <path d='M104 342h150' stroke='#ffcf72' stroke-width='3' stroke-linecap='round' opacity='.75'/><path d='M126 355h106' stroke='#ff3d72' stroke-width='2' stroke-linecap='round'/>
+    </svg></div></section>
     <section class='panel'><h2>اكتشف خدماتنا</h2><div class='grid'>
     <a class='service-card' href='/store/topups'><span class='service-icon'>🎮</span><strong>شحن الألعاب</strong><span>باقات وخدمات ألعابك المفضلة</span></a>
     <a class='service-card' href='/store/marketplace'><span class='service-icon'>🛍️</span><strong>السوق الرقمي</strong><span>تصفح العروض وأضف إعلانك</span></a>
