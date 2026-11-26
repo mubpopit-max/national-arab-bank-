@@ -594,8 +594,10 @@ def admin_payments():
                     post(row["reference"],[("user:"+row["username"],"SDG",row["amount"]),("external:verified_deposits","SDG",-row["amount"])],"إيداع SDG مؤكد يدوياً")
                 elif row["purpose"]=="EPC_PURCHASE":
                     epc=int(row["quantity_epc"])
-                    if epc<=0: raise ValueError("كمية EPC في طلب الدفع غير صالحة")
-                    post(row["reference"],[("user:"+row["username"],"EPC",epc),("issuer:epc","EPC",-epc)],"شراء EPC بعد التحقق من دفع USDT")
+                    if epc<=0 or row["currency"]!="USDT": raise ValueError("بيانات طلب EPC غير صالحة")
+                    post(row["reference"],[("asset:binance_usdt","USDT",row["amount"]),("external:usdt_receipts","USDT",-row["amount"]),
+                                          ("user:"+row["username"],"EPC",epc),("issuer:epc","EPC",-epc)],
+                         "تأكيد استلام USDT وإصدار EPC")
                 d.execute("UPDATE es_payments SET status='CONFIRMED',reviewer=?,reviewed_at=? WHERE id=?",(u["username"],now(),pid))
             elif action=="REJECTED":
                 d.execute("UPDATE es_payments SET status='REJECTED',reviewer=?,reviewed_at=? WHERE id=?",(u["username"],now(),pid))
@@ -604,7 +606,7 @@ def admin_payments():
             d.commit()
         except Exception: d.rollback(); raise
     rows=db().execute("SELECT * FROM es_payments ORDER BY id DESC LIMIT 200").fetchall()
-    body=render_template_string("""<section class='panel'><h1>طلبات الدفع</h1>{% for x in rows %}<article class='panel'>#{{x['id']}} · {{x['reference']}} · {{x['username']}} · {{x['amount']}} {{x['currency']}} · {{x['purpose']}} · {{x['status']}}<p>{{x['proof_note']}} · العملية: {{x['operation_id']}}</p>
+    body=render_template_string("""<section class='panel'><h1>طلبات الدفع</h1>{% for x in rows %}<article class='panel'>#{{x['id']}} · {{x['reference']}} · {{x['username']}} · {{(x['amount']/1000000) if x['currency']=='USDT' else x['amount']}} {{x['currency']}} · {{x['purpose']}} · {{x['status']}}<p>{{x['proof_note']}} · العملية: {{x['operation_id']}}</p>
     {% if x['status']=='PENDING' %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='id' value='{{x['id']}}'><button name='action' value='CONFIRMED'>تأكيد بعد التحقق</button><button name='action' value='REJECTED'>رفض</button></form>{% endif %}</article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("طلبات الدفع",body)
 
