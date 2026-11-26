@@ -498,6 +498,7 @@ def complete_topup():
         order=d.execute("SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.reference=? AND t.agent=? AND t.status='ASSIGNED'",
                         (r,u["username"])).fetchone()
         if not order: raise ValueError("الطلب لم يعد مسنداً إليك")
+        if order["cost_sdg"]<=0: raise ValueError("يجب على المالك إدخال تكلفة المورد الحقيقية قبل إغلاق الطلب")
         margin=order["amount_sdg"]-order["cost_sdg"]
         if margin<0: raise ValueError("تكلفة المورد أعلى من سعر البيع؛ أوقف المالك هذه العملية للمراجعة")
         agent_row=d.execute("SELECT commission_bps FROM es_agents WHERE username=? AND status='APPROVED'",(u["username"],)).fetchone()
