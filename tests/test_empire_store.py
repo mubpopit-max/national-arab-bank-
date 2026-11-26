@@ -53,12 +53,12 @@ class EmpireLedgerTests(unittest.TestCase):
         d.rollback()
         self.assertEqual(balance("founder", "SDG"), 0)
 
-    def test_epc_supply_cap_counts_issued_units(self):
+    def test_urc_supply_cap_counts_issued_units(self):
         d = db()
         d.execute("BEGIN IMMEDIATE")
-        post("TEST-EPC-ISSUE", [
-            ("user:founder", "EPC", 6),
-            ("issuer:epc", "EPC", -6),
+        post("TEST-URC-ISSUE", [
+            ("user:founder", "URC", 6),
+            ("issuer:urc", "URC", -6),
         ], "test issue")
         d.commit()
         assert_epc_capacity(4)
