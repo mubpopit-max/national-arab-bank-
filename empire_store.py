@@ -593,7 +593,7 @@ def admin():
     <article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>
     <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
     <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div>
-    <div class='grid'><a class='btn' href='/store/admin/agents'>إدارة الوكلاء</a><a class='btn' href='/store/admin/products'>باقات الشحن والتكلفة</a>
+    <div class='grid'><a class='btn' href='/store/admin/agents'>إدارة الوكلاء</a><a class='btn' href='/store/admin/listings'>إدارة إعلانات السوق</a><a class='btn' href='/store/admin/products'>باقات الشحن والتكلفة</a>
     <a class='btn' href='/store/admin/payments'>طلبات الدفع</a><a class='btn' href='/store/admin/disputes'>النزاعات</a>
     <a class='btn' href='/store/admin/settings'>الإعدادات والأسعار</a><a class='btn' href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats)
     return page("الإدارة",body)
@@ -617,20 +617,47 @@ def admin_agents():
     <button name='action' value='APPROVED'>اعتماد</button><button name='action' value='REJECTED'>رفض</button><button name='action' value='SUSPENDED'>إيقاف</button></form></article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("إدارة الوكلاء",body)
 
+@empire_bp.route("/admin/listings",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_listings():
+    if request.method=="POST":
+        csrf(); listing_id=request.form.get("listing_id",""); action=request.form.get("action","")
+        target={"PAUSE":"PAUSED","PUBLISH":"PUBLISHED","REMOVE":"REMOVED"}.get(action)
+        if not target: abort(400)
+        changed=db().execute("UPDATE es_listings SET status=? WHERE id=? AND status!='SOLD'",(target,listing_id)).rowcount
+        if changed!=1: abort(409,"الإعلان غير قابل للتعديل")
+        audit(user()["username"],"LISTING_"+action,"listing",listing_id)
+    rows=db().execute("SELECT * FROM es_listings ORDER BY id DESC LIMIT 300").fetchall()
+    body=render_template_string("""<section class='panel'><h1>إدارة إعلانات السوق</h1>{% for x in rows %}<article class='panel'>
+    <b>{{x['title']}}</b> · {{x['seller']}} · {{x['price_sdg']}} SDG · {{x['status']}}
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'>
+    <button name='action' value='PAUSE'>إيقاف</button><button name='action' value='PUBLISH'>نشر</button><button name='action' value='REMOVE'>إزالة</button></form></article>{% else %}<p>لا توجد إعلانات.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
+    return page("إدارة الإعلانات",body)
+
 @empire_bp.route("/admin/products",methods=["GET","POST"])
 @login_required
 @founder_required
 def admin_products():
     if request.method=="POST":
-        csrf(); game=request.form.get("game","").strip(); title=request.form.get("title","").strip()
-        price=money_int(request.form.get("price_sdg")); cost=money_int(request.form.get("cost_sdg")); code=ref()
-        if not game or not title or len(title)>120 or cost>price: abort(400)
-        db().execute("INSERT INTO es_products(code,game,title,price_sdg,cost_sdg,created_at) VALUES(?,?,?,?,?,?)",(code,game,title,price,cost,now()))
-        audit(user()["username"],"PRODUCT_CREATED","product",code)
+        csrf()
+        if request.form.get("action")=="toggle":
+            pid=request.form.get("product_id","")
+            row=db().execute("SELECT * FROM es_products WHERE id=?",(pid,)).fetchone()
+            if not row: abort(404)
+            db().execute("UPDATE es_products SET active=? WHERE id=?",(0 if row["active"] else 1,pid))
+            audit(user()["username"],"PRODUCT_TOGGLED","product",pid)
+        else:
+            game=request.form.get("game","").strip(); title=request.form.get("title","").strip()
+            price=money_int(request.form.get("price_sdg")); cost=money_int(request.form.get("cost_sdg")); code=ref()
+            if not game or not title or len(title)>120 or cost>price: abort(400)
+            db().execute("INSERT INTO es_products(code,game,title,price_sdg,cost_sdg,created_at) VALUES(?,?,?,?,?,?)",(code,game,title,price,cost,now()))
+            audit(user()["username"],"PRODUCT_CREATED","product",code)
     rows=db().execute("SELECT * FROM es_products ORDER BY id DESC").fetchall()
     body=render_template_string("""<section class='panel'><h1>باقات شحن الألعاب</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
     <input name='game' placeholder='اللعبة' required><input name='title' placeholder='اسم الباقة' required><input name='price_sdg' type='number' min='1' placeholder='سعر البيع SDG' required><input name='cost_sdg' type='number' min='0' placeholder='تكلفة المورد SDG' required><button>إضافة باقة</button></form>
-    {% for x in rows %}<p>{{x['game']}} · {{x['title']}} · البيع {{x['price_sdg']}} SDG · التكلفة {{x['cost_sdg']}} SDG</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
+    {% for x in rows %}<article class='panel'><p>{{x['game']}} · {{x['title']}} · البيع {{x['price_sdg']}} SDG · التكلفة {{x['cost_sdg']}} SDG · {{'فعال' if x['active'] else 'متوقف'}}</p>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'><button name='action' value='toggle'>{{'إيقاف' if x['active'] else 'تفعيل'}}</button></form></article>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("باقات الشحن",body)
 
 @empire_bp.route("/admin/payments",methods=["GET","POST"])
