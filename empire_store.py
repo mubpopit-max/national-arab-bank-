@@ -763,6 +763,7 @@ def admin_audit():
     return page("سجل التدقيق",body)
 
 def register_empire_store(app):
+    app.config.setdefault("MAX_CONTENT_LENGTH", 6 * 1024 * 1024)
     app.register_blueprint(empire_bp)
     app.teardown_appcontext(close_db)
     with app.app_context():
