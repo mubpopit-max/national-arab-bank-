@@ -78,7 +78,7 @@ def init_db():
       id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, username TEXT NOT NULL,
       method TEXT NOT NULL CHECK(method IN ('SDG_WALLET','BINANCE_USDT')),
       currency TEXT NOT NULL CHECK(currency IN ('SDG','USDT')),
-      amount INTEGER NOT NULL CHECK(amount>0), operation_id TEXT UNIQUE,
+      amount INTEGER NOT NULL CHECK(amount>0), quantity_epc INTEGER NOT NULL DEFAULT 0, operation_id TEXT UNIQUE,
       purpose TEXT NOT NULL CHECK(purpose IN ('WALLET_DEPOSIT','EPC_PURCHASE','TOPUP','MARKETPLACE')),
       status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','CONFIRMED','REJECTED')),
       proof_note TEXT NOT NULL DEFAULT '', reviewer TEXT, created_at TEXT NOT NULL, reviewed_at TEXT);
@@ -98,6 +98,9 @@ def init_db():
         CHECK(status IN ('OPEN','RESOLVED_BUYER','RESOLVED_SELLER')),
       resolution TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, resolved_at TEXT);
     """)
+    payment_cols={r["name"] for r in db().execute("PRAGMA table_info(es_payments)").fetchall()}
+    if "quantity_epc" not in payment_cols:
+        db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
     defaults = {
       "epc_price_sdg":"1000", "epc_price_usdt_micros":"1000000",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
@@ -455,10 +458,9 @@ def admin_payments():
                 if row["purpose"]=="WALLET_DEPOSIT":
                     post(row["reference"],[("user:"+row["username"],"SDG",row["amount"]),("external:verified_deposits","SDG",-row["amount"])],"إيداع SDG مؤكد يدوياً")
                 elif row["purpose"]=="EPC_PURCHASE":
-                    rate=int(setting("epc_price_sdg","1000"))
-                    epc=(row["amount"]*100)//rate
-                    if epc<=0: raise ValueError("قيمة الشراء أقل من وحدة EPC واحدة")
-                    post(row["reference"],[("user:"+row["username"],"EPC",epc),("issuer:epc","EPC",-epc)],"شراء EPC بعد التحقق من الدفع")
+                    epc=int(row["quantity_epc"])
+                    if epc<=0: raise ValueError("كمية EPC في طلب الدفع غير صالحة")
+                    post(row["reference"],[("user:"+row["username"],"EPC",epc),("issuer:epc","EPC",-epc)],"شراء EPC بعد التحقق من دفع USDT")
                 d.execute("UPDATE es_payments SET status='CONFIRMED',reviewer=?,reviewed_at=? WHERE id=?",(u["username"],now(),pid))
             elif action=="REJECTED":
                 d.execute("UPDATE es_payments SET status='REJECTED',reviewer=?,reviewed_at=? WHERE id=?",(u["username"],now(),pid))
@@ -493,9 +495,10 @@ def buy_epc():
             micros=int(setting("epc_price_usdt_micros","1000000"))
             amount=qty*micros
             r=ref()
-            db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','USDT',?,'EPC_PURCHASE',?,?)",
-                         (r,u["username"],amount,"Binance ID: "+bid,now()))
-            flash("تم إنشاء طلب شراء. حوّل USDT إلى Binance ID المعروض، ثم أدخل رقم العملية في طلب دعم/مراجعة؛ لا تصدر EPC قبل التحقق اليدوي.")
+            db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,quantity_epc,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','USDT',?,?,'EPC_PURCHASE',?,?)",
+                         (r,u["username"],amount,qty,"Binance ID: "+bid,now()))
+            flash("تم إنشاء طلب شراء. حوّل USDT إلى Binance ID المعروض، ثم أرسل رقم التحويل في نموذج ربط إثبات الدفع. لن تصدر EPC قبل التحقق اليدوي.")
+            session["last_epc_payment_ref"]=r
         else: abort(400)
         return redirect(url_for("empire.wallet"))
     body=render_template_string("""<section class='panel'><h1>شراء Empire Coin (EPC)</h1><p>السعر الحالي: {{price}} SDG للوحدة. البيع {{enabled}}.</p>
