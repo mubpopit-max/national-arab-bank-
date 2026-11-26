@@ -128,16 +128,16 @@ def init_db():
     # Safe schema migration: old URC ledger rows become URC; account numbers remain untouched.
     for table in ("es_wallets","es_ledger"):
         info=conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone()
-        if info and "'URC'" not in (info["sql"] or ""):
+        if info and ("'URC'" not in (info["sql"] or "") or conn.execute(f"SELECT 1 FROM {table} WHERE currency='EPC' LIMIT 1").fetchone()):
             if table=="es_wallets":
                 conn.execute("ALTER TABLE es_wallets RENAME TO es_wallets_legacy")
                 conn.execute("""CREATE TABLE es_wallets(username TEXT NOT NULL,currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0),PRIMARY KEY(username,currency))""")
-                conn.execute("INSERT INTO es_wallets SELECT username,CASE currency WHEN 'URC' THEN 'URC' ELSE currency END,balance FROM es_wallets_legacy")
+                conn.execute("INSERT INTO es_wallets SELECT username,CASE currency WHEN 'EPC' THEN 'URC' WHEN 'URC' THEN 'URC' ELSE currency END,balance FROM es_wallets_legacy")
                 conn.execute("DROP TABLE es_wallets_legacy")
             else:
                 conn.execute("ALTER TABLE es_ledger RENAME TO es_ledger_legacy")
                 conn.execute("""CREATE TABLE es_ledger(id INTEGER PRIMARY KEY,reference TEXT NOT NULL,line_no INTEGER NOT NULL,account TEXT NOT NULL,currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),delta INTEGER NOT NULL,memo TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(reference,line_no))""")
-                conn.execute("INSERT INTO es_ledger SELECT id,reference,line_no,account,CASE currency WHEN 'URC' THEN 'URC' ELSE currency END,delta,memo,created_at FROM es_ledger_legacy")
+                conn.execute("INSERT INTO es_ledger SELECT id,reference,line_no,account,CASE currency WHEN 'EPC' THEN 'URC' WHEN 'URC' THEN 'URC' ELSE currency END,delta,memo,created_at FROM es_ledger_legacy")
                 conn.execute("DROP TABLE es_ledger_legacy")
     conn.execute("CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id)")
     for k,v in defaults.items():
@@ -290,7 +290,7 @@ def page(title,body,**ctx):
     footer{margin-top:28px;padding:20px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
     .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);align-items:center;gap:18px}.hero-copy{position:relative;z-index:2}.hero-character{position:relative;min-height:280px;display:grid;place-items:center;isolation:isolate}.hero-character:before{content:'';position:absolute;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,35,83,.42),rgba(125,53,255,.18) 55%,transparent 72%);filter:blur(8px);z-index:-1}.hero-character svg{width:min(100%,330px);height:auto;filter:drop-shadow(0 12px 28px rgba(255,22,75,.24))}.hero-kicker{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(255,86,117,.35);border-radius:99px;background:rgba(125,22,64,.2);color:#ffb2c1;font-size:12px;font-weight:800}.hero h1 span{color:#ff7899;text-shadow:0 0 25px rgba(255,40,95,.22)}.hero p{position:relative;z-index:2}.hero .grid{position:relative;z-index:2}@media(max-width:640px){.hero{grid-template-columns:1fr}.hero-character{grid-row:1;min-height:190px}.hero-character svg{width:220px}.hero-copy{text-align:center}.hero .grid{margin-right:auto;margin-left:auto}}\n    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/exchange'>صرف العملات</a><a href='/store/exchange'>الصرف</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
+    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/exchange'>صرف العملات</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main></body></html>"""
     current=user()
