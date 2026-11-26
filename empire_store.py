@@ -211,6 +211,14 @@ def page(title,body,**ctx):
     ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
     return render_template_string(shell,title=title,body=body,**ctx)
 
+@empire_bp.get("/healthz")
+def healthz():
+    try:
+        db().execute("SELECT 1").fetchone()
+        return {"status":"ok","service":"empire-estory"},200
+    except Exception:
+        return {"status":"unavailable"},503
+
 @empire_bp.get("/manifest.webmanifest")
 def manifest():
     return {"name":"الإمبراطورية إستوري","short_name":"Empire E-Story","start_url":"/store/","display":"standalone",
