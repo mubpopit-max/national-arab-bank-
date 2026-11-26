@@ -233,6 +233,16 @@ def page(title,body,**ctx):
     .service-card:hover{transform:translateY(-4px);border-color:rgba(139,112,255,.55)}.service-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,rgba(139,112,255,.25),rgba(72,217,232,.18));font-size:23px}
     .service-card strong{font-size:17px;color:#fff}.service-card span{font-size:13px;color:var(--muted)}
     .empty-state{padding:24px;text-align:center;border:1px dashed rgba(164,180,255,.24);border-radius:18px;color:var(--muted)}
+    .receipt-card{max-width:720px;margin:28px auto;border-color:rgba(82,214,162,.3);background:radial-gradient(circle at 50% 0,rgba(82,214,162,.13),transparent 38%),linear-gradient(145deg,#1a2940,#141b30)}
+    .receipt-head{text-align:center;padding:12px 0 18px}.receipt-mark{display:grid;place-items:center;width:62px;height:62px;margin:0 auto 12px;border-radius:50%;background:rgba(82,214,162,.14);border:1px solid rgba(82,214,162,.5);color:#75edbb;font-size:34px;font-weight:900}
+    .receipt-head h1{margin:12px 0 4px}.receipt-amount{text-align:center;padding:20px;border:1px solid var(--line);border-radius:18px;background:rgba(8,13,27,.36)}
+    .receipt-amount strong{display:block;margin-top:5px;color:#fff;font-size:clamp(28px,6vw,42px);font-weight:900;direction:ltr}
+    .receipt-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}
+    .receipt-details>div{display:flex;flex-direction:column;gap:4px;padding:13px;border-radius:13px;background:rgba(255,255,255,.045);border:1px solid var(--line);min-width:0}
+    .receipt-details b{overflow-wrap:anywhere;color:#f6f7ff}.receipt-success{color:#75edbb!important}.receipt-note{text-align:center;font-size:12px}
+    .receipt-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:20px}
+    @media(max-width:520px){.receipt-details{grid-template-columns:1fr}.receipt-card{padding:16px}}
+    @media print{body{background:#fff!important;color:#111!important}.receipt-card,.receipt-amount,.receipt-details>div{background:#fff!important;color:#111!important;box-shadow:none!important;border-color:#bbb!important}.receipt-card *{color:#111!important}.receipt-actions,header,.nav,footer{display:none!important}main{margin:0!important;padding:0!important}.receipt-success{color:#087a45!important}}
     form{max-width:100%}button{font-family:inherit}.flash{padding:12px 15px;border:1px solid rgba(82,214,162,.25);border-radius:13px;background:rgba(82,214,162,.08);color:#baf4dc}
     footer{margin-top:28px;padding:20px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
     .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);align-items:center;gap:18px}.hero-copy{position:relative;z-index:2}.hero-character{position:relative;min-height:280px;display:grid;place-items:center;isolation:isolate}.hero-character:before{content:'';position:absolute;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,35,83,.42),rgba(125,53,255,.18) 55%,transparent 72%);filter:blur(8px);z-index:-1}.hero-character svg{width:min(100%,330px);height:auto;filter:drop-shadow(0 12px 28px rgba(255,22,75,.24))}.hero-kicker{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(255,86,117,.35);border-radius:99px;background:rgba(125,22,64,.2);color:#ffb2c1;font-size:12px;font-weight:800}.hero h1 span{color:#ff7899;text-shadow:0 0 25px rgba(255,40,95,.22)}.hero p{position:relative;z-index:2}.hero .grid{position:relative;z-index:2}@media(max-width:640px){.hero{grid-template-columns:1fr}.hero-character{grid-row:1;min-height:190px}.hero-character svg{width:220px}.hero-copy{text-align:center}.hero .grid{margin-right:auto;margin-left:auto}}\n    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
@@ -660,11 +670,41 @@ def transfer_epc():
             post(r,[("user:"+u["username"],"EPC",-qty),("user:"+recipient,"EPC",qty)],"تحويل EPC بين المستخدمين")
             audit(u["username"],"EPC_TRANSFER","wallet",r,"to="+recipient); d.commit()
         except Exception: d.rollback(); raise
-        flash("تم تحويل EPC.")
-        return redirect(url_for("empire.wallet"))
-    body=render_template_string("""<section class='panel'><h1>تحويل EPC</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <label>اسم المستخدم المستلم</label><input name='recipient' required><label>الكمية EPC</label><input name='quantity' type='number' min='1' required><button>تحويل</button></form></section>""",csrf=session.get("csrf",""))
+        return redirect(url_for("empire.transfer_receipt", reference=r))
+    body=render_template_string("""<section class='panel'><h1>تحويل EPC</h1><p>أرسل EPC إلى مستخدم آخر مع إيصال رقمي ورقم عملية فريد بعد نجاح التحويل.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
+    <label>اسم المستخدم المستلم</label><input name='recipient' autocomplete='username' required><label>الكمية EPC</label><input name='quantity' type='number' min='1' required><button>تأكيد التحويل</button></form></section>""",csrf=session.get("csrf",""))
     return page("تحويل EPC",body)
+
+@empire_bp.get("/transfer/receipt/<reference>")
+@login_required
+def transfer_receipt(reference):
+    u=user()
+    rows=db().execute("SELECT account,currency,delta,memo,created_at FROM es_ledger WHERE reference=? ORDER BY line_no",(reference,)).fetchall()
+    if len(rows)!=2 or any(not row["account"].startswith("user:") for row in rows):
+        abort(404)
+    debit=next((row for row in rows if row["delta"]<0),None)
+    credit=next((row for row in rows if row["delta"]>0),None)
+    if not debit or not credit or debit["currency"]!=credit["currency"]:
+        abort(404)
+    sender=debit["account"][5:]; recipient=credit["account"][5:]
+    if u["username"] not in (sender,recipient):
+        abort(404)
+    amount=credit["delta"]
+    body=render_template_string("""<section class='panel receipt-card'>
+      <div class='receipt-head'><span class='receipt-mark'>✓</span><span class='tag'>عملية مكتملة</span><h1>تم التحويل بنجاح</h1>
+      <p>تم تنفيذ التحويل وتسجيله في سجل المعاملات.</p></div>
+      <div class='receipt-amount'><small>المبلغ المحوّل</small><strong>{{'{:,}'.format(amount)}} <small>{{currency}}</small></strong></div>
+      <div class='receipt-details'>
+        <div><small>رقم العملية الفريد</small><b dir='ltr'>{{reference}}</b></div>
+        <div><small>من</small><b>{{sender}}</b></div>
+        <div><small>إلى</small><b>{{recipient}}</b></div>
+        <div><small>تاريخ ووقت العملية (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
+        <div><small>الحالة</small><b class='receipt-success'>مكتملة · مؤكدة في السجل</b></div>
+      </div>
+      <p class='muted receipt-note'>هذا الإيصال يثبت تسجيل العملية داخل محفظة الإمبراطورية إستوري. لا يعرض أرصدة أي طرف.</p>
+      <div class='receipt-actions'><button type='button' onclick='window.print()'>طباعة / حفظ الإيصال</button><a class='btn secondary' href='/store/wallet'>العودة إلى المحفظة</a></div>
+    </section>""",amount=amount,currency=credit["currency"],reference=reference,sender=sender,recipient=recipient,created_at=credit["created_at"])
+    return page("إيصال التحويل",body)
 
 @empire_bp.get("/admin")
 @login_required
