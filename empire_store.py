@@ -182,7 +182,7 @@ def encryption():
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
-    <meta name='theme-color' content='#0b0b0b'><link rel='manifest' href='/store/manifest.webmanifest'>
+    <meta name='theme-color' content='#0b0b0b'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
     <title>{{title}} | الإمبراطورية إستوري</title><style>
     *{box-sizing:border-box}body{margin:0;background:#090909;color:#f6f1e6;font-family:system-ui,Arial}
     header{padding:18px max(16px,calc((100% - 1050px)/2));background:#111;border-bottom:1px solid #a78338}
@@ -193,7 +193,7 @@ def page(title,body,**ctx):
     input,textarea,select{display:block;width:100%;padding:12px;margin:7px 0 13px;background:#0c0c0c;border:1px solid #53452b;border-radius:8px;color:white}
     label{color:#d8c68f}.muted,small{color:#aaa}.tag{border:1px solid #80652d;border-radius:30px;padding:4px 9px;color:#e8c878;font-size:12px}
     .nav{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.nav a{padding:7px 10px;border:1px solid #514225;border-radius:8px;text-decoration:none}
-    </style></head><body><header><div class='brand'>♛ الإمبراطورية إستوري</div><small>EMPIRE E-STORY · سوقك الرقمي</small></header>
+    </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>♛ الإمبراطورية إستوري</div><small>EMPIRE E-STORY · سوقك الرقمي</small></header>
     <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>سوق الحسابات</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a></nav>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<p><a href='/account'>حساب المستخدم</a> · <a href='/logout'>خروج</a></p></main></body></html>"""
@@ -203,7 +203,21 @@ def page(title,body,**ctx):
 def manifest():
     return {"name":"الإمبراطورية إستوري","short_name":"Empire E-Story","start_url":"/store/","display":"standalone",
             "background_color":"#090909","theme_color":"#0b0b0b","lang":"ar","dir":"rtl",
-            "icons":[]},200,{"Content-Type":"application/manifest+json"}
+            "icons":[{"src":"/store/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]},200,{"Content-Type":"application/manifest+json"}
+
+@empire_bp.get("/icon.svg")
+def app_icon():
+    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='#090909'/><path d='M256 68l44 70 82-22-12 84 72 45-72 45 12 84-82-22-44 70-44-70-82 22 12-84-72-45 72-45-12-84 82 22z' fill='none' stroke='#d8b45e' stroke-width='16' stroke-linejoin='round'/><path d='M160 310h192l-18 54H178z' fill='#d8b45e'/><path d='M180 284l-16-92 66 52 26-112 26 112 66-52-16 92z' fill='#d8b45e'/></svg>"""
+    return svg,200,{"Content-Type":"image/svg+xml"}
+
+@empire_bp.get("/sw.js")
+def service_worker():
+    js="""const CACHE='empire-shell-v1';self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.add('/store/offline'))));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin)return;if(u.pathname==='/store/offline'){e.respondWith(caches.match('/store/offline').then(r=>r||fetch(e.request)));return;}e.respondWith(fetch(e.request).catch(()=>caches.match('/store/offline')));});"""
+    return js,200,{"Content-Type":"application/javascript","Service-Worker-Allowed":"/store/"}
+
+@empire_bp.get("/offline")
+def offline():
+    return page("غير متصل", "<section class='panel'><h1>لا يوجد اتصال بالإنترنت</h1><p>أعد الاتصال لمتابعة عملياتك. لا يتم تخزين صفحات الدفع أو الأرصدة دون اتصال.</p></section>")
 
 @empire_bp.get("/")
 @login_required
