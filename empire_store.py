@@ -47,6 +47,12 @@ def init_db():
       created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS es_listings_status ON es_listings(status,created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS es_transfer_details(
+      reference TEXT PRIMARY KEY, sender TEXT NOT NULL, recipient TEXT NOT NULL,
+      recipient_account TEXT NOT NULL, currency TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_identity_status(
+      username TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'UNVERIFIED'
+        CHECK(status IN ('UNVERIFIED','PENDING','VERIFIED','REJECTED')), updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_agents(
       username TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'PENDING'
         CHECK(status IN ('PENDING','APPROVED','REJECTED','SUSPENDED')),
@@ -112,6 +118,10 @@ def init_db():
     if "quantity_epc" not in payment_cols:
         db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
     listing_cols={r["name"] for r in db().execute("PRAGMA table_info(es_listings)").fetchall()}
+    if "listing_type" not in listing_cols:
+        db().execute("ALTER TABLE es_listings ADD COLUMN listing_type TEXT NOT NULL DEFAULT 'ACCOUNT'")
+    if "category" not in listing_cols:
+        db().execute("ALTER TABLE es_listings ADD COLUMN category TEXT NOT NULL DEFAULT 'حسابات ألعاب'")
     if "image_path" not in listing_cols:
         db().execute("ALTER TABLE es_listings ADD COLUMN image_path TEXT NOT NULL DEFAULT ''")
     product_cols={r["name"] for r in db().execute("PRAGMA table_info(es_products)").fetchall()}
@@ -805,23 +815,62 @@ def agents():
     {% if current %}<p>الحالة: {{current['status']}} · العمولة {{current['commission_bps']/100}}%</p>{% else %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><button>التقديم كوكيل</button></form>{% endif %}</section>""",current=current,csrf=session.get("csrf",""))
     return page("الوكلاء",body)
 
+@empire_bp.get("/transfer/lookup")
+@login_required
+def transfer_lookup():
+    account=request.args.get("account_number","").strip()
+    if not re.fullmatch(r"[0-9]{5,20}",account):
+        return jsonify({"ok":False,"message":"أدخل رقم حساب صحيحاً"}),400
+    target=db().execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
+    if not target or not target["active"] or target["username"]==user()["username"]:
+        return jsonify({"ok":False,"message":"لم يتم العثور على حساب مستلم صالح"})
+    status=db().execute("SELECT status FROM es_identity_status WHERE username=?",(target["username"],)).fetchone()
+    verified=bool(status and status["status"]=="VERIFIED")
+    return jsonify({"ok":True,"name":target["full_name"],"account_number":target["account_number"],
+                    "verification":"موثق" if verified else "غير موثق","verified":verified})
+
 @empire_bp.route("/transfer-epc",methods=["GET","POST"])
 @login_required
 def transfer_epc():
     u=user()
     if request.method=="POST":
-        csrf(); recipient=request.form.get("recipient","").strip(); qty=money_int(request.form.get("quantity"))
-        target=db().execute("SELECT username,active FROM users WHERE username=?",(recipient,)).fetchone()
-        if not target or not target["active"] or recipient==u["username"]: abort(400,"المستلم غير صالح")
+        csrf()
+        account=request.form.get("recipient_account","").strip()
+        currency=request.form.get("currency","URC").strip()
+        qty=money_int(request.form.get("quantity"))
+        note=request.form.get("note","").strip()[:250]
+        if currency not in ("SDG","URC") or not re.fullmatch(r"[0-9]{5,20}",account): abort(400,"بيانات التحويل غير صالحة")
+        target=db().execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
+        if not target or not target["active"] or target["username"]==u["username"]: abort(400,"المستلم غير صالح")
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
-            post(r,[("user:"+u["username"],"URC",-qty),("user:"+recipient,"URC",qty)],"تحويل URC بين المستخدمين")
-            audit(u["username"],"URC_TRANSFER","wallet",r,"to="+recipient); d.commit()
-        except Exception: d.rollback(); raise
-        return redirect(url_for("empire.transfer_receipt", reference=r))
-    body=render_template_string("""<section class='panel'><h1>تحويل URC</h1><p>أرسل URC إلى مستخدم آخر مع إيصال رقمي ورقم عملية فريد بعد نجاح التحويل.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <label>اسم المستخدم المستلم</label><input name='recipient' autocomplete='username' required><label>الكمية URC</label><input name='quantity' type='number' min='1' required><button>تأكيد التحويل</button></form></section>""",csrf=session.get("csrf",""))
-    return page("تحويل URC",body)
+            post(r,[("user:"+u["username"],currency,-qty),("user:"+target["username"],currency,qty)],"تحويل "+currency+" إلى "+target["full_name"])
+            d.execute("INSERT INTO es_transfer_details(reference,sender,recipient,recipient_account,currency,note,created_at) VALUES(?,?,?,?,?,?,?)",
+                      (r,u["username"],target["username"],account,currency,note,now()))
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (target["username"],"وصلك تحويل جديد","استلمت تحويلًا بقيمة "+format(qty,",")+" "+currency+" من "+u["full_name"]+" · رقم العملية "+r,r,now()))
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (u["username"],"تم التحويل بنجاح","تم إرسال "+format(qty,",")+" "+currency+" إلى "+target["full_name"]+" · رقم العملية "+r,r,now()))
+            audit(u["username"],"WALLET_TRANSFER","wallet",r,"to="+target["username"]+";currency="+currency)
+            d.commit()
+        except Exception:
+            d.rollback(); raise
+        return redirect(url_for("empire.transfer_receipt",reference=r))
+    body=render_template_string("""<section class='panel'><span class='tag'>تحويل آمن</span><h1>إرسال تحويل</h1>
+      <p>أدخل رقم حساب المستلم أولاً، وسنعرض اسمه وحالة التوثيق قبل المتابعة.</p>
+      <form method='post' id='transferForm'><input type='hidden' name='csrf' value='{{csrf}}'>
+      <label>رقم حساب المستلم</label><input id='recipientAccount' name='recipient_account' inputmode='numeric' pattern='[0-9]{5,20}' maxlength='20' required>
+      <div id='recipientInfo' class='panel' style='display:none;background:#f2f8fc!important;margin:8px 0'></div>
+      <label>عملة التحويل</label><select name='currency'><option value='SDG'>جنيه سوداني SDG</option><option value='URC'>عملة URC</option></select>
+      <label>المبلغ</label><input name='quantity' type='number' min='1' step='1' required>
+      <label>ملاحظات (اختياري)</label><textarea name='note' maxlength='250' placeholder='أضف ملاحظة للمستلم'></textarea>
+      <button id='sendTransfer' disabled>إرسال التحويل</button></form></section>
+      <script>
+      (function(){const input=document.getElementById('recipientAccount'),box=document.getElementById('recipientInfo'),btn=document.getElementById('sendTransfer');let timer=null,last='';
+      input.addEventListener('input',()=>{clearTimeout(timer);btn.disabled=true;box.style.display='none';const value=input.value.trim();if(!value)return;timer=setTimeout(async()=>{if(value===last)return;last=value;try{const r=await fetch('/store/transfer/lookup?account_number='+encodeURIComponent(value),{credentials:'same-origin'});const j=await r.json();box.style.display='block';if(j.ok){box.innerHTML='<b>المستلم: '+j.name+'</b><div>رقم الحساب: '+j.account_number+'</div><div>حالة التوثيق: '+j.verification+'</div>';btn.disabled=false}else{box.textContent=j.message||'تعذر العثور على الحساب';}}catch(e){box.style.display='block';box.textContent='تعذر التحقق من الحساب. حاول مجدداً.';}},350);});
+      document.getElementById('transferForm').addEventListener('submit',e=>{if(btn.disabled){e.preventDefault();alert('تحقق من بيانات المستلم أولاً');}});
+      })();</script>""",csrf=session.get("csrf",""))
+    return page("التحويلات",body)
 
 @empire_bp.get("/transfer/receipt/<reference>")
 @login_required
