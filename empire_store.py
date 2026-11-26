@@ -118,7 +118,7 @@ def init_db():
     if "cost_sdg" not in product_cols:
         db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
     defaults = {
-      "epc_price_sdg":"0", "epc_price_usdt_micros":"0",
+      "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"0",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
       "store_name":"الإمبراطورية إستوري", "market_fee_bps":"0",
       "topups_enabled":"0", "epc_sales_enabled":"0"
@@ -189,6 +189,13 @@ def post(reference, entries, memo):
 def balance(username,currency):
     row=db().execute("SELECT balance FROM es_wallets WHERE username=? AND currency=?",(username,currency)).fetchone()
     return row["balance"] if row else 0
+
+def assert_epc_capacity(quantity):
+    maximum=int(setting("epc_max_supply","0"))
+    if maximum<=0: raise ValueError("يجب على المالك تحديد الحد الأقصى لإصدار EPC قبل البيع")
+    issued=-db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:epc' AND currency='EPC'").fetchone()["n"]
+    reserved=db().execute("SELECT COALESCE(SUM(quantity_epc),0) n FROM es_payments WHERE purpose='EPC_PURCHASE' AND status='PENDING'").fetchone()["n"]
+    if issued+reserved+quantity>maximum: raise ValueError("الكمية تتجاوز المعروض المتاح من EPC")
 
 def encryption():
     key=os.getenv("EMPIRE_DATA_ENCRYPTION_KEY","")
@@ -744,6 +751,7 @@ def buy_epc():
             cost=qty*rate
             r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
             try:
+                assert_epc_capacity(qty)
                 post(r,[("user:"+u["username"],"SDG",-cost),("platform:epc_sales","SDG",cost),("user:"+u["username"],"EPC",qty),("issuer:epc","EPC",-qty)],"شراء EPC من محفظة SDG")
                 audit(u["username"],"EPC_PURCHASE","wallet",r); d.commit()
             except Exception: d.rollback(); raise
@@ -754,6 +762,7 @@ def buy_epc():
             micros=int(setting("epc_price_usdt_micros","0"))
             if micros<=0: abort(503,"يجب على المالك ضبط سعر EPC مقابل USDT أولاً")
             amount=qty*micros
+            assert_epc_capacity(qty)
             r=ref()
             db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,quantity_epc,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','USDT',?,?,'EPC_PURCHASE',?,?)",
                          (r,u["username"],amount,qty,"Binance ID: "+bid,now()))
@@ -774,11 +783,15 @@ def buy_epc():
 def admin_settings():
     if request.method=="POST":
         csrf()
-        keys=("epc_price_sdg","epc_price_usdt_micros","binance_id","market_fee_bps","epc_sales_enabled","topups_enabled")
+        keys=("epc_price_sdg","epc_price_usdt_micros","epc_max_supply","binance_id","market_fee_bps","epc_sales_enabled","topups_enabled")
         for k in keys:
             v=request.form.get(k,"").strip()
-            if k in ("epc_price_sdg","epc_price_usdt_micros","market_fee_bps") and not re.fullmatch(r"[0-9]{1,12}",v): abort(400)
+            if k in ("epc_price_sdg","epc_price_usdt_micros","epc_max_supply","market_fee_bps") and not re.fullmatch(r"[0-9]{1,12}",v): abort(400)
             if k in ("epc_price_sdg","epc_price_usdt_micros") and int(v)<1: abort(400)
+            if k=="epc_max_supply":
+                issued=-db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:epc' AND currency='EPC'").fetchone()["n"]
+                reserved=db().execute("SELECT COALESCE(SUM(quantity_epc),0) n FROM es_payments WHERE purpose='EPC_PURCHASE' AND status='PENDING'").fetchone()["n"]
+                if int(v)<issued+reserved: abort(400,"لا يمكن خفض الحد الأقصى دون إجمالي الإصدار والطلبات المعلقة")
             if k=="market_fee_bps" and int(v)>10000: abort(400)
             if k in ("epc_sales_enabled","topups_enabled") and v not in ("0","1"): abort(400)
             db().execute("INSERT INTO es_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(k,v))
@@ -786,8 +799,8 @@ def admin_settings():
         flash("تم حفظ الإعدادات.")
     body=render_template_string("""<section class='panel'><h1>إعدادات المنصة</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
     {% for key,label in fields %}<label>{{label}}</label><input name='{{key}}' value='{{values[key]}}'>{% endfor %}<button>حفظ الإعدادات</button></form></section>""",
-      fields=[("epc_price_sdg","سعر EPC بالجنيه SDG"),("epc_price_usdt_micros","سعر EPC بالـ USDT بوحدة مليونية"),("binance_id","Binance ID للاستقبال"),("market_fee_bps","عمولة السوق بالنقاط الأساسية"),("epc_sales_enabled","تفعيل بيع EPC: 1 أو 0"),("topups_enabled","تفعيل طلبات الشحن: 1 أو 0")],
-      values={k:setting(k) for k in ("epc_price_sdg","epc_price_usdt_micros","binance_id","market_fee_bps","epc_sales_enabled","topups_enabled")},csrf=session.get("csrf",""))
+      fields=[("epc_price_sdg","سعر EPC بالجنيه SDG"),("epc_price_usdt_micros","سعر EPC بالـ USDT بوحدة مليونية"),("epc_max_supply","الحد الأقصى لإصدار EPC (وحدات صحيحة)"),("binance_id","Binance ID للاستقبال"),("market_fee_bps","عمولة السوق بالنقاط الأساسية"),("epc_sales_enabled","تفعيل بيع EPC: 1 أو 0"),("topups_enabled","تفعيل طلبات الشحن: 1 أو 0")],
+      values={k:setting(k) for k in ("epc_price_sdg","epc_price_usdt_micros","epc_max_supply","binance_id","market_fee_bps","epc_sales_enabled","topups_enabled")},csrf=session.get("csrf",""))
     return page("الإعدادات",body)
 
 @empire_bp.route("/admin/withdrawals",methods=["GET","POST"])
