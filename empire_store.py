@@ -322,7 +322,50 @@ def page(title,body,**ctx):
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
     <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div><div class='urc-line'>رصيد العملة الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav></body></html>"""
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav><script>
+(function(){
+  const main=document.querySelector('main');
+  const bottom=document.querySelector('.app-bottom');
+  if(!main||!bottom)return;
+  function markActive(path){
+    bottom.querySelectorAll('a').forEach(a=>{
+      a.classList.toggle('active',new URL(a.href,location.href).pathname===path);
+    });
+  }
+  async function navigate(url,push){
+    const target=new URL(url,location.href);
+    if(target.origin!==location.origin||!target.pathname.startsWith('/store/'))return;
+    main.style.opacity='.55';
+    try{
+      const response=await fetch(target.href,{headers:{'X-Requested-With':'EmpireApp'}});
+      if(!response.ok)throw new Error('navigation failed');
+      const html=await response.text();
+      const doc=new DOMParser().parseFromString(html,'text/html');
+      const next=doc.querySelector('main');
+      if(!next)throw new Error('missing screen');
+      main.innerHTML=next.innerHTML;
+      document.title=doc.title;
+      if(push)history.pushState({},'',target.href);
+      main.style.opacity='1';
+      window.scrollTo({top:0,behavior:'instant'});
+      markActive(target.pathname);
+    }catch(e){
+      main.style.opacity='1';
+      location.href=target.href;
+    }
+  }
+  document.addEventListener('click',e=>{
+    const a=e.target.closest('a[href]');
+    if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||a.target||a.hasAttribute('download'))return;
+    const url=new URL(a.href,location.href);
+    if(url.origin===location.origin&&url.pathname.startsWith('/store/')){
+      e.preventDefault();navigate(url.href,true);
+    }
+  });
+  window.addEventListener('popstate',()=>navigate(location.href,false));
+  markActive(location.pathname);
+})();
+</script></body></html>"""
     current=user()
     ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
     ctx.setdefault("wallet_sdg", balance(current["username"],"SDG") if current else 0)
