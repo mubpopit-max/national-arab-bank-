@@ -8,7 +8,7 @@ import os, re, json, sqlite3, secrets, io
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
-from flask import Blueprint, abort, flash, redirect, render_template_string, request, session, url_for, send_from_directory
+from flask import Blueprint, abort, flash, redirect, render_template_string, request, session, url_for, send_from_directory, jsonify
 from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 from werkzeug.utils import secure_filename
@@ -47,6 +47,12 @@ def init_db():
       created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS es_listings_status ON es_listings(status,created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS es_transfer_details(
+      reference TEXT PRIMARY KEY, sender TEXT NOT NULL, recipient TEXT NOT NULL,
+      recipient_account TEXT NOT NULL, currency TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_identity_status(
+      username TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'UNVERIFIED'
+        CHECK(status IN ('UNVERIFIED','PENDING','VERIFIED','REJECTED')), updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_agents(
       username TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'PENDING'
         CHECK(status IN ('PENDING','APPROVED','REJECTED','SUSPENDED')),
@@ -112,6 +118,10 @@ def init_db():
     if "quantity_epc" not in payment_cols:
         db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
     listing_cols={r["name"] for r in db().execute("PRAGMA table_info(es_listings)").fetchall()}
+    if "listing_type" not in listing_cols:
+        db().execute("ALTER TABLE es_listings ADD COLUMN listing_type TEXT NOT NULL DEFAULT 'ACCOUNT'")
+    if "category" not in listing_cols:
+        db().execute("ALTER TABLE es_listings ADD COLUMN category TEXT NOT NULL DEFAULT 'حسابات ألعاب'")
     if "image_path" not in listing_cols:
         db().execute("ALTER TABLE es_listings ADD COLUMN image_path TEXT NOT NULL DEFAULT ''")
     product_cols={r["name"] for r in db().execute("PRAGMA table_info(es_products)").fetchall()}
@@ -147,7 +157,7 @@ def init_db():
 def user():
     username=session.get("username")
     if not username: return None
-    return db().execute("SELECT username,full_name,role,active FROM users WHERE username=?",(username,)).fetchone()
+    return db().execute("SELECT username,full_name,account_number,role,active FROM users WHERE username=?",(username,)).fetchone()
 
 def login_required(fn):
     @wraps(fn)
@@ -320,10 +330,42 @@ def page(title,body,**ctx):
     footer{display:none}
     @media(min-width:760px){main{margin-top:22px}.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #e6eaf0;border-bottom:0;border-radius:18px 18px 0 0}}
 
-    </style></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div><div class='urc-line'>رصيد العملة الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
+    
+    /* Sudan national wallet visual system */
+    :root{color-scheme:light;--bg:#f3f7fb;--surface:#fff;--surface2:#edf5fb;--line:#dce8f1;--text:#172b3a;--muted:#687e8d;--blue:#0875b9;--green:#138a52;--red:#c83d43;--radius:20px}
+    html,body{background:#f3f7fb!important;color:#172b3a!important;font-family:system-ui,-apple-system,'Segoe UI',Tahoma,Arial,sans-serif!important}
+    body{padding-bottom:calc(84px + env(safe-area-inset-bottom));line-height:1.55}
+    header{background:#fff!important;color:#16344a!important;border-bottom:1px solid #dce8f1!important;box-shadow:0 2px 10px rgba(20,60,85,.05)!important;padding:13px 18px!important}
+    .brand,.brand:before{color:#fff!important}.brand{color:#153a55!important;font-size:19px!important}.brand:before{background:linear-gradient(135deg,#0875b9,#138a52)!important}
+    header small{color:#6a8494!important}
+    main{max-width:760px!important;margin:14px auto 24px!important;padding:0 14px!important}
+    .nav{display:none!important}
+    .panel{background:#fff!important;color:#172b3a!important;border:1px solid #e1eaf1!important;border-radius:19px!important;padding:17px!important;margin:12px 0!important;box-shadow:0 3px 12px rgba(20,60,85,.045)!important}
+    h1,h2,h3{color:#173b55!important}p{color:#536b7c!important}.muted,small{color:#6c8190!important}
+    a{color:#0875b9!important}
+    .btn,button{background:#0875b9!important;color:#fff!important;border-radius:13px!important;box-shadow:none!important;transition:none!important}
+    .btn.secondary{background:#edf5fa!important;color:#12618e!important;border:1px solid #d8e7f0!important}
+    input,textarea,select{background:#f8fbfd!important;color:#172b3a!important;border:1px solid #d7e4ed!important;border-radius:12px!important}
+    label{color:#36566c!important}
+    .tag{background:#eaf6ef!important;color:#137344!important;border-color:#cde8d7!important}
+    .hero{display:none!important}
+    .service-card{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;min-height:108px;padding:14px!important;background:#fff!important;border:1px solid #dfebf2!important;border-radius:17px!important;box-shadow:0 3px 10px rgba(22,65,90,.035)!important;color:#183b52!important}
+    .service-card strong{font-size:13px;color:#183b52!important}.service-card span:last-child{font-size:11px;color:#718796!important}
+    .service-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#eaf4fb!important;color:#0875b9;font-size:22px;font-style:normal}
+    .app-bottom{position:fixed;z-index:100;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:#fff!important;border-top:1px solid #dce8f1;box-shadow:0 -3px 14px rgba(20,60,85,.07)!important;backdrop-filter:none!important}
+    .app-bottom a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;color:#6d8290!important;font-size:10px;font-weight:800}
+    .app-bottom a .ico{font-size:20px;line-height:1.2}.app-bottom a.active{color:#0875b9!important}
+    .wallet-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:19px;border-radius:21px;background:linear-gradient(125deg,#07558a,#087bb2 68%,#12865c)!important;color:#fff;box-shadow:0 8px 20px rgba(7,85,138,.14)}
+    .wallet-top .eyebrow,.wallet-top .currency{font-size:12px;color:#e3f4ff!important}.wallet-top .amount{font-size:27px;font-weight:900;direction:ltr;text-align:right;line-height:1.2;color:#fff}.wallet-top .wallet-link{padding:9px 12px;border:1px solid rgba(255,255,255,.45);border-radius:11px;color:#fff!important;font-size:12px;font-weight:800;white-space:nowrap}
+    .transfer-receipt{border-top:6px solid #16844f!important;background:linear-gradient(180deg,#fff 0%,#f8fbf9 100%)!important}
+    .receipt-flag{display:flex;height:7px;border-radius:20px;overflow:hidden;margin:0 0 15px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
+    footer{display:none!important}
+    @media(min-width:760px){.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #dce8f1;border-bottom:0;border-radius:18px 18px 0 0}}
+
+</style></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
+    <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك المتاح</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div></div><a class='wallet-link' href='/store/wallet'>تفاصيل الرصيد ←</a></section><nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav><script>
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>المتجر</a><a href='/store/transfer-epc'><span class='ico'>⇄</span>التحويلات</a><a href='/store/wallet'><span class='ico'>▣</span>عملاتي</a><a href='/account_details'><span class='ico'>♙</span>حسابي</a></nav><script>
 (function(){
   'use strict';
   const main=document.querySelector('main');
@@ -410,28 +452,25 @@ def offline():
 def home():
     u=user()
     sdg=balance(u["username"],"SDG")
-    urc=balance(u["username"],"URC")
-    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 4",("user:"+u["username"],)).fetchall()
-    body=render_template_string("""<section class='panel' style='padding:18px'>
-    <div style='display:flex;justify-content:space-between;align-items:center;gap:8px'><div><small>مرحباً بعودتك</small><h1 style='margin:2px 0'>{{name}}</h1></div><span class='tag'>Empire E-Story</span></div>
-    <div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px'>
-      <div style='padding:13px;border-radius:14px;background:#f1f7fc'><small>رصيد SDG</small><div style='font-size:20px;font-weight:900;color:#125e96'>{{'{:,}'.format(sdg)}}</div></div>
-      <div style='padding:13px;border-radius:14px;background:#f5f3ff'><small>رصيد URC</small><div style='font-size:20px;font-weight:900;color:#6548a8'>{{'{:,}'.format(urc)}}</div></div>
-    </div></section>
-    <section class='panel'><h2>الخدمات الرئيسية</h2><div class='grid'>
-      <a class='service-card' href='/store/transfer-epc'><span class='service-icon'>↗</span><strong>تحويل الأموال</strong><span>إرسال واستقبال URC</span></a>
-      <a class='service-card' href='/store/exchange'><span class='service-icon'>⇄</span><strong>صرف العملات</strong><span>URC و SDG</span></a>
-      <a class='service-card' href='/store/deposit'><span class='service-icon'>＋</span><strong>إيداع رصيد</strong><span>إضافة رصيد SDG</span></a>
-      <a class='service-card' href='/store/withdrawal'><span class='service-icon'>⇩</span><strong>سحب رصيد</strong><span>طلب سحب من المحفظة</span></a>
-      <a class='service-card' href='/store/topups'><span class='service-icon'>🎮</span><strong>شحن الألعاب</strong><span>باقات وخدمات الألعاب</span></a>
-      <a class='service-card' href='/store/marketplace'><span class='service-icon'>▦</span><strong>السوق الرقمي</strong><span>تصفح العروض الرقمية</span></a>
-      <a class='service-card' href='/store/agents'><span class='service-icon'>♧</span><strong>الوكلاء</strong><span>خدمات الوكلاء</span></a>
-      <a class='service-card' href='/store/orders'><span class='service-icon'>☷</span><strong>طلباتي</strong><span>متابعة حالة الطلبات</span></a>
+    rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 5",("user:"+u["username"],)).fetchall()
+    body=render_template_string("""<section class='panel'><h2>خدماتك</h2><div class='grid' style='grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
+      <a class='service-card' href='/store/transfer-epc'><i class='service-icon'>⇄</i><strong>التحويلات</strong><span>إرسال واستقبال الأموال</span></a>
+      <a class='service-card' href='/store/accounts'><i class='service-icon'>🎮</i><strong>بيع وشراء حسابات</strong><span>اعرض حسابك أو اشترِ</span></a>
+      <a class='service-card' href='/account/funding'><i class='service-icon'>＋</i><strong>تغذية حسابي</strong><span>إيداع رصيد SDG</span></a>
+      <a class='service-card' href='/account_details'><i class='service-icon'>♙</i><strong>الملف الشخصي</strong><span>بيانات حسابك</span></a>
+      <a class='service-card' href='/store/wallet'><i class='service-icon'>◉</i><strong>عملاتي</strong><span>SDG و URC</span></a>
+      <a class='service-card' href='/store/marketplace'><i class='service-icon'>▦</i><strong>المتجر الشامل</strong><span>تسوق واعرض منتجاتك</span></a>
+      <a class='service-card' href='/store/topups'><i class='service-icon'>🎮</i><strong>شحن الألعاب</strong><span>باقات وخدمات رقمية</span></a>
+      <a class='service-card' href='/store/exchange'><i class='service-icon'>⇄</i><strong>صرف العملات</strong><span>تحويل URC و SDG</span></a>
+      <a class='service-card' href='/store/withdrawal'><i class='service-icon'>↧</i><strong>سحب الرصيد</strong><span>طلبات السحب</span></a>
+      <a class='service-card' href='/store/agents'><i class='service-icon'>♧</i><strong>الوكلاء</strong><span>خدمات الوكلاء</span></a>
+      <a class='service-card' href='/store/orders'><i class='service-icon'>☷</i><strong>طلباتي</strong><span>متابعة المشتريات</span></a>
+      <a class='service-card' href='/store/wallet'><i class='service-icon'>▤</i><strong>كشف الحساب</strong><span>سجل الحركات المالية</span></a>
     </div></section>
     <section class='panel'><div style='display:flex;justify-content:space-between;align-items:center'><h2 style='margin:0'>آخر العمليات</h2><a href='/store/wallet'>عرض الكل</a></div>
     {% for x in rows %}<div style='display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf0f4'><div><b>{{x['memo']}}</b><div><small>{{x['created_at'][:16]}}</small></div></div><b dir='ltr'>{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class='empty-state'>لا توجد عمليات حديثة.</div>{% endfor %}</section>
-    {% if is_founder %}<section class='panel'><h2>إدارة المؤسس</h2><a class='btn' href='/store/admin'>فتح لوحة التحكم الشاملة</a></section>{% endif %}""",
-      name=u["full_name"],sdg=sdg,urc=urc,rows=rows,is_founder=u["role"]=="founder")
+    {% if is_founder %}<section class='panel'><h2>مركز المؤسس</h2><a class='btn' href='/store/admin'>لوحة التحكم الشاملة</a></section>{% endif %}""",
+      rows=rows,is_founder=u["role"]=="founder")
     return page("الرئيسية",body)
 
 @empire_bp.get("/wallet")
@@ -524,12 +563,23 @@ def new_topup():
 @empire_bp.get("/marketplace")
 @login_required
 def marketplace():
-    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' ORDER BY id DESC LIMIT 100").fetchall()
-    body=render_template_string("""<section class='panel'><h1>سوق حسابات PUBG Mobile</h1>
-    <p>البيع بين المستخدمين. لا تضع كلمات المرور أو رموز الاسترداد في الإعلان.</p><a class='btn' href='/store/listing/new'>اعرض حسابك</a></section>
-    <div class='grid'>{% for x in rows %}<article class='panel'><span class='tag'>{{x['game']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b><p><small>البائع: {{x['seller']}}</small></p>
-    <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد عروض حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
-    return page("السوق",body)
+    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' AND listing_type='PRODUCT' ORDER BY id DESC LIMIT 100").fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>المتجر السوداني الرقمي</span><h1>المتجر الشامل</h1>
+    <p>تسوق الخدمات والمنتجات الرقمية، أو اعرض منتجك للبيع.</p><a class='btn' href='/store/listing/new'>＋ أضف منتجاً للبيع</a> <a class='btn secondary' href='/store/accounts'>سوق الحسابات</a></section>
+    <div class='grid'>{% for x in rows %}<article class='panel'><span class='tag'>{{x['category']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b><p><small>البائع: {{x['seller']}}</small></p>
+    <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد منتجات معروضة حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
+    return page("المتجر الشامل",body)
+
+@empire_bp.get("/accounts")
+@login_required
+def accounts_market():
+    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' AND listing_type='ACCOUNT' ORDER BY id DESC LIMIT 100").fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>بيع وشراء الحسابات</span><h1>سوق الحسابات</h1>
+    <p>تصفح الحسابات المعروضة أو اعرض حسابك للبيع. رسوم نشر إعلان الحساب 1,000 SDG تخصم من محفظتك عند النشر.</p>
+    <a class='btn' href='/store/listing/new'>＋ اعرض حسابك للبيع</a></section>
+    <div class='grid'>{% for x in rows %}<article class='panel'><span class='tag'>{{x['category']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b><p><small>البائع: {{x['seller']}}</small></p>
+    <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد حسابات معروضة حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
+    return page("سوق الحسابات",body)
 
 @empire_bp.get("/listing-image/<int:listing_id>")
 def listing_image(listing_id):
@@ -545,7 +595,9 @@ def listing_new():
         csrf()
         title=request.form.get("title","").strip(); desc=request.form.get("description","").strip()
         price=money_int(request.form.get("price_sdg"))
-        if not title or len(title)>100 or len(desc)<10 or len(desc)>1500: abort(400)
+        listing_type=request.form.get("listing_type","ACCOUNT").strip()
+        category=request.form.get("category","").strip()[:60]
+        if listing_type not in ("ACCOUNT","PRODUCT") or not category or not title or len(title)>100 or len(desc)<10 or len(desc)>1500: abort(400)
         image_path=""
         uploaded=request.files.get("image")
         if uploaded and uploaded.filename:
@@ -557,18 +609,33 @@ def listing_new():
                 if source.width>4000 or source.height>4000: abort(400,"أبعاد الصورة كبيرة جداً")
                 image_path=secrets.token_hex(16)+".jpg"
                 source.convert("RGB").save(os.path.join(IMAGE_DIR,image_path),"JPEG",quality=88,optimize=True)
-            except Exception:
-                abort(400,"ملف الصورة غير صالح")
-        r=ref()
-        db().execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at) VALUES(?,?,'PUBG Mobile',?,?,?,?,'PUBLISHED',?)",
-                     (r,u["username"],title,desc,price,image_path,now()))
-        audit(u["username"],"LISTING_CREATED","listing",r)
-        return redirect(url_for("empire.marketplace"))
-    body=render_template_string("""<section class='panel'><h1>إضافة حساب للبيع</h1><form method='post' enctype='multipart/form-data'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <label>صورة الحساب (اختياري، JPG/PNG/WebP، حتى 5MB)</label><input type='file' name='image' accept='image/jpeg,image/png,image/webp'>
-    <label>عنوان العرض</label><input name='title' maxlength='100' required><label>وصف الحساب دون بيانات الدخول</label><textarea name='description' minlength='10' maxlength='1500' required></textarea>
+            except Exception: abort(400,"ملف الصورة غير صالح")
+        r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            if listing_type=="ACCOUNT":
+                post(r+"F",[("user:"+u["username"],"SDG",-1000),("platform:revenue","SDG",1000)],"رسوم نشر حساب للبيع")
+            d.execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at,listing_type,category) VALUES(?,?,?,?,?,?,?,'PUBLISHED',?,?,?)",
+                      (r,u["username"],category,title,desc,price,image_path,now(),listing_type,category))
+            audit(u["username"],"LISTING_CREATED","listing",r,"type="+listing_type)
+            d.commit()
+        except Exception:
+            d.rollback()
+            if image_path:
+                try: os.remove(os.path.join(IMAGE_DIR,image_path))
+                except OSError: pass
+            raise
+        flash("تم نشر إعلانك بنجاح." if listing_type=="PRODUCT" else "تم نشر حسابك وخصم رسوم النشر 1,000 SDG.")
+        return redirect(url_for("empire.accounts_market" if listing_type=="ACCOUNT" else "empire.marketplace"))
+    body=render_template_string("""<section class='panel'><h1>إضافة إعلان جديد</h1>
+    <p>رسوم نشر حساب للبيع 1,000 SDG تخصم عند تأكيد النشر. نشر المنتجات في المتجر لا يخصم هذه الرسوم.</p>
+    <form method='post' enctype='multipart/form-data'><input type='hidden' name='csrf' value='{{csrf}}'>
+    <label>نوع الإعلان</label><select name='listing_type'><option value='ACCOUNT'>حساب للبيع</option><option value='PRODUCT'>منتج / خدمة في المتجر</option></select>
+    <label>التصنيف</label><input name='category' maxlength='60' placeholder='مثال: PUBG Mobile، خدمات رقمية، منتجات' required>
+    <label>صورة الإعلان (اختياري)</label><input type='file' name='image' accept='image/jpeg,image/png,image/webp'>
+    <label>عنوان الإعلان</label><input name='title' maxlength='100' required>
+    <label>الوصف دون بيانات دخول أو كلمات مرور</label><textarea name='description' minlength='10' maxlength='1500' required></textarea>
     <label>السعر SDG</label><input name='price_sdg' type='number' min='1' required><button>نشر الإعلان</button></form></section>""",csrf=session.get("csrf",""))
-    return page("إعلان جديد",body)
+    return page("إضافة إعلان",body)
 
 @empire_bp.post("/marketplace/buy")
 @login_required
@@ -773,54 +840,101 @@ def agents():
     {% if current %}<p>الحالة: {{current['status']}} · العمولة {{current['commission_bps']/100}}%</p>{% else %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><button>التقديم كوكيل</button></form>{% endif %}</section>""",current=current,csrf=session.get("csrf",""))
     return page("الوكلاء",body)
 
+@empire_bp.get("/transfer/lookup")
+@login_required
+def transfer_lookup():
+    account=request.args.get("account_number","").strip()
+    if not re.fullmatch(r"[0-9]{5,20}",account):
+        return jsonify({"ok":False,"message":"أدخل رقم حساب صحيحاً"}),400
+    target=db().execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
+    if not target or not target["active"] or target["username"]==user()["username"]:
+        return jsonify({"ok":False,"message":"لم يتم العثور على حساب مستلم صالح"})
+    status=db().execute("SELECT status FROM es_identity_status WHERE username=?",(target["username"],)).fetchone()
+    verified=bool(status and status["status"]=="VERIFIED")
+    return jsonify({"ok":True,"name":target["full_name"],"account_number":target["account_number"],
+                    "verification":"موثق" if verified else "غير موثق","verified":verified})
+
 @empire_bp.route("/transfer-epc",methods=["GET","POST"])
 @login_required
 def transfer_epc():
     u=user()
     if request.method=="POST":
-        csrf(); recipient=request.form.get("recipient","").strip(); qty=money_int(request.form.get("quantity"))
-        target=db().execute("SELECT username,active FROM users WHERE username=?",(recipient,)).fetchone()
-        if not target or not target["active"] or recipient==u["username"]: abort(400,"المستلم غير صالح")
+        csrf()
+        account=request.form.get("recipient_account","").strip()
+        currency=request.form.get("currency","URC").strip()
+        qty=money_int(request.form.get("quantity"))
+        note=request.form.get("note","").strip()[:250]
+        if currency not in ("SDG","URC") or not re.fullmatch(r"[0-9]{5,20}",account): abort(400,"بيانات التحويل غير صالحة")
+        target=db().execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
+        if not target or not target["active"] or target["username"]==u["username"]: abort(400,"المستلم غير صالح")
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
-            post(r,[("user:"+u["username"],"URC",-qty),("user:"+recipient,"URC",qty)],"تحويل URC بين المستخدمين")
-            audit(u["username"],"URC_TRANSFER","wallet",r,"to="+recipient); d.commit()
-        except Exception: d.rollback(); raise
-        return redirect(url_for("empire.transfer_receipt", reference=r))
-    body=render_template_string("""<section class='panel'><h1>تحويل URC</h1><p>أرسل URC إلى مستخدم آخر مع إيصال رقمي ورقم عملية فريد بعد نجاح التحويل.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <label>اسم المستخدم المستلم</label><input name='recipient' autocomplete='username' required><label>الكمية URC</label><input name='quantity' type='number' min='1' required><button>تأكيد التحويل</button></form></section>""",csrf=session.get("csrf",""))
-    return page("تحويل URC",body)
+            post(r,[("user:"+u["username"],currency,-qty),("user:"+target["username"],currency,qty)],"تحويل "+currency+" إلى "+target["full_name"])
+            d.execute("INSERT INTO es_transfer_details(reference,sender,recipient,recipient_account,currency,note,created_at) VALUES(?,?,?,?,?,?,?)",
+                      (r,u["username"],target["username"],account,currency,note,now()))
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (target["username"],"وصلك تحويل جديد","استلمت تحويلًا بقيمة "+format(qty,",")+" "+currency+" من "+u["full_name"]+" · رقم العملية "+r,r,now()))
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (u["username"],"تم التحويل بنجاح","تم إرسال "+format(qty,",")+" "+currency+" إلى "+target["full_name"]+" · رقم العملية "+r,r,now()))
+            audit(u["username"],"WALLET_TRANSFER","wallet",r,"to="+target["username"]+";currency="+currency)
+            d.commit()
+        except Exception:
+            d.rollback(); raise
+        return redirect(url_for("empire.transfer_receipt",reference=r))
+    body=render_template_string("""<section class='panel'><span class='tag'>تحويل آمن</span><h1>إرسال تحويل</h1>
+      <p>أدخل رقم حساب المستلم أولاً، وسنعرض اسمه وحالة التوثيق قبل المتابعة.</p>
+      <form method='post' id='transferForm'><input type='hidden' name='csrf' value='{{csrf}}'>
+      <label>رقم حساب المستلم</label><input id='recipientAccount' name='recipient_account' inputmode='numeric' pattern='[0-9]{5,20}' maxlength='20' required>
+      <div id='recipientInfo' class='panel' style='display:none;background:#f2f8fc!important;margin:8px 0'></div>
+      <label>عملة التحويل</label><select name='currency'><option value='SDG'>جنيه سوداني SDG</option><option value='URC'>عملة URC</option></select>
+      <label>المبلغ</label><input name='quantity' type='number' min='1' step='1' required>
+      <label>ملاحظات (اختياري)</label><textarea name='note' maxlength='250' placeholder='أضف ملاحظة للمستلم'></textarea>
+      <button id='sendTransfer' disabled>إرسال التحويل</button></form></section>
+      <script>
+      (function(){const input=document.getElementById('recipientAccount'),box=document.getElementById('recipientInfo'),btn=document.getElementById('sendTransfer');let timer=null,last='';
+      input.addEventListener('input',()=>{clearTimeout(timer);btn.disabled=true;box.style.display='none';const value=input.value.trim();if(!value)return;timer=setTimeout(async()=>{if(value===last)return;last=value;try{const r=await fetch('/store/transfer/lookup?account_number='+encodeURIComponent(value),{credentials:'same-origin'});const j=await r.json();box.style.display='block';if(j.ok){box.replaceChildren();const name=document.createElement('b');name.textContent='المستلم: '+j.name;const acc=document.createElement('div');acc.textContent='رقم الحساب: '+j.account_number;const ver=document.createElement('div');ver.textContent='حالة التوثيق: '+j.verification;box.append(name,acc,ver);btn.disabled=false}else{box.textContent=j.message||'تعذر العثور على الحساب';}}catch(e){box.style.display='block';box.textContent='تعذر التحقق من الحساب. حاول مجدداً.';}},350);});
+      document.getElementById('transferForm').addEventListener('submit',e=>{if(btn.disabled){e.preventDefault();alert('تحقق من بيانات المستلم أولاً');}});
+      })();</script>""",csrf=session.get("csrf",""))
+    return page("التحويلات",body)
 
 @empire_bp.get("/transfer/receipt/<reference>")
 @login_required
 def transfer_receipt(reference):
     u=user()
     rows=db().execute("SELECT account,currency,delta,memo,created_at FROM es_ledger WHERE reference=? ORDER BY line_no",(reference,)).fetchall()
-    if len(rows)!=2 or any(not row["account"].startswith("user:") for row in rows):
-        abort(404)
+    if len(rows)!=2 or any(not row["account"].startswith("user:") for row in rows): abort(404)
     debit=next((row for row in rows if row["delta"]<0),None)
     credit=next((row for row in rows if row["delta"]>0),None)
-    if not debit or not credit or debit["currency"]!=credit["currency"]:
-        abort(404)
+    if not debit or not credit or debit["currency"]!=credit["currency"]: abort(404)
     sender=debit["account"][5:]; recipient=credit["account"][5:]
-    if u["username"] not in (sender,recipient):
-        abort(404)
+    if u["username"] not in (sender,recipient): abort(404)
+    detail=db().execute("SELECT * FROM es_transfer_details WHERE reference=?",(reference,)).fetchone()
+    if not detail: abort(404)
+    sender_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(sender,)).fetchone()
+    recipient_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(recipient,)).fetchone()
     amount=credit["delta"]
-    body=render_template_string("""<section class='panel receipt-card'>
-      <div class='receipt-head'><span class='receipt-mark'>✓</span><span class='tag'>عملية مكتملة</span><h1>تم التحويل بنجاح</h1>
-      <p>تم تنفيذ التحويل وتسجيله في سجل المعاملات.</p></div>
-      <div class='receipt-amount'><small>المبلغ المحوّل</small><strong>{{'{:,}'.format(amount)}} <small>{{currency}}</small></strong></div>
-      <div class='receipt-details'>
-        <div><small>رقم العملية الفريد</small><b dir='ltr'>{{reference}}</b></div>
-        <div><small>من</small><b>{{sender}}</b></div>
-        <div><small>إلى</small><b>{{recipient}}</b></div>
-        <div><small>تاريخ ووقت العملية (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
-        <div><small>الحالة</small><b class='receipt-success'>مكتملة · مؤكدة في السجل</b></div>
+    body=render_template_string("""<section class='panel transfer-receipt'>
+      <div class='receipt-flag'><i></i><i></i><i></i><i></i></div>
+      <div style='text-align:center'><span class='tag'>إشعار تحويل رسمي</span><div style='font-size:42px;color:#16844f'>✓</div>
+      <h1>تم التحويل بنجاح</h1><p>الإمبراطورية إستوري · خدمة مالية سودانية</p></div>
+      <div style='background:#edf7f1;border:1px solid #d1eadb;border-radius:16px;padding:17px;text-align:center;margin:14px 0'>
+        <small>قيمة التحويل</small><div style='font-size:30px;font-weight:900;color:#145c3a'>{{'{:,}'.format(amount)}} {{currency}}</div><b style='color:#16844f'>عملية مكتملة</b>
       </div>
-      <p class='muted receipt-note'>هذا الإيصال يثبت تسجيل العملية داخل محفظة الإمبراطورية إستوري. لا يعرض أرصدة أي طرف.</p>
-      <div class='receipt-actions'><button type='button' onclick='window.print()'>طباعة / حفظ الإيصال</button><a class='btn secondary' href='/store/wallet'>العودة إلى المحفظة</a></div>
-    </section>""",amount=amount,currency=credit["currency"],reference=reference,sender=sender,recipient=recipient,created_at=credit["created_at"])
-    return page("إيصال التحويل",body)
+      <div style='display:grid;gap:11px'>
+        <div><small>من المرسل</small><b>{{sender_name}} · {{sender_account}}</b></div>
+        <div><small>إلى المستلم</small><b>{{recipient_name}} · {{recipient_account}}</b></div>
+        <div><small>ملاحظات المرسل</small><b>{{note or 'لا توجد ملاحظات'}}</b></div>
+        <div><small>رقم العملية</small><b dir='ltr'>{{reference}}</b></div>
+        <div><small>تاريخ ووقت العملية (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
+      </div>
+      <p class='muted' style='margin-top:15px'>هذا إشعار يثبت تسجيل التحويل داخل محفظة الإمبراطورية إستوري. لا يعرض أرصدة أطراف العملية.</p>
+      <div style='display:flex;gap:8px;flex-wrap:wrap'><button type='button' onclick='window.print()'>حفظ الإشعار / PDF</button><a class='btn secondary' href='/store/'>الرئيسية</a></div>
+    </section>""",
+      amount=amount,currency=credit["currency"],reference=reference,
+      sender_name=sender_user["full_name"],sender_account=sender_user["account_number"],
+      recipient_name=recipient_user["full_name"],recipient_account=recipient_user["account_number"],
+      note=detail["note"],created_at=credit["created_at"])
+    return page("إشعار التحويل",body)
 
 @empire_bp.route("/exchange",methods=["GET","POST"])
 @login_required
