@@ -68,12 +68,12 @@ def init_db():
       agent TEXT, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 
     CREATE TABLE IF NOT EXISTS es_wallets(
-      username TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','EPC')),
+      username TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),
       balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0),
       PRIMARY KEY(username,currency));
     CREATE TABLE IF NOT EXISTS es_ledger(
       id INTEGER PRIMARY KEY, reference TEXT NOT NULL, line_no INTEGER NOT NULL,
-      account TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','EPC')),
+      account TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),
       delta INTEGER NOT NULL, memo TEXT NOT NULL, created_at TEXT NOT NULL,
       UNIQUE(reference,line_no));
     CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id);
@@ -118,13 +118,44 @@ def init_db():
     if "cost_sdg" not in product_cols:
         db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
     defaults = {
-      "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"0",
+      "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"15000000",
+      "fx_rate_mode":"manual", "fx_market_rate":"0", "fx_manual_rate":"0", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
       "store_name":"الإمبراطورية إستوري", "market_fee_bps":"0",
       "topups_enabled":"0", "epc_sales_enabled":"0"
     }
+    conn=db()
+    # Safe schema migration: old URC ledger rows become URC; account numbers remain untouched.
+    for table in ("es_wallets","es_ledger"):
+        info=conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone()
+        if info and "'URC'" not in (info["sql"] or ""):
+            if table=="es_wallets":
+                conn.execute("ALTER TABLE es_wallets RENAME TO es_wallets_legacy")
+                conn.execute("""CREATE TABLE es_wallets(username TEXT NOT NULL,currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0),PRIMARY KEY(username,currency))""")
+                conn.execute("INSERT INTO es_wallets SELECT username,CASE currency WHEN 'URC' THEN 'URC' ELSE currency END,balance FROM es_wallets_legacy")
+                conn.execute("DROP TABLE es_wallets_legacy")
+            else:
+                conn.execute("ALTER TABLE es_ledger RENAME TO es_ledger_legacy")
+                conn.execute("""CREATE TABLE es_ledger(id INTEGER PRIMARY KEY,reference TEXT NOT NULL,line_no INTEGER NOT NULL,account TEXT NOT NULL,currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),delta INTEGER NOT NULL,memo TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(reference,line_no))""")
+                conn.execute("INSERT INTO es_ledger SELECT id,reference,line_no,account,CASE currency WHEN 'EPC' THEN 'URC' ELSE currency END,delta,memo,created_at FROM es_ledger_legacy")
+                conn.execute("DROP TABLE es_ledger_legacy")
+    conn.execute("CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id)")
     for k,v in defaults.items():
-        db().execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
+        conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
+    founder=conn.execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+    if founder:
+        owner=founder["username"]
+        ensure_wallet(owner,"SDG"); ensure_wallet(owner,"URC")
+        if setting("owner_urc_seeded","0")!="1":
+            if balance(owner,"URC")==0:
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    post("OWNER-URC-OPENING",[("user:"+owner,"URC",15000000),("issuer:urc","URC",-15000000)],"الرصيد الافتتاحي لأصول المالك")
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+            conn.execute("INSERT INTO es_settings(key,value) VALUES('owner_urc_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
 
 def user():
     username=session.get("username")
@@ -167,6 +198,7 @@ def ref():
     return secrets.token_hex(8).upper()
 
 def ensure_wallet(username,currency):
+    if currency not in ("SDG","URC"): raise ValueError("عملة غير مدعومة")
     db().execute("INSERT OR IGNORE INTO es_wallets(username,currency,balance) VALUES(?,?,0)",(username,currency))
 
 def post(reference, entries, memo):
@@ -191,9 +223,9 @@ def balance(username,currency):
     return row["balance"] if row else 0
 
 def assert_epc_capacity(quantity):
-    maximum=int(setting("epc_max_supply","0"))
-    if maximum<=0: raise ValueError("يجب على المالك تحديد الحد الأقصى لإصدار EPC قبل البيع")
-    issued=-db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:epc' AND currency='EPC'").fetchone()["n"]
+    maximum=int(setting("epc_max_supply","15000000"))
+    if maximum<=0: raise ValueError("يجب على المالك تحديد الحد الأقصى لإصدار URC قبل البيع")
+    issued=-db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"]
     reserved=db().execute("SELECT COALESCE(SUM(quantity_epc),0) n FROM es_payments WHERE purpose='EPC_PURCHASE' AND status='PENDING'").fetchone()["n"]
     if issued+reserved+quantity>maximum: raise ValueError("الكمية تتجاوز المعروض المتاح من EPC")
 
@@ -321,7 +353,7 @@ def home():
 @empire_bp.get("/wallet")
 @login_required
 def wallet():
-    u=user(); ensure_wallet(u["username"],"SDG"); ensure_wallet(u["username"],"EPC")
+    u=user(); ensure_wallet(u["username"],"SDG"); ensure_wallet(u["username"],"URC")
     body=render_template_string("""<section class='panel'><h1>المحفظة التجارية</h1>
     <div class='grid'><article class='panel'><small>رصيد SDG</small><h2>{{'{:,}'.format(sdg)}}</h2></article>
     <article class='panel'><small>رصيد EPC</small><h2>{{'{:,}'.format(epc)}}</h2></article></div>
@@ -491,7 +523,7 @@ def payment_reference():
         return redirect(url_for("empire.wallet"))
     rows=db().execute("SELECT reference,amount,currency,quantity_epc,operation_id,created_at FROM es_payments WHERE username=? AND status='PENDING' AND method='BINANCE_USDT' ORDER BY id DESC",(u["username"],)).fetchall()
     body=render_template_string("""<section class='panel'><h1>ربط تحويل Binance</h1><p>حوّل إلى Binance ID: <b>{{bid or 'لم يضبطه المالك بعد'}}</b>. أدخل رقم التحويل الحقيقي بعد إتمامه.</p>
-    {% for x in rows %}<article class='panel'><p>المرجع {{x['reference']}} · {{x['amount']/1000000}} USDT · EPC المطلوبة {{x['quantity_epc']}}</p>
+    {% for x in rows %}<article class='panel'><p>المرجع {{x['reference']}} · {{x['amount']/1000000}} USDT · URC المطلوبة {{x['quantity_epc']}}</p>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'>
     <label>رقم التحويل من Binance</label><input name='operation_id' maxlength='100' required><button>إرسال للمراجعة</button></form>{% if not x['operation_id'] %}<form method='post' action='/store/payment/cancel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>إلغاء الطلب</button></form>{% endif %}</article>{% else %}<p>لا توجد طلبات Binance معلقة.</p>{% endfor %}</section>""",
       bid=setting("binance_id"),rows=rows,csrf=session.get("csrf",""))
@@ -867,7 +899,7 @@ def buy_epc():
             session["last_epc_payment_ref"]=r
         else: abort(400)
         return redirect(url_for("empire.wallet"))
-    body=render_template_string("""<section class='panel'><h1>شراء Empire Coin (EPC)</h1><p>السعر الحالي: {{price}} SDG للوحدة. البيع {{enabled}}.</p>
+    body=render_template_string("""<section class='panel'><h1>شراء Empire Coin (URC)</h1><p>السعر الحالي: {{price}} SDG للوحدة. البيع {{enabled}}.</p>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>الكمية EPC</label><input name='quantity' type='number' min='1' required>
     <label>طريقة الدفع</label><select name='method'><option value='SDG_WALLET'>محفظة SDG</option><option value='BINANCE_USDT'>USDT عبر Binance ID</option></select><button>إنشاء الشراء</button></form>
     <p class='muted'>لا يمكن سحب EPC أو تداولها خارج المتجر حالياً. مدفوعات Binance تخضع للتحقق اليدوي.</p></section>""",
