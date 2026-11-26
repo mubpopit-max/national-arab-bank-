@@ -566,12 +566,23 @@ def new_topup():
 @empire_bp.get("/marketplace")
 @login_required
 def marketplace():
-    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' ORDER BY id DESC LIMIT 100").fetchall()
-    body=render_template_string("""<section class='panel'><h1>سوق حسابات PUBG Mobile</h1>
-    <p>البيع بين المستخدمين. لا تضع كلمات المرور أو رموز الاسترداد في الإعلان.</p><a class='btn' href='/store/listing/new'>اعرض حسابك</a></section>
-    <div class='grid'>{% for x in rows %}<article class='panel'><span class='tag'>{{x['game']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b><p><small>البائع: {{x['seller']}}</small></p>
-    <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد عروض حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
-    return page("السوق",body)
+    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' AND listing_type='PRODUCT' ORDER BY id DESC LIMIT 100").fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>المتجر السوداني الرقمي</span><h1>المتجر الشامل</h1>
+    <p>تسوق الخدمات والمنتجات الرقمية، أو اعرض منتجك للبيع.</p><a class='btn' href='/store/listing/new'>＋ أضف منتجاً للبيع</a> <a class='btn secondary' href='/store/accounts'>سوق الحسابات</a></section>
+    <div class='grid'>{% for x in rows %}<article class='panel'><span class='tag'>{{x['category']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b><p><small>البائع: {{x['seller']}}</small></p>
+    <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد منتجات معروضة حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
+    return page("المتجر الشامل",body)
+
+@empire_bp.get("/accounts")
+@login_required
+def accounts_market():
+    rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' AND listing_type='ACCOUNT' ORDER BY id DESC LIMIT 100").fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>بيع وشراء الحسابات</span><h1>سوق الحسابات</h1>
+    <p>تصفح الحسابات المعروضة أو اعرض حسابك للبيع. رسوم نشر إعلان الحساب 1,000 SDG تخصم من محفظتك عند النشر.</p>
+    <a class='btn' href='/store/listing/new'>＋ اعرض حسابك للبيع</a></section>
+    <div class='grid'>{% for x in rows %}<article class='panel'><span class='tag'>{{x['category']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b><p><small>البائع: {{x['seller']}}</small></p>
+    <form method='post' action='/store/marketplace/buy'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='listing_id' value='{{x['id']}}'><button>شراء مع ضمان</button></form></article>{% else %}<p>لا توجد حسابات معروضة حالياً.</p>{% endfor %}</div>""",rows=rows,csrf=session.get("csrf",""))
+    return page("سوق الحسابات",body)
 
 @empire_bp.get("/listing-image/<int:listing_id>")
 def listing_image(listing_id):
@@ -587,7 +598,9 @@ def listing_new():
         csrf()
         title=request.form.get("title","").strip(); desc=request.form.get("description","").strip()
         price=money_int(request.form.get("price_sdg"))
-        if not title or len(title)>100 or len(desc)<10 or len(desc)>1500: abort(400)
+        listing_type=request.form.get("listing_type","ACCOUNT").strip()
+        category=request.form.get("category","").strip()[:60]
+        if listing_type not in ("ACCOUNT","PRODUCT") or not category or not title or len(title)>100 or len(desc)<10 or len(desc)>1500: abort(400)
         image_path=""
         uploaded=request.files.get("image")
         if uploaded and uploaded.filename:
@@ -599,18 +612,33 @@ def listing_new():
                 if source.width>4000 or source.height>4000: abort(400,"أبعاد الصورة كبيرة جداً")
                 image_path=secrets.token_hex(16)+".jpg"
                 source.convert("RGB").save(os.path.join(IMAGE_DIR,image_path),"JPEG",quality=88,optimize=True)
-            except Exception:
-                abort(400,"ملف الصورة غير صالح")
-        r=ref()
-        db().execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at) VALUES(?,?,'PUBG Mobile',?,?,?,?,'PUBLISHED',?)",
-                     (r,u["username"],title,desc,price,image_path,now()))
-        audit(u["username"],"LISTING_CREATED","listing",r)
-        return redirect(url_for("empire.marketplace"))
-    body=render_template_string("""<section class='panel'><h1>إضافة حساب للبيع</h1><form method='post' enctype='multipart/form-data'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <label>صورة الحساب (اختياري، JPG/PNG/WebP، حتى 5MB)</label><input type='file' name='image' accept='image/jpeg,image/png,image/webp'>
-    <label>عنوان العرض</label><input name='title' maxlength='100' required><label>وصف الحساب دون بيانات الدخول</label><textarea name='description' minlength='10' maxlength='1500' required></textarea>
+            except Exception: abort(400,"ملف الصورة غير صالح")
+        r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            if listing_type=="ACCOUNT":
+                post(r+"F",[("user:"+u["username"],"SDG",-1000),("platform:revenue","SDG",1000)],"رسوم نشر حساب للبيع")
+            d.execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at,listing_type,category) VALUES(?,?,?,?,?,?,?,'PUBLISHED',?,?,?)",
+                      (r,u["username"],category,title,desc,price,image_path,now(),listing_type,category))
+            audit(u["username"],"LISTING_CREATED","listing",r,"type="+listing_type)
+            d.commit()
+        except Exception:
+            d.rollback()
+            if image_path:
+                try: os.remove(os.path.join(IMAGE_DIR,image_path))
+                except OSError: pass
+            raise
+        flash("تم نشر إعلانك بنجاح." if listing_type=="PRODUCT" else "تم نشر حسابك وخصم رسوم النشر 1,000 SDG.")
+        return redirect(url_for("empire.accounts_market" if listing_type=="ACCOUNT" else "empire.marketplace"))
+    body=render_template_string("""<section class='panel'><h1>إضافة إعلان جديد</h1>
+    <p>رسوم نشر حساب للبيع 1,000 SDG تخصم عند تأكيد النشر. نشر المنتجات في المتجر لا يخصم هذه الرسوم.</p>
+    <form method='post' enctype='multipart/form-data'><input type='hidden' name='csrf' value='{{csrf}}'>
+    <label>نوع الإعلان</label><select name='listing_type'><option value='ACCOUNT'>حساب للبيع</option><option value='PRODUCT'>منتج / خدمة في المتجر</option></select>
+    <label>التصنيف</label><input name='category' maxlength='60' placeholder='مثال: PUBG Mobile، خدمات رقمية، منتجات' required>
+    <label>صورة الإعلان (اختياري)</label><input type='file' name='image' accept='image/jpeg,image/png,image/webp'>
+    <label>عنوان الإعلان</label><input name='title' maxlength='100' required>
+    <label>الوصف دون بيانات دخول أو كلمات مرور</label><textarea name='description' minlength='10' maxlength='1500' required></textarea>
     <label>السعر SDG</label><input name='price_sdg' type='number' min='1' required><button>نشر الإعلان</button></form></section>""",csrf=session.get("csrf",""))
-    return page("إعلان جديد",body)
+    return page("إضافة إعلان",body)
 
 @empire_bp.post("/marketplace/buy")
 @login_required
