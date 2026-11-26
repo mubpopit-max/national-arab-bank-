@@ -251,11 +251,12 @@ def page(title,body,**ctx):
     <meta name='theme-color' content='#101326'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
     <meta name='description' content='الإمبراطورية إستوري — وجهتك لشحن الألعاب والتجارة الرقمية.'>
     <title>{{title}} | الإمبراطورية إستوري</title>
-    <link rel='preconnect' href='https://fonts.googleapis.com'><link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
-    <link href='https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap' rel='stylesheet'>
+    
     <style>
+    *{-webkit-tap-highlight-color:transparent}html{scroll-behavior:auto}body{background:#f3f5f9!important}header:after{display:none!important}.panel{box-shadow:0 2px 8px rgba(22,35,58,.035)!important}.app-bottom{backdrop-filter:none!important;box-shadow:0 -2px 8px rgba(20,30,55,.06)!important}.service-card,.btn,button{transition:none!important}.service-card:hover,.btn:hover,button:hover{transform:none!important}
+    
     :root{color-scheme:dark;--bg:#0c1020;--surface:#151b30;--surface2:#1b2340;--line:rgba(164,180,255,.13);--text:#f6f7ff;--muted:#aab2cc;--purple:#8b70ff;--cyan:#48d9e8;--pink:#f17acb;--green:#52d6a2;--radius:22px}
-    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 90% -10%,rgba(116,83,255,.22),transparent 38%),radial-gradient(ellipse at 0% 35%,rgba(38,190,211,.10),transparent 32%),var(--bg);color:var(--text);font-family:'Cairo',system-ui,sans-serif;font-size:15px;line-height:1.75}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 90% -10%,rgba(116,83,255,.22),transparent 38%),radial-gradient(ellipse at 0% 35%,rgba(38,190,211,.10),transparent 32%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;font-size:15px;line-height:1.75}
     a{color:#b9adff;text-decoration:none} .metric{padding:20px;border-radius:20px;background:linear-gradient(135deg,rgba(139,112,255,.18),rgba(72,217,232,.07));border:1px solid var(--line)} .metric strong{display:block;font-size:clamp(24px,4vw,34px);font-weight:900;direction:ltr;text-align:right} .admin-links a{min-height:82px;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;border-radius:17px;background:linear-gradient(135deg,rgba(139,112,255,.2),rgba(72,217,232,.08));border:1px solid var(--line);font-weight:800} .table-wrap{overflow-x:auto}a:hover{color:#fff}header{position:relative;overflow:hidden;padding:22px max(18px,calc((100% - 1120px)/2));background:linear-gradient(110deg,#171d38,#22234c 58%,#182d45);border-bottom:1px solid var(--line)}
     header:after{content:'';position:absolute;width:260px;height:260px;border-radius:50%;background:rgba(116,91,255,.18);filter:blur(55px);left:5%;top:-170px;pointer-events:none}
     .brand{position:relative;z-index:1;font-size:25px;font-weight:900;letter-spacing:-.5px;color:#fff}.brand:before{content:'✦';display:inline-grid;place-items:center;width:38px;height:38px;margin-left:10px;border-radius:13px;background:linear-gradient(135deg,var(--purple),var(--cyan));color:#101326}
@@ -265,7 +266,7 @@ def page(title,body,**ctx):
     .panel{background:linear-gradient(145deg,rgba(27,35,64,.96),rgba(19,25,46,.96));border:1px solid var(--line);border-radius:var(--radius);padding:22px;margin:14px 0;box-shadow:0 18px 45px rgba(0,0,0,.16)}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:15px}.grid>.panel,.grid article{margin:0}
     h1,h2,h3{color:#fff;line-height:1.35;margin-top:0}h1{font-size:clamp(25px,4vw,38px);font-weight:900}h2{font-size:22px}h3{font-size:18px}p{color:#d0d6eb}.muted,small{color:var(--muted)}
-    .btn,button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:45px;padding:10px 18px;border:0;border-radius:13px;background:linear-gradient(110deg,var(--purple),#6c8dff);color:#fff;font:700 14px 'Cairo',sans-serif;text-decoration:none;cursor:pointer;box-shadow:0 8px 22px rgba(112,101,255,.22);transition:transform .18s,filter .18s}
+    .btn,button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:45px;padding:10px 18px;border:0;border-radius:13px;background:linear-gradient(110deg,var(--purple),#6c8dff);color:#fff;font:700 14px system-ui,sans-serif;text-decoration:none;cursor:pointer;box-shadow:0 8px 22px rgba(112,101,255,.22);transition:transform .18s,filter .18s}
     .btn:hover,button:hover{color:#fff;filter:brightness(1.1);transform:translateY(-2px)}.btn.secondary{background:rgba(255,255,255,.07);border:1px solid var(--line);box-shadow:none}
     input,textarea,select{display:block;width:100%;padding:13px 14px;margin:7px 0 15px;background:#0e1428;border:1px solid rgba(164,180,255,.2);border-radius:13px;color:#fff;font:inherit;outline:none}
     input:focus,textarea:focus,select:focus{border-color:var(--purple);box-shadow:0 0 0 3px rgba(139,112,255,.14)}label{display:block;color:#dce2fa;font-weight:700;font-size:13px}
@@ -319,39 +320,43 @@ def page(title,body,**ctx):
     footer{display:none}
     @media(min-width:760px){main{margin-top:22px}.app-bottom{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border:1px solid #e6eaf0;border-bottom:0;border-radius:18px 18px 0 0}}
 
-    </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
+    </style></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
     <main><section class='wallet-top'><div><div class='eyebrow'>رصيد محفظتك · إجمالي الأصول النقدية</div><div class='amount'>{{'{:,}'.format(wallet_sdg)}}</div><div class='currency'>جنيه سوداني SDG</div><div class='urc-line'>رصيد العملة الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><a class='wallet-link' href='/store/wallet'>عرض المحفظة ←</a></section><nav class='nav'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main><nav class='app-bottom'><a href='/store/'><span class='ico'>⌂</span>الرئيسية</a><a href='/store/marketplace'><span class='ico'>▦</span>السوق</a><a href='/store/topups'><span class='ico'>🎮</span>الألعاب</a><a href='/store/wallet'><span class='ico'>▣</span>المحفظة</a><a href='/store/orders'><span class='ico'>☷</span>طلباتي</a></nav><script>
 (function(){
+  'use strict';
   const main=document.querySelector('main');
   const bottom=document.querySelector('.app-bottom');
   if(!main||!bottom)return;
+  let busy=false, timer=null, controller=null;
   function markActive(path){
     bottom.querySelectorAll('a').forEach(a=>{
-      a.classList.toggle('active',new URL(a.href,location.href).pathname===path);
+      try{a.classList.toggle('active',new URL(a.href,location.href).pathname===path)}catch(_){}
     });
   }
+  function restore(){busy=false;main.style.opacity='1';main.style.pointerEvents='';if(timer){clearTimeout(timer);timer=null}if(controller){controller.abort();controller=null}}
   async function navigate(url,push){
     const target=new URL(url,location.href);
-    if(target.origin!==location.origin||!target.pathname.startsWith('/store/'))return;
-    main.style.opacity='.55';
+    if(target.origin!==location.origin||!target.pathname.startsWith('/store/')){location.assign(target.href);return}
+    if(busy)return;
+    busy=true;main.style.opacity='.72';main.style.pointerEvents='none';
+    controller=new AbortController();
+    timer=setTimeout(()=>{if(busy){restore();location.assign(target.href)}},9000);
     try{
-      const response=await fetch(target.href,{headers:{'X-Requested-With':'EmpireApp'}});
-      if(!response.ok)throw new Error('navigation failed');
+      const response=await fetch(target.href,{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{'X-Requested-With':'XMLHttpRequest'}});
+      if(!response.ok)throw new Error('HTTP '+response.status);
       const html=await response.text();
       const doc=new DOMParser().parseFromString(html,'text/html');
       const next=doc.querySelector('main');
-      if(!next)throw new Error('missing screen');
+      if(!next)throw new Error('Screen unavailable');
       main.innerHTML=next.innerHTML;
-      document.title=doc.title;
-      if(push)history.pushState({},'',target.href);
-      main.style.opacity='1';
-      window.scrollTo({top:0,behavior:'instant'});
-      markActive(target.pathname);
-    }catch(e){
-      main.style.opacity='1';
-      location.href=target.href;
+      document.title=doc.title||document.title;
+      if(push)history.pushState({app:true},'',target.href);
+      restore();window.scrollTo(0,0);markActive(target.pathname);
+    }catch(err){
+      restore();
+      if(err.name!=='AbortError')location.assign(target.href);
     }
   }
   document.addEventListener('click',e=>{
