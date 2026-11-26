@@ -33,13 +33,16 @@ jobs:
           assert "/store/marketplace" in rules
           assert "/store/wallet" in rules
           assert "/store/admin" in rules
+          assert "/store/admin/withdrawals" in rules
+          assert "/store/transfer-epc" in rules
+          assert "/store/healthz" in rules
           with app.app.app_context():
               from empire_store import db
               names = {r["name"] for r in db().execute(
                   "SELECT name FROM sqlite_master WHERE type='table'"
               ).fetchall()}
               required = {"es_listings", "es_market_orders", "es_ledger",
-                          "es_payments", "es_agents", "es_topup_orders"}
+                          "es_payments", "es_agents", "es_topup_orders", "es_withdrawals", "es_products"}
               assert required.issubset(names), required - names
           print("Empire E-Story application and commerce schema initialized.")
           PY
