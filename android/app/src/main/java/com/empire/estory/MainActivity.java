@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
+import android.view.View;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
@@ -34,11 +35,14 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(9, 9, 9));
-        window.setNavigationBarColor(Color.rgb(9, 9, 9));
+        window.setStatusBarColor(Color.WHITE);
+        window.setNavigationBarColor(Color.WHITE);
+        window.getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        );
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(9, 9, 9));
+        webView.setBackgroundColor(Color.WHITE);
         webView.setOnApplyWindowInsetsListener((view, insets) -> {
             int left;
             int top;
