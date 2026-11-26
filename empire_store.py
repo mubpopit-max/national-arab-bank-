@@ -112,9 +112,9 @@ def init_db():
     if "cost_sdg" not in product_cols:
         db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
     defaults = {
-      "epc_price_sdg":"1000", "epc_price_usdt_micros":"1000000",
+      "epc_price_sdg":"0", "epc_price_usdt_micros":"0",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
-      "store_name":"الإمبراطورية إستوري", "market_fee_bps":"500",
+      "store_name":"الإمبراطورية إستوري", "market_fee_bps":"0",
       "topups_enabled":"0", "epc_sales_enabled":"0"
     }
     for k,v in defaults.items():
@@ -676,7 +676,9 @@ def buy_epc():
         method=request.form.get("method","")
         if setting("epc_sales_enabled","0")!="1": abort(403,"شراء EPC متوقف من الإدارة حالياً")
         if method=="SDG_WALLET":
-            rate=int(setting("epc_price_sdg","1000")); cost=qty*rate
+            rate=int(setting("epc_price_sdg","0"))
+            if rate<=0: abort(503,"يجب على المالك ضبط سعر EPC مقابل SDG أولاً")
+            cost=qty*rate
             r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
             try:
                 post(r,[("user:"+u["username"],"SDG",-cost),("platform:epc_sales","SDG",cost),("user:"+u["username"],"EPC",qty),("issuer:epc","EPC",-qty)],"شراء EPC من محفظة SDG")
@@ -686,7 +688,8 @@ def buy_epc():
         elif method=="BINANCE_USDT":
             bid=setting("binance_id","")
             if not bid: abort(503,"لم يضبط المالك Binance ID بعد")
-            micros=int(setting("epc_price_usdt_micros","1000000"))
+            micros=int(setting("epc_price_usdt_micros","0"))
+            if micros<=0: abort(503,"يجب على المالك ضبط سعر EPC مقابل USDT أولاً")
             amount=qty*micros
             r=ref()
             db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,quantity_epc,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','USDT',?,?,'EPC_PURCHASE',?,?)",
@@ -699,7 +702,7 @@ def buy_epc():
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>الكمية EPC</label><input name='quantity' type='number' min='1' required>
     <label>طريقة الدفع</label><select name='method'><option value='SDG_WALLET'>محفظة SDG</option><option value='BINANCE_USDT'>USDT عبر Binance ID</option></select><button>إنشاء الشراء</button></form>
     <p class='muted'>لا يمكن سحب EPC أو تداولها خارج المتجر حالياً. مدفوعات Binance تخضع للتحقق اليدوي.</p></section>""",
-      price=setting("epc_price_sdg","1000"),enabled="مفعل" if setting("epc_sales_enabled")=="1" else "متوقف",csrf=session.get("csrf",""))
+      price=setting("epc_price_sdg","0"),enabled="مفعل" if setting("epc_sales_enabled")=="1" else "متوقف",csrf=session.get("csrf",""))
     return page("شراء EPC",body)
 
 @empire_bp.route("/admin/settings",methods=["GET","POST"])
