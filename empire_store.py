@@ -317,6 +317,9 @@ def admin_agents():
 
 def register_empire_store(app):
     app.register_blueprint(empire_bp)
+    with app.app_context():
+        init_empire_store_db()
+
     @app.teardown_appcontext
     def close_empire_db(exception=None):
         from flask import g
