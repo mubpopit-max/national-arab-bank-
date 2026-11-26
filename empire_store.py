@@ -411,10 +411,10 @@ def payment_reference():
 @login_required
 def pay_topup():
     csrf(); u=user(); r=request.form.get("reference","")
-    row=db().execute("SELECT * FROM es_topup_orders WHERE reference=? AND buyer=? AND status='PENDING_PAYMENT'",(r,u["username"])).fetchone()
-    if not row: abort(404)
     d=db(); d.execute("BEGIN IMMEDIATE")
     try:
+        row=d.execute("SELECT * FROM es_topup_orders WHERE reference=? AND buyer=? AND status='PENDING_PAYMENT'",(r,u["username"])).fetchone()
+        if not row: raise ValueError("طلب الشحن غير متاح للدفع")
         post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=?",(now(),r))
         audit(u["username"],"TOPUP_PAID","topup",r); d.commit()
@@ -496,10 +496,10 @@ def orders():
 @login_required
 def deliver_order():
     csrf(); u=user(); r=request.form.get("reference","")
-    row=db().execute("SELECT * FROM es_market_orders WHERE reference=? AND seller=? AND status='ESCROWED'",(r,u["username"])).fetchone()
-    if not row: abort(404)
     encrypted=encryption().encrypt(request.form.get("delivery","").encode()).decode()
-    db().execute("UPDATE es_market_orders SET delivery_cipher=?,status='DELIVERED',updated_at=? WHERE reference=?",(encrypted,now(),r))
+    changed=db().execute("UPDATE es_market_orders SET delivery_cipher=?,status='DELIVERED',updated_at=? WHERE reference=? AND seller=? AND status='ESCROWED'",
+                         (encrypted,now(),r,u["username"])).rowcount
+    if changed!=1: abort(409,"الصفقة لم تعد قابلة للتسليم")
     audit(u["username"],"MARKET_DELIVERY_SUBMITTED","market_order",r)
     flash("تم إرسال بيانات التسليم بشكل مشفر للمشتري.")
     return redirect(url_for("empire.orders"))
@@ -508,12 +508,12 @@ def deliver_order():
 @login_required
 def confirm_order():
     csrf(); u=user(); r=request.form.get("reference",""); d=db()
-    row=d.execute("SELECT * FROM es_market_orders WHERE reference=? AND buyer=? AND status='DELIVERED'",(r,u["username"])).fetchone()
-    if not row: abort(404)
-    fee=(row["price_sdg"]*int(setting("market_fee_bps","500")))//10000
-    seller_amount=row["price_sdg"]-fee
     d.execute("BEGIN IMMEDIATE")
     try:
+        row=d.execute("SELECT * FROM es_market_orders WHERE reference=? AND buyer=? AND status='DELIVERED'",(r,u["username"])).fetchone()
+        if not row: raise ValueError("الصفقة لم تعد بانتظار تأكيد الاستلام")
+        fee=(row["price_sdg"]*int(setting("market_fee_bps","500")))//10000
+        seller_amount=row["price_sdg"]-fee
         post(r+"R",[("escrow:market","SDG",-row["price_sdg"]),("user:"+row["seller"],"SDG",seller_amount),("platform:revenue","SDG",fee)],"تحرير صفقة بعد تأكيد المشتري")
         d.execute("UPDATE es_market_orders SET status='RELEASED',updated_at=? WHERE reference=?",(now(),r))
         d.execute("UPDATE es_listings SET status='SOLD' WHERE id=?",(row["listing_id"],))
@@ -527,11 +527,17 @@ def confirm_order():
 @login_required
 def dispute():
     csrf(); u=user(); r=request.form.get("reference",""); reason=request.form.get("reason","").strip()
-    row=db().execute("SELECT * FROM es_market_orders WHERE reference=? AND (buyer=? OR seller=?) AND status IN ('ESCROWED','DELIVERED')",(r,u["username"],u["username"])).fetchone()
-    if not row or len(reason)<5: abort(400)
-    db().execute("UPDATE es_market_orders SET status='DISPUTED',updated_at=? WHERE reference=?",(now(),r))
-    db().execute("INSERT OR IGNORE INTO es_disputes(order_ref,opened_by,reason,created_at) VALUES(?,?,?,?)",(r,u["username"],reason,now()))
-    audit(u["username"],"DISPUTE_OPENED","market_order",r,reason)
+    if len(reason)<5: abort(400)
+    d=db(); d.execute("BEGIN IMMEDIATE")
+    try:
+        row=d.execute("SELECT * FROM es_market_orders WHERE reference=? AND (buyer=? OR seller=?) AND status IN ('ESCROWED','DELIVERED')",
+                      (r,u["username"],u["username"])).fetchone()
+        if not row: raise ValueError("الصفقة لا تقبل فتح نزاع")
+        d.execute("UPDATE es_market_orders SET status='DISPUTED',updated_at=? WHERE reference=?",(now(),r))
+        d.execute("INSERT INTO es_disputes(order_ref,opened_by,reason,created_at) VALUES(?,?,?,?)",(r,u["username"],reason,now()))
+        audit(u["username"],"DISPUTE_OPENED","market_order",r,reason)
+        d.commit()
+    except Exception: d.rollback(); raise
     flash("تم فتح النزاع وتجميد تحرير المبلغ لحين مراجعة المالك.")
     return redirect(url_for("empire.orders"))
 
@@ -732,7 +738,7 @@ def admin_disputes():
             if action=="BUYER":
                 post(r+"B",[("escrow:market","SDG",-order["price_sdg"]),("user:"+order["buyer"],"SDG",order["price_sdg"])],"استرداد صفقة بعد قرار النزاع")
                 d.execute("UPDATE es_market_orders SET status='REFUNDED',updated_at=? WHERE reference=?",(now(),r))
-                d.execute("UPDATE es_listings SET status='PUBLISHED' WHERE id=?",(order["listing_id"],))
+                d.execute("UPDATE es_listings SET status='PAUSED' WHERE id=?",(order["listing_id"],))
                 d.execute("UPDATE es_disputes SET status='RESOLVED_BUYER',resolution='refund',resolved_at=? WHERE order_ref=?",(now(),r))
             else:
                 fee=(order["price_sdg"]*int(setting("market_fee_bps","500")))//10000
