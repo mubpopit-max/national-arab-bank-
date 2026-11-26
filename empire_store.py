@@ -453,10 +453,7 @@ def home():
     u=user()
     sdg=balance(u["username"],"SDG")
     rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 5",("user:"+u["username"],)).fetchall()
-    body=render_template_string("""<section class='panel' style='padding:16px'>
-      <div style='display:flex;align-items:center;justify-content:space-between;gap:8px'><div><small>مرحباً بك في وطنك الرقمي</small><h1 style='margin:2px 0'>{{name}}</h1><small>رقم الحساب: {{account}}</small></div><span class='tag'>🇸🇩 السودان يجمعنا</span></div>
-    </section>
-    <section class='panel'><h2>خدماتك</h2><div class='grid' style='grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
+    body=render_template_string("""<section class='panel'><h2>خدماتك</h2><div class='grid' style='grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
       <a class='service-card' href='/store/transfer-epc'><i class='service-icon'>⇄</i><strong>التحويلات</strong><span>إرسال واستقبال الأموال</span></a>
       <a class='service-card' href='/store/accounts'><i class='service-icon'>🎮</i><strong>بيع وشراء حسابات</strong><span>اعرض حسابك أو اشترِ</span></a>
       <a class='service-card' href='/account/funding'><i class='service-icon'>＋</i><strong>تغذية حسابي</strong><span>إيداع رصيد SDG</span></a>
@@ -473,7 +470,7 @@ def home():
     <section class='panel'><div style='display:flex;justify-content:space-between;align-items:center'><h2 style='margin:0'>آخر العمليات</h2><a href='/store/wallet'>عرض الكل</a></div>
     {% for x in rows %}<div style='display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf0f4'><div><b>{{x['memo']}}</b><div><small>{{x['created_at'][:16]}}</small></div></div><b dir='ltr'>{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class='empty-state'>لا توجد عمليات حديثة.</div>{% endfor %}</section>
     {% if is_founder %}<section class='panel'><h2>مركز المؤسس</h2><a class='btn' href='/store/admin'>لوحة التحكم الشاملة</a></section>{% endif %}""",
-      name=u["full_name"],account=u["account_number"],rows=rows,is_founder=u["role"]=="founder")
+      rows=rows,is_founder=u["role"]=="founder")
     return page("الرئيسية",body)
 
 @empire_bp.get("/wallet")
