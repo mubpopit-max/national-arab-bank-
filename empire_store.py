@@ -279,7 +279,7 @@ def page(title,body,**ctx):
     footer{margin-top:28px;padding:20px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
     .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);align-items:center;gap:18px}.hero-copy{position:relative;z-index:2}.hero-character{position:relative;min-height:280px;display:grid;place-items:center;isolation:isolate}.hero-character:before{content:'';position:absolute;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,35,83,.42),rgba(125,53,255,.18) 55%,transparent 72%);filter:blur(8px);z-index:-1}.hero-character svg{width:min(100%,330px);height:auto;filter:drop-shadow(0 12px 28px rgba(255,22,75,.24))}.hero-kicker{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(255,86,117,.35);border-radius:99px;background:rgba(125,22,64,.2);color:#ffb2c1;font-size:12px;font-weight:800}.hero h1 span{color:#ff7899;text-shadow:0 0 25px rgba(255,40,95,.22)}.hero p{position:relative;z-index:2}.hero .grid{position:relative;z-index:2}@media(max-width:640px){.hero{grid-template-columns:1fr}.hero-character{grid-row:1;min-height:190px}.hero-character svg{width:220px}.hero-copy{text-align:center}.hero .grid{margin-right:auto;margin-left:auto}}\n    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
     </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
-    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/exchange'>الصرف</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
+    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/exchange'>صرف العملات</a><a href='/store/exchange'>الصرف</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main></body></html>"""
     current=user()
@@ -839,6 +839,11 @@ def admin_exchange():
 @login_required
 @founder_required
 def admin():
+    owner=db().execute("SELECT username,account_number FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+    owner_name=owner["username"] if owner else user()["username"]
+    owner_account=owner["account_number"] if owner else "—"
+    owner_urc=balance(owner_name,"URC")
+    owner_sdg=balance(owner_name,"SDG")
     stats={
       "listings":db().execute("SELECT COUNT(*) n FROM es_listings WHERE status='PUBLISHED'").fetchone()["n"],
       "escrow":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='escrow:market'").fetchone()["n"],
@@ -848,18 +853,18 @@ def admin():
       "agents":db().execute("SELECT COUNT(*) n FROM es_agents WHERE status='APPROVED'").fetchone()["n"],
       "topups":db().execute("SELECT COUNT(*) n FROM es_topup_orders WHERE status IN ('PAID','ASSIGNED')").fetchone()["n"]
     }
-    body=render_template_string("""<section class='panel'><h1>مركز إدارة الإمبراطورية</h1><div class='grid'>
+    body=render_template_string("""<section class='hero'><div><span class='hero-kicker'>OWNER CONTROL CENTER</span><h1>مركز قيادة الإمبراطورية</h1><p>لوحة المالك الشاملة لإدارة الأصول والخدمات والعمليات المالية.</p><span class='tag'>رقم حساب المالك: {{owner_account}}</span></div><div class='hero-character'><div class='metric'><small>الأصول الرقمية للمالك</small><strong>{{'{:,}'.format(owner_urc)}} URC</strong><small>الأصول النقدية: {{'{:,}'.format(owner_sdg)}} SDG</small></div></div></section>
+    <section class='panel'><h2>مؤشرات المنصة</h2><div class='grid'>
     <article class='panel'><small>الإعلانات النشطة</small><h2>{{stats['listings']}}</h2></article>
     <article class='panel'><small>أموال صفقات السوق المحتجزة (SDG)</small><h2>{{'{:,}'.format(stats['escrow'])}}</h2></article>
     <article class='panel'><small>صافي إيراد المتجر المسجل (SDG)</small><h2>{{'{:,}'.format(stats['revenue'])}}</h2></article>
     <article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>
     <article class='panel'><small>طلبات السحب المعلقة</small><h2>{{stats['withdrawals']}}</h2></article>
     <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
-    <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div>
-    <div class='grid'><a class='btn' href='/store/admin/agents'>إدارة الوكلاء</a><a class='btn' href='/store/admin/listings'>إدارة إعلانات السوق</a><a class='btn' href='/store/admin/products'>باقات الشحن والتكلفة</a>
-    <a class='btn' href='/store/admin/payments'>طلبات الدفع</a><a class='btn' href='/store/admin/withdrawals'>طلبات السحب</a><a class='btn' href='/store/admin/disputes'>النزاعات</a>
-    <a class='btn' href='/store/admin/settings'>الإعدادات والأسعار</a><a class='btn' href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats)
-    return page("الإدارة",body)
+    <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div></section>
+    <section class='panel'><h2>إدارة شاملة</h2><div class='grid admin-links'>
+    <a href='/store/admin/exchange'>إدارة الصرف والسيولة</a><a href='/store/admin/settings'>إعدادات المنصة والأسعار</a><a href='/store/admin/agents'>إدارة الوكلاء</a><a href='/store/admin/listings'>إدارة السوق والإعلانات</a><a href='/store/admin/products'>باقات الشحن والتكلفة</a><a href='/store/admin/payments'>طلبات الدفع</a><a href='/store/admin/withdrawals'>طلبات السحب</a><a href='/store/admin/disputes'>النزاعات</a><a href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
+    return page("لوحة المالك",body)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
 @login_required
