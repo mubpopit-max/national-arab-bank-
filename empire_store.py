@@ -86,6 +86,12 @@ def init_db():
       purpose TEXT NOT NULL CHECK(purpose IN ('WALLET_DEPOSIT','EPC_PURCHASE','TOPUP','MARKETPLACE')),
       status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','CONFIRMED','REJECTED')),
       proof_note TEXT NOT NULL DEFAULT '', reviewer TEXT, created_at TEXT NOT NULL, reviewed_at TEXT);
+    CREATE TABLE IF NOT EXISTS es_withdrawals(
+      id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, username TEXT NOT NULL,
+      amount_sdg INTEGER NOT NULL CHECK(amount_sdg>0), payout_method TEXT NOT NULL,
+      payout_details_cipher TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','PAID','REJECTED')),
+      reviewer TEXT, created_at TEXT NOT NULL, reviewed_at TEXT);
     CREATE TABLE IF NOT EXISTS es_market_orders(
       id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, listing_id INTEGER NOT NULL REFERENCES es_listings(id),
       buyer TEXT NOT NULL, seller TEXT NOT NULL, price_sdg INTEGER NOT NULL CHECK(price_sdg>0),
@@ -261,7 +267,7 @@ def wallet():
     body=render_template_string("""<section class='panel'><h1>المحفظة التجارية</h1>
     <div class='grid'><article class='panel'><small>رصيد SDG</small><h2>{{'{:,}'.format(sdg)}}</h2></article>
     <article class='panel'><small>رصيد EPC</small><h2>{{'{:,}'.format(epc)}}</h2></article></div>
-    <a class='btn' href='/store/deposit'>طلب إيداع SDG</a> <a class='btn' href='/store/buy-epc'>شراء EPC</a> <a class='btn' href='/store/transfer-epc'>تحويل EPC</a> <a class='btn' href='/store/payment/reference'>ربط تحويل Binance</a>
+    <a class='btn' href='/store/deposit'>طلب إيداع SDG</a> <a class='btn' href='/store/withdrawal'>طلب سحب SDG</a> <a class='btn' href='/store/buy-epc'>شراء EPC</a> <a class='btn' href='/store/transfer-epc'>تحويل EPC</a> <a class='btn' href='/store/payment/reference'>ربط تحويل Binance</a>
     <p class='muted'>EPC رصيد داخلي تجريبي ولا يمثل حالياً أصلاً قابلاً للسحب أو التداول خارج المنصة.</p></section>
     <section class='panel'><h2>آخر القيود</h2>{% for x in rows %}<p>{{x['created_at']}} · {{x['memo']}} · {{x['delta']}} {{x['currency']}}</p>{% else %}<p>لا توجد عمليات.</p>{% endfor %}</section>""",
       sdg=balance(u["username"],"SDG"),epc=balance(u["username"],"EPC"),
@@ -288,6 +294,32 @@ def deposit():
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>المبلغ SDG</label><input name='amount' type='number' min='1' required>
     <label>رقم العملية (إن وجد)</label><input name='operation_id' maxlength='100'><label>تفاصيل الدفع</label><textarea name='note' maxlength='250'></textarea><button>إرسال للمراجعة</button></form></section>""",csrf=session.get("csrf",""))
     return page("إيداع",body)
+
+@empire_bp.route("/withdrawal",methods=["GET","POST"])
+@login_required
+def withdrawal():
+    u=user()
+    if request.method=="POST":
+        csrf(); amount=money_int(request.form.get("amount"))
+        method=request.form.get("payout_method","").strip()
+        details=request.form.get("payout_details","").strip()
+        if method not in ("BANK_TRANSFER","MOBILE_WALLET","OTHER") or len(details)<5 or len(details)>500: abort(400)
+        encrypted=encryption().encrypt(details.encode()).decode()
+        r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            post(r,[("user:"+u["username"],"SDG",-amount),("payout:pending","SDG",amount)],"حجز طلب سحب مستحقات")
+            d.execute("INSERT INTO es_withdrawals(reference,username,amount_sdg,payout_method,payout_details_cipher,created_at) VALUES(?,?,?,?,?,?)",
+                      (r,u["username"],amount,method,encrypted,now()))
+            audit(u["username"],"WITHDRAWAL_REQUESTED","withdrawal",r)
+            d.commit()
+        except Exception: d.rollback(); raise
+        flash("تم حجز المبلغ ورفع طلب السحب للمراجعة. لا يعتبر مدفوعاً قبل تأكيد المالك.")
+        return redirect(url_for("empire.wallet"))
+    body=render_template_string("""<section class='panel'><h1>طلب سحب SDG</h1><p>سيتم حجز المبلغ من محفظتك حتى يراجع المالك الطلب. أدخل بيانات الاستلام بدقة.</p>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>المبلغ SDG</label><input name='amount' type='number' min='1' required>
+    <label>وسيلة الاستلام</label><select name='payout_method'><option value='BANK_TRANSFER'>تحويل بنكي</option><option value='MOBILE_WALLET'>محفظة هاتف</option><option value='OTHER'>أخرى</option></select>
+    <label>بيانات الاستلام</label><textarea name='payout_details' maxlength='500' required></textarea><button>إرسال طلب السحب</button></form></section>""",csrf=session.get("csrf",""))
+    return page("سحب SDG",body)
 
 @empire_bp.get("/topups")
 @login_required
@@ -594,7 +626,7 @@ def admin():
     <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
     <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div>
     <div class='grid'><a class='btn' href='/store/admin/agents'>إدارة الوكلاء</a><a class='btn' href='/store/admin/listings'>إدارة إعلانات السوق</a><a class='btn' href='/store/admin/products'>باقات الشحن والتكلفة</a>
-    <a class='btn' href='/store/admin/payments'>طلبات الدفع</a><a class='btn' href='/store/admin/disputes'>النزاعات</a>
+    <a class='btn' href='/store/admin/payments'>طلبات الدفع</a><a class='btn' href='/store/admin/withdrawals'>طلبات السحب</a><a class='btn' href='/store/admin/disputes'>النزاعات</a>
     <a class='btn' href='/store/admin/settings'>الإعدادات والأسعار</a><a class='btn' href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats)
     return page("الإدارة",body)
 
@@ -753,6 +785,38 @@ def admin_settings():
       fields=[("epc_price_sdg","سعر EPC بالجنيه SDG"),("epc_price_usdt_micros","سعر EPC بالـ USDT بوحدة مليونية"),("binance_id","Binance ID للاستقبال"),("market_fee_bps","عمولة السوق بالنقاط الأساسية"),("epc_sales_enabled","تفعيل بيع EPC: 1 أو 0"),("topups_enabled","تفعيل طلبات الشحن: 1 أو 0")],
       values={k:setting(k) for k in ("epc_price_sdg","epc_price_usdt_micros","binance_id","market_fee_bps","epc_sales_enabled","topups_enabled")},csrf=session.get("csrf",""))
     return page("الإعدادات",body)
+
+@empire_bp.route("/admin/withdrawals",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_withdrawals():
+    u=user()
+    if request.method=="POST":
+        csrf(); wid=request.form.get("id",""); action=request.form.get("action","")
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            row=d.execute("SELECT * FROM es_withdrawals WHERE id=? AND status='PENDING'",(wid,)).fetchone()
+            if not row: raise ValueError("طلب السحب غير متاح للمراجعة")
+            if action=="PAID":
+                post(row["reference"]+"P",[("payout:pending","SDG",-row["amount_sdg"]),("external:payout_settlements","SDG",row["amount_sdg"])],"تأكيد صرف طلب سحب")
+                status="PAID"
+            elif action=="REJECTED":
+                post(row["reference"]+"X",[("payout:pending","SDG",-row["amount_sdg"]),("user:"+row["username"],"SDG",row["amount_sdg"])],"إعادة مبلغ طلب سحب مرفوض")
+                status="REJECTED"
+            else: raise ValueError("إجراء غير صالح")
+            d.execute("UPDATE es_withdrawals SET status=?,reviewer=?,reviewed_at=? WHERE id=?",(status,u["username"],now(),wid))
+            audit(u["username"],"WITHDRAWAL_"+status,"withdrawal",row["reference"])
+            d.commit()
+        except Exception: d.rollback(); raise
+    rows=[]
+    for row in db().execute("SELECT * FROM es_withdrawals ORDER BY id DESC LIMIT 200").fetchall():
+        item=dict(row)
+        try: item["payout_details"]=encryption().decrypt(item["payout_details_cipher"].encode()).decode()
+        except Exception: item["payout_details"]="تعذر فك بيانات الاستلام"
+        rows.append(item)
+    body=render_template_string("""<section class='panel'><h1>طلبات السحب</h1>{% for x in rows %}<article class='panel'><b>{{x['reference']}}</b> · {{x['username']}} · {{x['amount_sdg']}} SDG · {{x['payout_method']}} · {{x['status']}}<p>{{x['payout_details']}}</p>
+    {% if x['status']=='PENDING' %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='id' value='{{x['id']}}'><button name='action' value='PAID'>تأكيد الصرف بعد الدفع الفعلي</button><button name='action' value='REJECTED'>رفض وإعادة الرصيد</button></form>{% endif %}</article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
+    return page("طلبات السحب",body)
 
 @empire_bp.route("/admin/disputes",methods=["GET","POST"])
 @login_required
