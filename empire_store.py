@@ -53,7 +53,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS es_products(
       id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, game TEXT NOT NULL,
       title TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT 'أدخل معرف اللاعب بدقة.',
-      price_sdg INTEGER NOT NULL CHECK(price_sdg>0), active INTEGER NOT NULL DEFAULT 1,
+      price_sdg INTEGER NOT NULL CHECK(price_sdg>0), cost_sdg INTEGER NOT NULL DEFAULT 0 CHECK(cost_sdg>=0), active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_topup_orders(
       id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, buyer TEXT NOT NULL,
@@ -101,6 +101,9 @@ def init_db():
     payment_cols={r["name"] for r in db().execute("PRAGMA table_info(es_payments)").fetchall()}
     if "quantity_epc" not in payment_cols:
         db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
+    product_cols={r["name"] for r in db().execute("PRAGMA table_info(es_products)").fetchall()}
+    if "cost_sdg" not in product_cols:
+        db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
     defaults = {
       "epc_price_sdg":"1000", "epc_price_usdt_micros":"1000000",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
@@ -403,10 +406,25 @@ def complete_topup():
     if not agent or agent["status"]!="APPROVED": abort(403)
     r=request.form.get("reference",""); note=request.form.get("note","").strip()
     if len(note)<4 or len(note)>300: abort(400)
-    changed=db().execute("UPDATE es_topup_orders SET status='COMPLETED',note=?,updated_at=? WHERE reference=? AND agent=? AND status='ASSIGNED'",
-                         (note,now(),r,u["username"])).rowcount
-    if changed!=1: abort(409)
-    audit(u["username"],"TOPUP_COMPLETED","topup",r,note)
+    d=db(); d.execute("BEGIN IMMEDIATE")
+    try:
+        order=d.execute("SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.reference=? AND t.agent=? AND t.status='ASSIGNED'",
+                        (r,u["username"])).fetchone()
+        if not order: raise ValueError("الطلب لم يعد مسنداً إليك")
+        margin=order["amount_sdg"]-order["cost_sdg"]
+        if margin<0: raise ValueError("تكلفة المورد أعلى من سعر البيع؛ أوقف المالك هذه العملية للمراجعة")
+        agent_row=d.execute("SELECT commission_bps FROM es_agents WHERE username=? AND status='APPROVED'",(u["username"],)).fetchone()
+        commission=(margin*agent_row["commission_bps"])//10000
+        platform_profit=margin-commission
+        post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),
+                    ("user:"+u["username"],"SDG",commission),("platform:revenue","SDG",platform_profit)],
+             "تسوية شحن لعبة وتسجيل عمولة الوكيل")
+        d.execute("UPDATE es_topup_orders SET status='COMPLETED',note=?,updated_at=? WHERE reference=? AND agent=? AND status='ASSIGNED'",
+                  (note,now(),r,u["username"]))
+        audit(u["username"],"TOPUP_COMPLETED","topup",r,"commission="+str(commission)+"; "+note)
+        d.commit()
+    except Exception: d.rollback(); raise
+    flash("تم إغلاق الطلب وتسجيل عمولتك بعد احتساب تكلفة المورد.")
     return redirect(url_for("empire.orders"))
 
 @empire_bp.get("/orders")
@@ -548,14 +566,14 @@ def admin_agents():
 def admin_products():
     if request.method=="POST":
         csrf(); game=request.form.get("game","").strip(); title=request.form.get("title","").strip()
-        price=money_int(request.form.get("price_sdg")); code=ref()
-        if not game or not title or len(title)>120: abort(400)
-        db().execute("INSERT INTO es_products(code,game,title,price_sdg,created_at) VALUES(?,?,?,?,?)",(code,game,title,price,now()))
+        price=money_int(request.form.get("price_sdg")); cost=money_int(request.form.get("cost_sdg")); code=ref()
+        if not game or not title or len(title)>120 or cost>price: abort(400)
+        db().execute("INSERT INTO es_products(code,game,title,price_sdg,cost_sdg,created_at) VALUES(?,?,?,?,?,?)",(code,game,title,price,cost,now()))
         audit(user()["username"],"PRODUCT_CREATED","product",code)
     rows=db().execute("SELECT * FROM es_products ORDER BY id DESC").fetchall()
     body=render_template_string("""<section class='panel'><h1>باقات شحن الألعاب</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <input name='game' placeholder='اللعبة' required><input name='title' placeholder='اسم الباقة' required><input name='price_sdg' type='number' min='1' placeholder='السعر SDG' required><button>إضافة باقة</button></form>
-    {% for x in rows %}<p>{{x['game']}} · {{x['title']}} · {{x['price_sdg']}} SDG</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
+    <input name='game' placeholder='اللعبة' required><input name='title' placeholder='اسم الباقة' required><input name='price_sdg' type='number' min='1' placeholder='سعر البيع SDG' required><input name='cost_sdg' type='number' min='0' placeholder='تكلفة المورد SDG' required><button>إضافة باقة</button></form>
+    {% for x in rows %}<p>{{x['game']}} · {{x['title']}} · البيع {{x['price_sdg']}} SDG · التكلفة {{x['cost_sdg']}} SDG</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("باقات الشحن",body)
 
 @empire_bp.route("/admin/payments",methods=["GET","POST"])
