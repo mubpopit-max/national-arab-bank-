@@ -28,7 +28,6 @@ from werkzeug.utils import secure_filename
 
 load_dotenv()
 
-from vortex.vortex.database import init_vortex_db
 # ============================================================
 # NATIONAL ARAB BANK
 #
@@ -82,7 +81,7 @@ FOUNDER_USERNAME = "founder"
 FOUNDER_ACCOUNT = "5147234"
 FUNDING_RECEIVE_ACCOUNT = "8147243"
 
-FOUNDER_INITIAL_BALANCE = 3_000_000_000_000
+FOUNDER_INITIAL_BALANCE = 0
 
 
 # ============================================================
@@ -6676,7 +6675,6 @@ def hide_legacy_bank_surface():
 
 with app.app_context():
     init_db()
-    init_vortex_db()
 
     
 
