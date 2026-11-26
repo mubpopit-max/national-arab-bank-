@@ -205,21 +205,41 @@ def encryption():
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
-    <meta name='theme-color' content='#0b0b0b'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
-    <title>{{title}} | الإمبراطورية إستوري</title><style>
-    *{box-sizing:border-box}body{margin:0;background:#090909;color:#f6f1e6;font-family:system-ui,Arial}
-    header{padding:18px max(16px,calc((100% - 1050px)/2));background:#111;border-bottom:1px solid #a78338}
-    .brand{font-size:22px;font-weight:900;color:#e8c878}main{max-width:1050px;margin:22px auto;padding:0 14px}
-    .panel{background:#151515;border:1px solid #42351e;border-radius:15px;padding:17px;margin:12px 0}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-    h1,h2,h3{color:#e8c878}a{color:#e8c878}.btn,button{display:inline-block;background:#d1aa56;color:#111;border:0;border-radius:9px;padding:11px 15px;font-weight:800;text-decoration:none;cursor:pointer}
-    input,textarea,select{display:block;width:100%;padding:12px;margin:7px 0 13px;background:#0c0c0c;border:1px solid #53452b;border-radius:8px;color:white}
-    label{color:#d8c68f}.muted,small{color:#aaa}.tag{border:1px solid #80652d;border-radius:30px;padding:4px 9px;color:#e8c878;font-size:12px}
-    .nav{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.nav a{padding:7px 10px;border:1px solid #514225;border-radius:8px;text-decoration:none}
-    </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>♛ الإمبراطورية إستوري</div><small>EMPIRE E-STORY · سوقك الرقمي</small></header>
-    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>سوق الحسابات</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>مركز المالك</a>{% endif %}</nav>
-    {% with ms=get_flashed_messages() %}{% for m in ms %}<p>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<p><a href='/account'>حساب المستخدم</a> · <a href='/logout'>خروج</a></p></main></body></html>"""
+    <meta name='theme-color' content='#101326'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
+    <meta name='description' content='الإمبراطورية إستوري — وجهتك لشحن الألعاب والتجارة الرقمية.'>
+    <title>{{title}} | الإمبراطورية إستوري</title>
+    <link rel='preconnect' href='https://fonts.googleapis.com'><link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+    <link href='https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap' rel='stylesheet'>
+    <style>
+    :root{color-scheme:dark;--bg:#0c1020;--surface:#151b30;--surface2:#1b2340;--line:rgba(164,180,255,.13);--text:#f6f7ff;--muted:#aab2cc;--purple:#8b70ff;--cyan:#48d9e8;--pink:#f17acb;--green:#52d6a2;--radius:22px}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 90% -10%,rgba(116,83,255,.22),transparent 38%),radial-gradient(ellipse at 0% 35%,rgba(38,190,211,.10),transparent 32%),var(--bg);color:var(--text);font-family:'Cairo',system-ui,sans-serif;font-size:15px;line-height:1.75}
+    a{color:#b9adff;text-decoration:none}a:hover{color:#fff}header{position:relative;overflow:hidden;padding:22px max(18px,calc((100% - 1120px)/2));background:linear-gradient(110deg,#171d38,#22234c 58%,#182d45);border-bottom:1px solid var(--line)}
+    header:after{content:'';position:absolute;width:260px;height:260px;border-radius:50%;background:rgba(116,91,255,.18);filter:blur(55px);left:5%;top:-170px;pointer-events:none}
+    .brand{position:relative;z-index:1;font-size:25px;font-weight:900;letter-spacing:-.5px;color:#fff}.brand:before{content:'✦';display:inline-grid;place-items:center;width:38px;height:38px;margin-left:10px;border-radius:13px;background:linear-gradient(135deg,var(--purple),var(--cyan));color:#101326}
+    header small{position:relative;z-index:1;display:block;margin-right:49px;color:#c4cbea;font-size:12px;letter-spacing:1.2px}
+    main{max-width:1120px;margin:24px auto 50px;padding:0 18px}.nav{position:sticky;top:8px;z-index:10;display:flex;gap:7px;flex-wrap:wrap;padding:9px;margin:0 0 22px;background:rgba(18,24,44,.88);backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 35px rgba(0,0,0,.18)}
+    .nav a{padding:8px 13px;border-radius:12px;color:#cbd2ec;font-weight:700;font-size:13px;transition:.2s}.nav a:hover{background:rgba(139,112,255,.18);color:#fff}
+    .panel{background:linear-gradient(145deg,rgba(27,35,64,.96),rgba(19,25,46,.96));border:1px solid var(--line);border-radius:var(--radius);padding:22px;margin:14px 0;box-shadow:0 18px 45px rgba(0,0,0,.16)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:15px}.grid>.panel,.grid article{margin:0}
+    h1,h2,h3{color:#fff;line-height:1.35;margin-top:0}h1{font-size:clamp(25px,4vw,38px);font-weight:900}h2{font-size:22px}h3{font-size:18px}p{color:#d0d6eb}.muted,small{color:var(--muted)}
+    .btn,button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:45px;padding:10px 18px;border:0;border-radius:13px;background:linear-gradient(110deg,var(--purple),#6c8dff);color:#fff;font:700 14px 'Cairo',sans-serif;text-decoration:none;cursor:pointer;box-shadow:0 8px 22px rgba(112,101,255,.22);transition:transform .18s,filter .18s}
+    .btn:hover,button:hover{color:#fff;filter:brightness(1.1);transform:translateY(-2px)}.btn.secondary{background:rgba(255,255,255,.07);border:1px solid var(--line);box-shadow:none}
+    input,textarea,select{display:block;width:100%;padding:13px 14px;margin:7px 0 15px;background:#0e1428;border:1px solid rgba(164,180,255,.2);border-radius:13px;color:#fff;font:inherit;outline:none}
+    input:focus,textarea:focus,select:focus{border-color:var(--purple);box-shadow:0 0 0 3px rgba(139,112,255,.14)}label{display:block;color:#dce2fa;font-weight:700;font-size:13px}
+    .tag{display:inline-flex;border:1px solid rgba(72,217,232,.25);border-radius:30px;padding:4px 11px;color:var(--cyan);background:rgba(72,217,232,.07);font-size:12px;font-weight:700}
+    .hero{position:relative;overflow:hidden;padding:clamp(24px,5vw,48px);border-radius:28px;background:linear-gradient(115deg,#29245d 0%,#242d5d 48%,#125064 100%);border:1px solid rgba(181,190,255,.2);box-shadow:0 22px 55px rgba(28,27,86,.35)}
+    .hero:after{content:'✦';position:absolute;left:5%;top:5%;font-size:150px;line-height:1;color:rgba(255,255,255,.06);transform:rotate(-15deg)}.hero p{max-width:580px;color:#e0e5ff;font-size:16px}
+    .service-card{display:flex;flex-direction:column;gap:8px;min-height:170px;padding:21px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,rgba(30,39,71,.95),rgba(19,27,49,.95));transition:.2s}
+    .service-card:hover{transform:translateY(-4px);border-color:rgba(139,112,255,.55)}.service-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,rgba(139,112,255,.25),rgba(72,217,232,.18));font-size:23px}
+    .service-card strong{font-size:17px;color:#fff}.service-card span{font-size:13px;color:var(--muted)}
+    .empty-state{padding:24px;text-align:center;border:1px dashed rgba(164,180,255,.24);border-radius:18px;color:var(--muted)}
+    form{max-width:100%}button{font-family:inherit}.flash{padding:12px 15px;border:1px solid rgba(82,214,162,.25);border-radius:13px;background:rgba(82,214,162,.08);color:#baf4dc}
+    footer{margin-top:28px;padding:20px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+    @media(max-width:640px){header{padding:18px}.brand{font-size:21px}main{margin-top:14px;padding:0 12px}.nav{position:static;gap:4px}.nav a{padding:7px 9px;font-size:12px}.panel{padding:17px;border-radius:18px}.hero{border-radius:22px}.btn,button{width:100%}}
+    </style><script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/store/sw.js'));}</script></head><body><header><div class='brand'>الإمبراطورية إستوري</div><small>EMPIRE E-STORY · وجهتك للتجارة الرقمية</small></header>
+    <main><nav class='nav'><a href='/store/'>الرئيسية</a><a href='/store/marketplace'>السوق</a><a href='/store/topups'>شحن الألعاب</a><a href='/store/wallet'>المحفظة</a><a href='/store/agents'>الوكلاء</a><a href='/store/orders'>طلباتي</a>{% if is_founder %}<a href='/store/admin'>إدارة المنصة</a>{% endif %}</nav>
+    {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></main></body></html>"""
     current=user()
     ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
     return render_template_string(shell,title=title,body=body,**ctx)
@@ -257,14 +277,17 @@ def offline():
 def home():
     u=user()
     rows=db().execute("SELECT * FROM es_listings WHERE status='PUBLISHED' ORDER BY id DESC LIMIT 8").fetchall()
-    body=render_template_string("""<section class='panel'><h1>مرحباً بك في الإمبراطورية</h1>
-    <p>منصة شحن الألعاب والتجارة الرقمية وسوق المستخدمين.</p><div class='grid'>
-    <a class='btn' href='/store/marketplace'>سوق حسابات PUBG</a><a class='btn' href='/store/topups'>شحن الألعاب</a>
-    <a class='btn' href='/store/wallet'>محفظتي وEPC</a><a class='btn' href='/store/agents'>برنامج الوكلاء</a></div>
-    <p class='muted'>الرصيد التجاري منفصل عن أي رصيد قديم في النظام السابق.</p></section>
+    body=render_template_string("""<section class='hero'><span class='tag'>مرحباً بك في عالمك الرقمي</span><h1>كل خدماتك الرقمية<br>في مكان واحد</h1>
+    <p>اشحن ألعابك، اكتشف العروض، وتسوق بأمان وسهولة من خلال تجربة مصممة لتناسبك.</p><div class='grid' style='max-width:650px;margin-top:22px'>
+    <a class='btn' href='/store/topups'>استكشف شحن الألعاب</a><a class='btn secondary' href='/store/marketplace'>تصفح السوق</a></div></section>
+    <section class='panel'><h2>اكتشف خدماتنا</h2><div class='grid'>
+    <a class='service-card' href='/store/topups'><span class='service-icon'>🎮</span><strong>شحن الألعاب</strong><span>باقات وخدمات ألعابك المفضلة</span></a>
+    <a class='service-card' href='/store/marketplace'><span class='service-icon'>🛍️</span><strong>السوق الرقمي</strong><span>تصفح العروض وأضف إعلانك</span></a>
+    <a class='service-card' href='/store/wallet'><span class='service-icon'>👛</span><strong>المحفظة</strong><span>تابع رصيدك وعملياتك بسهولة</span></a>
+    <a class='service-card' href='/store/agents'><span class='service-icon'>🤝</span><strong>برنامج الوكلاء</strong><span>انضم إلى شبكة شركائنا</span></a></div></section>
     <section class='panel'><h2>أحدث العروض</h2><div class='grid'>{% for x in rows %}
     <article class='panel'>{% if x['image_path'] %}<img src='/store/listing-image/{{x['id']}}' alt='صورة العرض' style='width:100%;max-height:220px;object-fit:cover;border-radius:10px'>{% endif %}<span class='tag'>{{x['game']}}</span><h3>{{x['title']}}</h3><p>{{x['description']}}</p><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b></article>
-    {% else %}<p>لا توجد عروض حالياً.</p>{% endfor %}</div></section>""",rows=rows)
+    {% else %}<div class='empty-state'>لا توجد عروض متاحة الآن. عد إلينا قريباً لاكتشاف الجديد.</div>{% endfor %}</div></section>""",rows=rows)
     return page("الرئيسية",body)
 
 @empire_bp.get("/wallet")
@@ -275,7 +298,7 @@ def wallet():
     <div class='grid'><article class='panel'><small>رصيد SDG</small><h2>{{'{:,}'.format(sdg)}}</h2></article>
     <article class='panel'><small>رصيد EPC</small><h2>{{'{:,}'.format(epc)}}</h2></article></div>
     <a class='btn' href='/store/deposit'>طلب إيداع SDG</a> <a class='btn' href='/store/withdrawal'>طلب سحب SDG</a> <a class='btn' href='/store/buy-epc'>شراء EPC</a> <a class='btn' href='/store/transfer-epc'>تحويل EPC</a> <a class='btn' href='/store/payment/reference'>ربط تحويل Binance</a>
-    <p class='muted'>EPC رصيد داخلي تجريبي ولا يمثل حالياً أصلاً قابلاً للسحب أو التداول خارج المنصة.</p></section>
+    </section>
     <section class='panel'><h2>آخر القيود</h2>{% for x in rows %}<p>{{x['created_at']}} · {{x['memo']}} · {{x['delta']}} {{x['currency']}}</p>{% else %}<p>لا توجد عمليات.</p>{% endfor %}</section>""",
       sdg=balance(u["username"],"SDG"),epc=balance(u["username"],"EPC"),
       rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 30",("user:"+u["username"],)).fetchall())
@@ -335,7 +358,7 @@ def topups():
     body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>طلبات الشحن متاحة فقط للمنتجات التي يضيفها المالك، والتنفيذ يتطلب مورداً أو وكيلاً معتمداً.</p></section>
     <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p><b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
     <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'>
-    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form></article>{% else %}<p>لم يضف المالك باقات بعد.</p>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""))
+    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form></article>{% else %}<div class='empty-state'>نعمل على تجهيز باقات الشحن. تفقد الصفحة قريباً.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""))
     return page("شحن الألعاب",body)
 
 @empire_bp.post("/topups/new")
