@@ -1105,7 +1105,7 @@ def login():
             ] = secrets.token_urlsafe(32)
 
             return redirect(
-                url_for("account")
+                url_for("empire.home")
             )
 
         flash(
@@ -1353,13 +1353,7 @@ def logout():
 @app.get("/account")
 @login_required
 def account():
-
-    user = current_user()
-
-    return render_template_string(
-        ACCOUNT_HTML,
-        user=user,
-    )
+    return redirect(url_for("empire.home"))
 
 
 @app.get("/account_details")
@@ -6664,6 +6658,10 @@ style="color:#0056b3;text-decoration:none;font-weight:bold"
 # STARTUP
 # ============================================================
 
+
+from empire_store import register_empire_store
+
+register_empire_store(app)
 
 with app.app_context():
     init_db()
