@@ -159,7 +159,7 @@ def post(reference, entries, memo):
     for account,currency,delta in entries:
         totals[currency]=totals.get(currency,0)+delta
     if any(v!=0 for v in totals.values()): raise ValueError("القيد المحاسبي غير متوازن")
-    for account,currency,delta in entries:
+    for line_no,(account,currency,delta) in enumerate(entries, start=1):
         if account.startswith("user:"):
             name=account[5:]
             ensure_wallet(name,currency)
@@ -168,7 +168,7 @@ def post(reference, entries, memo):
             if new<0: raise ValueError("الرصيد غير كافٍ")
             db().execute("UPDATE es_wallets SET balance=? WHERE username=? AND currency=?",(new,name,currency))
         db().execute("INSERT INTO es_ledger(reference,line_no,account,currency,delta,memo,created_at) VALUES(?,?,?,?,?,?,?)",
-                     (reference,entries.index((account,currency,delta))+1,account,currency,delta,memo,now()))
+                     (reference,line_no,account,currency,delta,memo,now()))
 
 def balance(username,currency):
     row=db().execute("SELECT balance FROM es_wallets WHERE username=? AND currency=?",(username,currency)).fetchone()
@@ -227,7 +227,7 @@ def wallet():
     body=render_template_string("""<section class='panel'><h1>المحفظة التجارية</h1>
     <div class='grid'><article class='panel'><small>رصيد SDG</small><h2>{{'{:,}'.format(sdg)}}</h2></article>
     <article class='panel'><small>رصيد EPC</small><h2>{{'{:,}'.format(epc)}}</h2></article></div>
-    <a class='btn' href='/store/deposit'>طلب إيداع SDG</a> <a class='btn' href='/store/buy-epc'>شراء EPC</a>
+    <a class='btn' href='/store/deposit'>طلب إيداع SDG</a> <a class='btn' href='/store/buy-epc'>شراء EPC</a> <a class='btn' href='/store/transfer-epc'>تحويل EPC</a> <a class='btn' href='/store/payment/reference'>ربط تحويل Binance</a>
     <p class='muted'>EPC رصيد داخلي تجريبي ولا يمثل حالياً أصلاً قابلاً للسحب أو التداول خارج المنصة.</p></section>
     <section class='panel'><h2>آخر القيود</h2>{% for x in rows %}<p>{{x['created_at']}} · {{x['memo']}} · {{x['delta']}} {{x['currency']}}</p>{% else %}<p>لا توجد عمليات.</p>{% endfor %}</section>""",
       sdg=balance(u["username"],"SDG"),epc=balance(u["username"],"EPC"),
@@ -244,7 +244,7 @@ def deposit():
         note=request.form.get("note","").strip()[:250]
         operation=request.form.get("operation_id","").strip()[:100] or None
         r=ref()
-        db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,operation_id,purpose,proof_note,created_at) VALUES(?,?,'BINANCE_USDT','SDG',?,?,'WALLET_DEPOSIT',?,?)",
+        db().execute("INSERT INTO es_payments(reference,username,method,currency,amount,operation_id,purpose,proof_note,created_at) VALUES(?,?,'SDG_WALLET','SDG',?,?,'WALLET_DEPOSIT',?,?)",
                      (r,u["username"],amount,operation,note,now()))
         audit(u["username"],"DEPOSIT_REQUEST","payment",r,"manual review required")
         flash("تم تسجيل طلب الإيداع للمراجعة. لن يضاف الرصيد قبل التحقق الفعلي.")
@@ -269,6 +269,7 @@ def topups():
 @login_required
 def new_topup():
     csrf(); u=user()
+    if setting("topups_enabled","0")!="1": abort(503,"طلبات الشحن متوقفة حالياً")
     p=db().execute("SELECT * FROM es_products WHERE id=? AND active=1",(request.form.get("product_id"),)).fetchone()
     if not p: abort(404)
     player=request.form.get("player_id","").strip()
@@ -474,6 +475,25 @@ def agents():
     {% if current %}<p>الحالة: {{current['status']}} · العمولة {{current['commission_bps']/100}}%</p>{% else %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><button>التقديم كوكيل</button></form>{% endif %}</section>""",current=current,csrf=session.get("csrf",""))
     return page("الوكلاء",body)
 
+@empire_bp.route("/transfer-epc",methods=["GET","POST"])
+@login_required
+def transfer_epc():
+    u=user()
+    if request.method=="POST":
+        csrf(); recipient=request.form.get("recipient","").strip(); qty=money_int(request.form.get("quantity"))
+        target=db().execute("SELECT username,active FROM users WHERE username=?",(recipient,)).fetchone()
+        if not target or not target["active"] or recipient==u["username"]: abort(400,"المستلم غير صالح")
+        r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            post(r,[("user:"+u["username"],"EPC",-qty),("user:"+recipient,"EPC",qty)],"تحويل EPC بين المستخدمين")
+            audit(u["username"],"EPC_TRANSFER","wallet",r,"to="+recipient); d.commit()
+        except Exception: d.rollback(); raise
+        flash("تم تحويل EPC.")
+        return redirect(url_for("empire.wallet"))
+    body=render_template_string("""<section class='panel'><h1>تحويل EPC</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
+    <label>اسم المستخدم المستلم</label><input name='recipient' required><label>الكمية EPC</label><input name='quantity' type='number' min='1' required><button>تحويل</button></form></section>""",csrf=session.get("csrf",""))
+    return page("تحويل EPC",body)
+
 @empire_bp.get("/admin")
 @login_required
 @founder_required
@@ -604,12 +624,34 @@ def admin_settings():
       values={k:setting(k) for k in ("epc_price_sdg","epc_price_usdt_micros","binance_id","market_fee_bps","epc_sales_enabled","topups_enabled")},csrf=session.get("csrf",""))
     return page("الإعدادات",body)
 
-@empire_bp.get("/admin/disputes")
+@empire_bp.route("/admin/disputes",methods=["GET","POST"])
 @login_required
 @founder_required
 def admin_disputes():
+    u=user()
+    if request.method=="POST":
+        csrf(); r=request.form.get("reference",""); action=request.form.get("action","")
+        order=db().execute("SELECT * FROM es_market_orders WHERE reference=? AND status='DISPUTED'",(r,)).fetchone()
+        if not order or action not in ("BUYER","SELLER"): abort(400)
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            if action=="BUYER":
+                post(r+"B",[("escrow:market","SDG",-order["price_sdg"]),("user:"+order["buyer"],"SDG",order["price_sdg"])],"استرداد صفقة بعد قرار النزاع")
+                d.execute("UPDATE es_market_orders SET status='REFUNDED',updated_at=? WHERE reference=?",(now(),r))
+                d.execute("UPDATE es_listings SET status='PUBLISHED' WHERE id=?",(order["listing_id"],))
+                d.execute("UPDATE es_disputes SET status='RESOLVED_BUYER',resolution='refund',resolved_at=? WHERE order_ref=?",(now(),r))
+            else:
+                fee=(order["price_sdg"]*int(setting("market_fee_bps","500")))//10000
+                post(r+"S",[("escrow:market","SDG",-order["price_sdg"]),("user:"+order["seller"],"SDG",order["price_sdg"]-fee),("platform:revenue","SDG",fee)],"تحرير مستحقات البائع بعد قرار النزاع")
+                d.execute("UPDATE es_market_orders SET status='RELEASED',updated_at=? WHERE reference=?",(now(),r))
+                d.execute("UPDATE es_disputes SET status='RESOLVED_SELLER',resolution='release',resolved_at=? WHERE order_ref=?",(now(),r))
+            audit(u["username"],"DISPUTE_RESOLVED_"+action,"market_order",r)
+            d.commit()
+        except Exception: d.rollback(); raise
     rows=db().execute("SELECT * FROM es_disputes WHERE status='OPEN' ORDER BY id").fetchall()
-    body=render_template_string("""<section class='panel'><h1>النزاعات</h1>{% for x in rows %}<article class='panel'>{{x['order_ref']}} · {{x['opened_by']}}<p>{{x['reason']}}</p></article>{% else %}<p>لا توجد نزاعات مفتوحة.</p>{% endfor %}</section>""",rows=rows)
+    body=render_template_string("""<section class='panel'><h1>النزاعات</h1>{% for x in rows %}<article class='panel'>{{x['order_ref']}} · {{x['opened_by']}}<p>{{x['reason']}}</p>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['order_ref']}}'>
+    <button name='action' value='BUYER'>استرداد المبلغ للمشتري</button><button name='action' value='SELLER'>تحرير مستحقات البائع</button></form></article>{% else %}<p>لا توجد نزاعات مفتوحة.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("النزاعات",body)
 
 @empire_bp.get("/admin/audit")
