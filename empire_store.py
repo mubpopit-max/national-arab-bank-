@@ -1401,10 +1401,19 @@ def exchange():
     if request.method=="POST":
         csrf()
         direction=request.form.get("direction","")
-        amount=money_int(request.form.get("amount"))
+        try:
+            amount=money_int(request.form.get("amount"))
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(url_for("empire.exchange"))
         mode=setting("fx_rate_mode","manual")
-        base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","0"))
-        if base<=0: abort(503,"سعر الصرف غير مضبوط من إدارة المنصة")
+        try:
+            base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
+        except (TypeError,ValueError):
+            base=0
+        if base<=0:
+            flash("سعر الصرف غير مضبوط حالياً. يرجى مراجعة إدارة المنصة.")
+            return redirect(url_for("empire.exchange"))
         buy_spread=int(setting("fx_buy_spread_bps","0")); sell_spread=int(setting("fx_sell_spread_bps","0"))
         if direction=="URC_TO_SDG":
             rate=(base*(10000-sell_spread))//10000
@@ -1430,9 +1439,16 @@ def exchange():
                 post(r,[("user:"+u["username"],"SDG",-amount),("platform:fx_pool","SDG",amount),("platform:fx_pool","URC",-result),("user:"+u["username"],"URC",result)],"تحويل SDG إلى URC")
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate))
             d.commit()
+        except ValueError as exc:
+            d.rollback()
+            flash(str(exc))
+            return redirect(url_for("empire.exchange"))
         except Exception:
             d.rollback()
-            raise
+            from flask import current_app
+            current_app.logger.exception("Currency exchange failed for user %s", u["username"])
+            flash("تعذر تنفيذ التحويل بسبب خطأ داخلي. لم يتم اعتماد العملية؛ حاول لاحقاً أو تواصل مع الدعم.")
+            return redirect(url_for("empire.exchange"))
         flash("تم تنفيذ تحويل العملات بنجاح.")
         return redirect(url_for("empire.wallet"))
     mode=setting("fx_rate_mode","manual")
