@@ -1385,6 +1385,8 @@ def admin_exchange():
     if request.method=="POST":
         csrf()
         action=request.form.get("action","settings")
+        if u["role"] != "founder":
+            abort(403)
         if action=="liquidity":
             currency=request.form.get("currency","")
             amount=money_int(request.form.get("amount"))
@@ -1397,7 +1399,26 @@ def admin_exchange():
             except Exception:
                 d.rollback()
                 raise
-            flash("تمت إضافة السيولة إلى احتياطي الصرف.")
+            flash("تمت إضافة السيولة من محفظة المالك إلى احتياطي الصرف.")
+            return redirect(url_for("empire.admin_exchange"))
+        if action=="external_liquidity":
+            amount=money_int(request.form.get("amount"))
+            external_ref=(request.form.get("external_reference") or "").strip()
+            confirmed=request.form.get("cash_confirmed")=="yes"
+            if not confirmed or not 4<=len(external_ref)<=100:
+                raise ValueError("أدخل مرجع الاستلام وأكد استلام مبلغ SDG فعلياً قبل تسجيل السيولة.")
+            d=db(); d.execute("BEGIN IMMEDIATE")
+            try:
+                ledger_ref="FXEXT"+hashlib.sha256(external_ref.encode("utf-8")).hexdigest()[:24].upper()
+                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("platform:fx_pool","SDG",amount)],
+                     "إيداع احتياطي SDG خارجي مؤكد من المالك")
+                audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",
+                      str(amount)+" SDG; external_reference="+external_ref)
+                d.commit()
+            except Exception:
+                d.rollback()
+                raise
+            flash("تم تسجيل احتياطي SDG بعد تأكيد المالك استلام النقد فعلياً.")
             return redirect(url_for("empire.admin_exchange"))
         mode=request.form.get("fx_rate_mode","manual")
         market=request.form.get("fx_market_rate","0").strip()
@@ -1422,7 +1443,9 @@ def admin_exchange():
       <label>هامش بيع URC بالنقاط الأساسية</label><input name='fx_sell_spread_bps' type='number' min='0' max='10000' value='{{values["fx_sell_spread_bps"]}}'><button>حفظ الأسعار</button></form>
       <p class='muted'>سعر السوق هنا سعر مرجعي يدخله المالك أو يحدّثه؛ لا يوجد حالياً اتصال تلقائي بمزوّد أسعار خارجي.</p>
       <h2>تمويل احتياطي الصرف</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='liquidity'>
-      <label>العملة</label><select name='currency'><option>URC</option><option>SDG</option></select><label>المبلغ من محفظة المالك</label><input name='amount' type='number' min='1' required><button>إضافة إلى احتياطي الصرف</button></form></section>""",
+      <label>العملة</label><select name='currency'><option>URC</option><option>SDG</option></select><label>المبلغ من محفظة المالك</label><input name='amount' type='number' min='1' required><button>إضافة إلى احتياطي الصرف</button></form>
+      <h2>تسجيل احتياطي SDG نقدي مستلم فعلياً</h2><p class='muted'>استخدم هذا الخيار فقط بعد استلام النقد فعلياً والتحقق منه خارج المنصة. يسجل النظام مرجع العملية في سجل التدقيق ولا ينشئ رصيداً للعميل.</p>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form></section>""",
       owner=owner,pools=pools,values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","0"),("fx_manual_rate","0"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
 
 @empire_bp.get("/admin")
@@ -1435,6 +1458,11 @@ def admin():
     owner_account=owner["account_number"] if owner else "—"
     owner_urc=balance(owner_name,"URC")
     owner_sdg=balance(owner_name,"SDG")
+    is_founder = user()["role"] == "founder"
+    manager_permissions = [x["permission"] for x in db().execute(
+        "SELECT permission FROM es_manager_permissions WHERE username=?",
+        (user()["username"],)
+    ).fetchall()] if user()["role"] == "manager" else []
     stats={
       "listings":db().execute("SELECT COUNT(*) n FROM es_listings WHERE status='PUBLISHED'").fetchone()["n"],
       "escrow":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='escrow:market'").fetchone()["n"],
@@ -1470,10 +1498,10 @@ def admin():
     {% if is_founder or 'settings' in manager_permissions or 'audit' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
     {% if is_founder or 'settings' in manager_permissions %}<a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>{% endif %}
     {% if is_founder or 'audit' in manager_permissions %}<a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>{% endif %}
-    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
-    manager_permissions=[x["permission"] for x in db().execute("SELECT permission FROM es_manager_permissions WHERE username=?",(user()["username"],)).fetchall()] if user()["role"]=="manager" else []
+    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
+      is_founder=is_founder,manager_permissions=manager_permissions)
     dashboard_title="لوحة المدير العام" if user()["role"]=="manager" else "لوحة المالك"
-    return page(dashboard_title,body,manager_permissions=manager_permissions)
+    return page(dashboard_title,body,manager_permissions=manager_permissions,is_founder=is_founder)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
 @login_required
