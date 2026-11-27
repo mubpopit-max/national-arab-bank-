@@ -68,7 +68,7 @@ public final class MainActivity extends Activity {
         checkForMandatoryUpdate();
     }
 
-    private void checkForMandatoryUpdate() {
+    @Override protected void onResume() {\n        super.onResume();\n        if (pendingDownloadId > 0 && downloadManager != null) {\n            DownloadManager.Query query = new DownloadManager.Query().setFilterById(pendingDownloadId);\n            try (android.database.Cursor cursor = downloadManager.query(query)) {\n                if (cursor != null && cursor.moveToFirst() && cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL) {\n                    Uri uri = downloadManager.getUriForDownloadedFile(pendingDownloadId);\n                    if (uri != null && (Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls())) installApk(uri);\n                }\n            } catch (Exception ignored) {}\n        }\n    }\n\n    private void checkForMandatoryUpdate() {
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {

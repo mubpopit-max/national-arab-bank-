@@ -84,7 +84,7 @@ jobs:
       - name: Publish mandatory update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-release-latest
+          tag_name: android-release-${{ github.run_number }}
           name: Empire E-Story Android Release
           target_commitish: main
           prerelease: false
