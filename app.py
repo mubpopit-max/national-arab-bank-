@@ -1788,9 +1788,7 @@ def founder_panel():
                     WHERE username = ?
                       AND role = 'founder'
                     """,
-                    (
-                        FOUNDER_USERNAME,
-                    ),
+                    (FOUNDER_USERNAME,),
                 ).fetchone()
 
                 customer_user = database.execute(
@@ -1800,188 +1798,153 @@ def founder_panel():
                     WHERE account_number = ?
                       AND active = 1
                     """,
-                    (
-                        req["account_number"],
-                    ),
+                    (req["account_number"],),
                 ).fetchone()
 
                 if not founder_user:
-
-                    raise ValueError(
-                        "حساب المؤسس غير موجود."
-                    )
+                    raise ValueError("حساب المالك غير موجود.")
 
                 if not customer_user:
-
-                    raise ValueError(
-                        "حساب العميل المستفيد غير موجود أو معطل."
-                    )
+                    raise ValueError("حساب العميل المستفيد غير موجود أو معطل.")
 
                 amount = int(req["amount"])
-                founder_before = int(
-                    founder_user["balance"]
-                )
-                customer_before = int(
-                    customer_user["balance"]
-                )
+                if amount <= 0:
+                    raise ValueError("مبلغ الإيداع غير صالح.")
 
-                if founder_before < amount:
-
-                    raise ValueError(
-                        "رصيد المؤسس غير كافٍ لإتمام الاعتماد."
-                    )
-
-                founder_after = (
-                    founder_before - amount
-                )
-                customer_after = (
-                    customer_before + amount
-                )
-
-                up_founder = database.execute(
-                    """
-                    UPDATE users
-                    SET balance = balance - ?
-                    WHERE username = ?
-                      AND balance >= ?
-                    """,
-                    (
-                        amount,
-                        FOUNDER_USERNAME,
-                        amount,
-                    ),
-                )
-
-                if up_founder.rowcount != 1:
-
-                    raise ValueError(
-                        "تعذر خصم المبلغ من حساب المؤسس."
-                    )
-
-                up_customer = database.execute(
-                    """
-                    UPDATE users
-                    SET balance = balance + ?
-                    WHERE account_number = ?
-                    """,
-                    (
-                        amount,
-                        req["account_number"],
-                    ),
-                )
-
-                if up_customer.rowcount != 1:
-
-                    raise ValueError(
-                        "تعذر إضافة المبلغ لحساب العميل."
-                    )
-
+                # Funding requests are backed by an externally received bank
+                # payment. They must credit the actual store wallet ledger;
+                # they must not consume the owner's personal wallet balance.
                 database.execute(
+                    "INSERT OR IGNORE INTO es_wallets(username,currency,balance) VALUES(?,'SDG',0)",
+                    (customer_user["username"],),
+                )
+                wallet = database.execute(
+                    "SELECT balance FROM es_wallets WHERE username=? AND currency='SDG'",
+                    (customer_user["username"],),
+                ).fetchone()
+                if not wallet:
+                    raise ValueError("تعذر الوصول إلى محفظة العميل.")
+
+                wallet_before = int(wallet["balance"])
+                wallet_after = wallet_before + amount
+                ledger_reference = "DEP-" + str(req["reference"])
+                already_posted = database.execute(
+                    "SELECT 1 FROM es_ledger WHERE reference=? LIMIT 1",
+                    (ledger_reference,),
+                ).fetchone()
+                if already_posted:
+                    raise ValueError("تم تسجيل هذا الإيداع محاسبياً من قبل.")
+
+                posted_at = now()
+                memo = "إيداع بنكي مؤكد وإضافة إلى محفظة العميل"
+                database.execute(
+                    "UPDATE es_wallets SET balance=balance+? WHERE username=? AND currency='SDG'",
+                    (amount, customer_user["username"]),
+                )
+                database.execute(
+                    """
+                    INSERT INTO es_ledger(reference,line_no,account,currency,delta,memo,created_at)
+                    VALUES(?,1,'external:confirmed_bank_deposits','SDG',?,?,?)
+                    """,
+                    (ledger_reference, -amount, memo, posted_at),
+                )
+                database.execute(
+                    """
+                    INSERT INTO es_ledger(reference,line_no,account,currency,delta,memo,created_at)
+                    VALUES(?,2,?,'SDG',?,?,?)
+                    """,
+                    (ledger_reference, "user:" + customer_user["username"], amount, memo, posted_at),
+                )
+
+                # Keep the legacy balance as a compatibility mirror only.
+                # The store's es_wallets/es_ledger remains the customer wallet source.
+                legacy_update = database.execute(
+                    "UPDATE users SET balance=balance+? WHERE username=? AND active=1",
+                    (amount, customer_user["username"]),
+                )
+                if legacy_update.rowcount != 1:
+                    raise ValueError("تعذر تحديث سجل حساب العميل.")
+
+                request_update = database.execute(
                     """
                     UPDATE funding_requests
-                    SET
-                        status = 'APPROVED',
-                        founder_note = ?,
-                        reviewed_at = ?
-                    WHERE id = ?
+                    SET status='APPROVED', founder_note=?, reviewed_at=?
+                    WHERE id=? AND status='PENDING'
                     """,
-                    (
-                        founder_note[:500],
-                        now(),
-                        req["id"],
-                    ),
+                    (founder_note[:500], posted_at, req["id"]),
                 )
+                if request_update.rowcount != 1:
+                    raise ValueError("تم التعامل مع طلب الإيداع مسبقاً.")
 
+                receiving_number = (
+                    req["receiving_account_number"]
+                    if "receiving_account_number" in req.keys() and req["receiving_account_number"]
+                    else FUNDING_RECEIVE_ACCOUNT
+                )
                 database.execute(
                     """
-                    INSERT INTO transactions (
-                        reference,
-                        sender_account,
-                        receiver_account,
-                        amount,
-                        sender_before,
-                        sender_after,
-                        receiver_before,
-                        receiver_after,
-                        type,
-                        status,
-                        comment,
-                        phone,
-                        created_at
+                    INSERT INTO transactions(
+                        reference,sender_account,receiver_account,amount,
+                        sender_before,sender_after,receiver_before,receiver_after,
+                        type,status,comment,phone,created_at
                     )
-                    VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?
-                    )
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         req["reference"],
-                        FOUNDER_ACCOUNT,
-                        req["account_number"],
+                        receiving_number,
+                        customer_user["account_number"],
                         amount,
-                        founder_before,
-                        founder_after,
-                        customer_before,
-                        customer_after,
+                        None,
+                        None,
+                        wallet_before,
+                        wallet_after,
                         "ACCOUNT_FUNDING",
                         "COMPLETED",
-                        f"تغذية حساب معتمدة - بعملية {req['operation_number']}",
+                        "إيداع خارجي مؤكد بعد مراجعة الإيصال · " + str(req["operation_number"]),
                         "",
-                        now(),
+                        posted_at,
                     ),
                 )
 
+                owner_balance = int(founder_user["balance"])
                 database.execute(
                     """
-                    INSERT INTO founder_ledger (
-                        reference,
-                        type,
-                        amount,
-                        before_balance,
-                        after_balance,
-                        beneficiary_account,
-                        beneficiary_name,
-                        actor_username,
-                        note,
-                        created_at
+                    INSERT INTO founder_ledger(
+                        reference,type,amount,before_balance,after_balance,
+                        beneficiary_account,beneficiary_name,actor_username,note,created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES(?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         req["reference"],
-                        "FUNDING_APPROVAL",
+                        "EXTERNAL_FUNDING_APPROVAL",
                         amount,
-                        founder_before,
-                        founder_after,
+                        owner_balance,
+                        owner_balance,
                         customer_user["account_number"],
                         customer_user["full_name"],
                         FOUNDER_USERNAME,
-                        founder_note[:500],
-                        now(),
+                        (founder_note or "اعتماد إيداع خارجي مؤكد؛ لم يتم الخصم من رصيد المالك.")[:500],
+                        posted_at,
                     ),
                 )
 
                 create_notification(
                     database,
                     req["username"],
-                    "اعتماد تغذية الحساب",
+                    "تمت إضافة الإيداع إلى محفظتك",
                     (
-                        f"تم اعتماد طلب تغذية حسابك بقيمة "
-                        f"{money(amount)} SDG "
-                        f"وإضافتها لرصيدك بنجاح."
+                        f"تم اعتماد إيداعك بقيمة {money(amount)} SDG "
+                        "وإضافته إلى محفظة الإمبراطورية إستوري."
                     ),
-                    req["reference"],
+                    ledger_reference,
                 )
 
                 commit_safely(database)
 
-                flash(
-                    "تم اعتماد الطلب وتنفيذ العملية المالية بنجاح."
-                )
-
-                return redirect(
-                    url_for("founder_panel")
-                )
+                flash("تم اعتماد الإيداع وإضافة المبلغ إلى محفظة العميل بنجاح.")
+                return redirect(url_for("founder_panel"))
 
         except Exception as error:
 
