@@ -1,9 +1,7 @@
-name: Empire E-Story Android APK
+name: Empire E-Story Android Release
 
 on:
   push:
-    branches: [main, android-app-prep]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -11,21 +9,40 @@ permissions:
   contents: write
 
 jobs:
-  build-debug-apk:
+  build-release-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Validate and decode release signing key
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64" || { echo "Missing ANDROID_KEYSTORE_BASE64"; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "Missing ANDROID_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Missing ANDROID_KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Missing ANDROID_KEY_PASSWORD"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/signing"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing/empire-estory-release.jks"
+          test -s "$RUNNER_TEMP/signing/empire-estory-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/signing/empire-estory-release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/empire-estory-release.jks" >> "$GITHUB_ENV"
 
       - name: Accept Android SDK licences and install platform
         shell: bash
@@ -43,34 +60,42 @@ jobs:
           gradle-version: "8.9"
 
       - name: Validate Python application syntax
-        run: python -m py_compile app.py empire_store.py
+        run: python -m py_compile app.py empire_store.py wsgi.py
 
-      - name: Build installable debug APK
+      - name: Build signed release APK
         working-directory: android
-        run: gradle --no-daemon --stacktrace assembleDebug
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle --no-daemon --stacktrace assembleRelease
 
-      - name: Calculate APK checksum
-        run: sha256sum android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APK signature and checksum
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          sha256sum "$APK"
 
-      - name: Upload APK artifact
+      - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: empire-estory-android-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: empire-estory-android-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
-      - name: Publish browser-downloadable GitHub release
+      - name: Publish mandatory update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-debug-latest
-          name: Empire E-Story Android APK (Test)
+          tag_name: android-release-v4
+          name: Empire E-Story 1.2.0
           target_commitish: main
-          prerelease: true
-          make_latest: false
+          prerelease: false
+          make_latest: true
           overwrite_files: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/release/app-release.apk
           body: |
-            Installable Android test build of Empire E-Story.
-            This app loads the hosted Faable website and requires an internet connection.
-            Debug-signed test build; not the final Google Play release.
+            Empire E-Story Android release 1.2.0.
+            Signed with the project's persistent release keystore.
+            This release is the mandatory in-app update target.
