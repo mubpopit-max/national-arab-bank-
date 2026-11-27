@@ -518,6 +518,10 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
 def profile():
     u=user()
     row=db().execute("SELECT username,full_name,account_number,role,active,email,phone FROM users WHERE username=?",(u["username"],)).fetchone()
+    identity=db().execute("SELECT status,updated_at FROM es_identity_status WHERE username=?",(u["username"],)).fetchone()
+    if not identity:
+        db().execute("INSERT OR IGNORE INTO es_identity_status(username,status,updated_at) VALUES(?,'UNVERIFIED',?)",(u["username"],now()))
+        identity=db().execute("SELECT status,updated_at FROM es_identity_status WHERE username=?",(u["username"],)).fetchone()
     loyalty=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
     if request.method=="POST":
         csrf()
@@ -527,15 +531,63 @@ def profile():
         if len(phone)>30 or (phone and not re.fullmatch(r"[+0-9 ()-]{6,30}",phone)): abort(400,"رقم الهاتف غير صالح")
         if email and db().execute("SELECT 1 FROM users WHERE lower(email)=? AND username<>?",(email,u["username"])).fetchone(): abort(409,"البريد الإلكتروني مرتبط بحساب آخر")
         db().execute("UPDATE users SET email=?,phone=? WHERE username=?",(email,phone,u["username"]))
-        audit(u["username"],"PROFILE_CONTACT_UPDATED","profile",u["username"])
-        flash("تم حفظ معلومات الاتصال.")
+        new_status="PENDING" if email and phone else "UNVERIFIED"
+        db().execute("INSERT INTO es_identity_status(username,status,updated_at) VALUES(?,?,?) ON CONFLICT(username) DO UPDATE SET status=excluded.status,updated_at=excluded.updated_at",(u["username"],new_status,now()))
+        audit(u["username"],"PROFILE_CONTACT_UPDATED","profile",u["username"],"identity_status="+new_status)
+        nref="PROFILE-REVIEW-"+u["username"]+"-"+hashlib.sha256((email+"|"+phone).encode()).hexdigest()[:12]
+        title="تم استلام بيانات التوثيق" if new_status=="PENDING" else "أكمل بيانات التوثيق"
+        message="تم استلام بريدك ورقم هاتفك. ستراجع الإدارة البيانات، وستظهر علامة التوثيق بعد الاعتماد." if new_status=="PENDING" else "أدخل البريد الإلكتروني ورقم الهاتف معاً ثم احفظهما لإرسال طلب المراجعة."
+        db().execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",(u["username"],title,message,nref,now()))
+        flash("تم إرسال بيانات الاتصال للمراجعة. ستظهر علامة التوثيق بعد الاعتماد." if new_status=="PENDING" else "أضف البريد ورقم الهاتف معاً لإرسال طلب التوثيق.")
         return redirect(url_for("empire.profile"))
     body=render_template_string("""<section class='panel profile-hero'><span class='profile-mark'>🇸🇩</span><div><h1>الملف الشخصي</h1><p>إدارة معلومات حسابك وإعداداتك.</p></div></section>
+    <section class='panel'><h2>حالة التوثيق</h2>{% if identity['status']=='VERIFIED' %}<span class='tag'>✓ حساب موثّق</span>{% elif identity['status']=='PENDING' %}<span class='tag' style='background:#fff5df;color:#94620a'>قيد مراجعة التوثيق</span>{% else %}<span class='tag'>حساب غير موثّق</span>{% endif %}<p class='muted'>أضف البريد ورقم الهاتف معاً. لن تظهر علامة ✓ إلا بعد مراجعة الإدارة واعتماد البيانات.</p></section>
     {% if loyalty %}<section class='premium-banner'><span class='ice-badge'>❄ عميل آيس ستوري مميز</span><h2>عضوية مميزة</h2><b class='loyalty-points'>{{'{:,}'.format(loyalty['points'])}}</b><small>نقاط الولاء</small></section>{% endif %}
     <section class='panel'><h2>الضبط</h2><a class='profile-setting' href='/store/notifications'><span>🔔</span><b>الإشعارات</b><small>عرض تنبيهات حسابك</small><strong>‹</strong></a></section>
     <section class='panel'><h2>معلومات الحساب</h2><div class='profile-info'><span>الاسم</span><b>{{row['full_name']}}</b></div><div class='profile-info'><span>رقم الحساب</span><b dir='ltr'>{{row['account_number']}}</b></div><div class='profile-info'><span>الحالة</span><b><span class='tag'>{{'نشط' if row['active'] else 'موقوف'}}</span></b></div>
-    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>البريد الإلكتروني المرتبط</label><input type='email' name='email' maxlength='254' value='{{row['email']}}' placeholder='name@example.com'><label>رقم الهاتف</label><input type='tel' name='phone' maxlength='30' value='{{row['phone']}}' placeholder='+249...'><button>حفظ معلومات الحساب</button></form></section>""",row=row,csrf=session.get("csrf",""))
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>البريد الإلكتروني المرتبط</label><input type='email' name='email' maxlength='254' value='{{row['email']}}' placeholder='name@example.com' required><label>رقم الهاتف</label><input type='tel' name='phone' maxlength='30' value='{{row['phone']}}' placeholder='+249...' required><button>حفظ وإرسال للمراجعة</button></form></section>""",row=row,csrf=session.get("csrf",""),identity=identity)
     return page("الملف الشخصي",body,loyalty=loyalty)
+
+@empire_bp.get("/loyalty")
+@login_required
+def loyalty():
+    u=user()
+    member=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
+    points=int(member["points"]) if member else 0
+    ledger=db().execute("SELECT reference,points_delta,memo,created_at FROM es_loyalty_ledger WHERE username=? ORDER BY id DESC LIMIT 100",(u["username"],)).fetchall()
+    body=render_template_string("""<section class='premium-banner'><span class='ice-badge'>★ برنامج الولاء</span><h1>نقاط الولاء</h1><strong class='loyalty-points'>{{'{:,}'.format(points)}}</strong><p>إجمالي نقاطك المتاحة</p>{% if member %}<span class='tag'>❄ عميل آيس ستوري مميز</span>{% else %}<p>يمكنك تفعيل عضوية آيس ستوري باستخدام الكود الحصري الذي تحصل عليه من آيس ستوري.</p><a class='btn' href='/store/ice-empire'>تفعيل عضوية آيس ستوري</a>{% endif %}</section>
+      <section class='panel'><h2>سجل النقاط</h2>{% for x in ledger %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}} · {{x['reference']}}</small></div><b class='transaction-value {{'in' if x['points_delta']>0 else 'out'}}'>{{'+' if x['points_delta']>0 else ''}}{{x['points_delta']}} نقطة</b></article>{% else %}<div class='empty-state'>لم تُسجل نقاط في حسابك بعد.</div>{% endfor %}</section>
+      <section class='panel'><h2>استبدال النقاط</h2><p>رصيد النقاط وسجل اكتسابها ظاهران هنا. لم يُفعّل الاستبدال بعد حتى نعتمد المكافآت وقيمة كل مكافأة وعدد النقاط المطلوب لها.</p></section>""",points=points,member=member,ledger=ledger)
+    return page("نقاط الولاء",body)
+
+@empire_bp.route("/admin/identity",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_identity():
+    if request.method=="POST":
+        csrf()
+        username=(request.form.get("username") or "").strip()
+        action=request.form.get("action","")
+        row=db().execute("SELECT username,email,phone FROM users WHERE username=?",(username,)).fetchone()
+        if not row or not row["email"] or not row["phone"] or action not in ("VERIFY","REJECT"):
+            flash("تعذر مراجعة الطلب: تحقق من بيانات الحساب.")
+            return redirect(url_for("empire.admin_identity"))
+        status="VERIFIED" if action=="VERIFY" else "REJECTED"
+        db().execute("INSERT INTO es_identity_status(username,status,updated_at) VALUES(?,?,?) ON CONFLICT(username) DO UPDATE SET status=excluded.status,updated_at=excluded.updated_at",(username,status,now()))
+        nref="IDENTITY-"+status+"-"+username+"-"+secrets.token_hex(4)
+        title="تم توثيق حسابك ✓" if status=="VERIFIED" else "تعذر اعتماد بيانات التوثيق"
+        message="تمت مراجعة بيانات الاتصال واعتماد حسابك. ستظهر علامة ✓ بجانب حالة حسابك." if status=="VERIFIED" else "لم يتم اعتماد بيانات الاتصال. يرجى مراجعة البريد ورقم الهاتف والتواصل مع الدعم."
+        db().execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",(username,title,message,nref,now()))
+        audit(user()["username"],"IDENTITY_"+status,"identity",username)
+        flash("تم اعتماد الحساب وارسال إشعار للعميل." if status=="VERIFIED" else "تم رفض طلب التوثيق وإشعار العميل.")
+        return redirect(url_for("empire.admin_identity"))
+    rows=db().execute("""SELECT u.username,u.full_name,u.account_number,u.email,u.phone,s.status,s.updated_at
+      FROM es_identity_status s JOIN users u ON u.username=s.username
+      WHERE s.status IN ('PENDING','REJECTED') ORDER BY CASE s.status WHEN 'PENDING' THEN 0 ELSE 1 END,s.updated_at""").fetchall()
+    body=render_template_string("""<section class='panel'><h1>مراجعة توثيق الحسابات</h1><p>راجع بيانات الاتصال وتحقق منها خارجياً قبل الاعتماد. لا تعتمد بيانات لم يتم التحقق منها.</p>
+      {% for x in rows %}<article class='panel'><b>{{x['full_name']}} · {{x['account_number']}}</b><p dir='ltr'>{{x['email']}}</p><p dir='ltr'>{{x['phone']}}</p><span class='tag'>{{'قيد المراجعة' if x['status']=='PENDING' else 'مرفوض سابقاً'}}</span>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='username' value='{{x['username']}}'><button name='action' value='VERIFY'>اعتماد التوثيق ✓</button><button class='btn secondary' name='action' value='REJECT'>رفض وإشعار العميل</button></form></article>{% else %}<div class='empty-state'>لا توجد طلبات توثيق معلقة.</div>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
+    return page("توثيق الحسابات",body)
 
 @empire_bp.route("/notifications")
 @login_required
@@ -808,6 +860,12 @@ def offline():
 @login_required
 def home():
     u=user()
+    contacts=db().execute("SELECT email,phone FROM users WHERE username=?",(u["username"],)).fetchone()
+    if contacts and (not contacts["email"] or not contacts["phone"]):
+        reminder_ref="PROFILE-CONTACT-"+u["username"]
+        if not db().execute("SELECT 1 FROM notifications WHERE username=? AND reference=?",(u["username"],reminder_ref)).fetchone():
+            db().execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                (u["username"],"أكمل بيانات ملفك الشخصي","أضف بريدك الإلكتروني ورقم هاتفك من الملف الشخصي، ثم أرسل البيانات للمراجعة حتى نتمكن من اعتماد حالة حسابك.",reminder_ref,now()))
     rows=db().execute("SELECT * FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 4",("user:"+u["username"],)).fetchall()
     body=render_template_string("""<section class="home-services"><div class="section-heading"><div><span class="section-kicker">خدمات الإمبراطورية</span><h2>ماذا تريد أن تفعل اليوم؟</h2></div><span class="sudan-mark">🇸🇩</span></div>
     <div class="service-grid">
@@ -821,6 +879,7 @@ def home():
     <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>صرف العملات</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
     <a class="service-card" href="/store/agents"><i class="service-icon agents"><svg><use href="#i-user"/></svg></i><strong>الوكلاء</strong></a>
+    <a class="service-card loyalty-service" href="/store/loyalty"><i class="service-icon loyalty"><span>★</span></i><strong>نقاط الولاء</strong></a>
     <a class="service-card loyalty-service" href="/store/ice-empire"><i class="service-icon loyalty"><span>❄</span></i><strong>آيس ستوري · عميل مميز</strong></a></div></section>
     <section class="national-banner"><div class="banner-copy"><span>معاً نبني السودان الرقمي</span><strong>خدمات متكاملة .. أمان وثقة</strong></div><div class="banner-flag" aria-label="علم السودان"><i></i><i></i><i></i><b></b></div><div class="banner-crown">♛</div></section>
     <section class="panel recent-panel"><div class="section-heading"><div><span class="section-kicker">حسابك أولاً</span><h2>آخر العمليات</h2></div><a class="view-all" href="/store/wallet">عرض الكل ←</a></div>
@@ -1591,7 +1650,7 @@ def admin():
     {% if is_founder or 'settings' in manager_permissions or 'audit' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
     {% if is_founder or 'settings' in manager_permissions %}<a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>{% endif %}
     {% if is_founder or 'audit' in manager_permissions %}<a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>{% endif %}
-    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/code-inventory'><b>مخزون أكواد الألعاب</b><small>إضافة الأكواد ومتابعة المتاح والمستخدم</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>🏦 حسابات الدفع والتحويل الخارجي</b><small>إضافة · تعديل · حذف · إيقاف — فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
+    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/code-inventory'><b>مخزون أكواد الألعاب</b><small>إضافة الأكواد ومتابعة المتاح والمستخدم</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/store/admin/identity'><b>توثيق حسابات العملاء</b><small>مراجعة البريد والهاتف واعتماد العلامة ✓</small></a><a href='/founder/receiving-accounts'><b>🏦 حسابات الدفع والتحويل الخارجي</b><small>إضافة · تعديل · حذف · إيقاف — فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
       is_founder=is_founder,manager_permissions=manager_permissions)
     dashboard_title="لوحة المدير العام" if user()["role"]=="manager" else "لوحة المالك"
     return page(dashboard_title,body,manager_permissions=manager_permissions,is_founder=is_founder)
