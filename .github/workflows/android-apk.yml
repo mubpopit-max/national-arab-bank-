@@ -41,7 +41,17 @@ jobs:
           mkdir -p "$RUNNER_TEMP/signing"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing/empire-estory-release.jks"
           test -s "$RUNNER_TEMP/signing/empire-estory-release.jks"
-          keytool -list -keystore "$RUNNER_TEMP/signing/empire-estory-release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          if ! keytool -list -keystore "$RUNNER_TEMP/signing/empire-estory-release.jks" -storepass "$STORE_PASSWORD" > "$RUNNER_TEMP/signing/keystore-check.txt" 2>&1; then
+            echo "Keystore could not be opened. Check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
+            cat "$RUNNER_TEMP/signing/keystore-check.txt"
+            exit 1
+          fi
+          if ! grep -Fq "$KEY_ALIAS" "$RUNNER_TEMP/signing/keystore-check.txt"; then
+            echo "The configured ANDROID_KEY_ALIAS was not found. Available aliases:"
+            cat "$RUNNER_TEMP/signing/keystore-check.txt"
+            exit 1
+          fi
+          echo "Release keystore and alias validated."
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/empire-estory-release.jks" >> "$GITHUB_ENV"
 
       - name: Accept Android SDK licences and install platform
