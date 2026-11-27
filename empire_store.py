@@ -506,6 +506,45 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
   .service-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+/* Transaction receipt and notification typography: strict RTL layout, no overlap. */
+.transfer-receipt-clean{max-width:560px;margin:12px auto;padding:clamp(16px,4vw,24px);border:1px solid #dce9df;border-radius:22px;background:#fff;box-shadow:0 12px 34px rgba(24,65,42,.08);direction:rtl;overflow:hidden}
+.trc-header{text-align:center;padding:6px 4px 16px}
+.trc-check{display:grid;place-items:center;width:54px;height:54px;margin:0 auto 10px;border-radius:50%;background:#e8f6ed;color:#137a48;font-size:30px;font-weight:900}
+.trc-label{display:inline-flex;padding:5px 12px;border-radius:30px;background:#f2f7f3;color:#387052;font-size:11px;font-weight:850}
+.trc-header h1{margin:10px 0 5px;font-size:22px;line-height:1.4}
+.trc-header p{margin:0;font-size:12px;line-height:1.8;color:#718477}
+.trc-amount{display:grid;gap:7px;justify-items:center;margin:8px 0 16px;padding:20px 12px;border:1px solid #d9ecdf;border-radius:17px;background:#f3faf5;text-align:center}
+.trc-amount small,.trc-person small,.trc-field small,.trc-meta small{color:#718477;font-size:11px;font-weight:750}
+.trc-amount strong{display:block;max-width:100%;color:#145c3a;font-size:clamp(25px,7vw,34px);font-weight:950;line-height:1.35;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.trc-amount strong span{font-size:15px}
+.trc-status{padding:4px 11px;border-radius:30px;background:#e4f4e9;color:#176e43;font-size:11px;font-weight:850}
+.trc-parties{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);align-items:center;gap:8px;margin:12px 0}
+.trc-person{display:grid;gap:5px;min-width:0;padding:12px;border:1px solid #e5ede7;border-radius:14px;background:#fbfdfb}
+.trc-person b,.trc-person span{min-width:0;overflow-wrap:anywhere}
+.trc-person b{font-size:13px;line-height:1.55}
+.trc-person span{font-size:11px;color:#54705f;font-variant-numeric:tabular-nums}
+.trc-arrow{display:grid;place-items:center;color:#16834f;font-size:20px}
+.trc-field,.trc-meta>div{display:grid;gap:5px;min-width:0;padding:12px 0;border-bottom:1px solid #edf2ee}
+.trc-field b,.trc-meta b{min-width:0;overflow-wrap:anywhere;line-height:1.6;font-size:12px}
+.trc-meta{display:grid;gap:2px;margin-top:8px}
+.trc-meta b[dir=ltr]{text-align:left;unicode-bidi:plaintext;font-variant-numeric:tabular-nums}
+.trc-foot{margin:14px 0;color:#718477;font-size:11px;line-height:1.8}
+.trc-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.trc-actions>*{width:100%;min-width:0;min-height:44px;padding:9px 7px;font-size:11px;text-align:center}
+.notification-page{display:grid;gap:9px}
+.notification-card{display:flex;align-items:center;gap:10px;min-width:0;padding:13px;border:1px solid #e0eae2;border-radius:15px;background:#fbfdfb;color:#183b2c!important;text-decoration:none!important}
+.notification-card:active{background:#f0f7f1}
+.notification-symbol{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:#e7f5eb;color:#16834f;font-weight:900}
+.notification-copy{display:grid;flex:1;min-width:0;gap:4px}
+.notification-copy b,.notification-copy span,.notification-copy small{min-width:0;overflow-wrap:anywhere;line-height:1.6}
+.notification-copy b{font-size:13px}.notification-copy span{font-size:12px;color:#506c5b}.notification-copy small{font-size:10px;color:#819187}
+.notification-arrow{flex:0 0 auto;color:#16834f;font-size:18px}
+.admin-open{display:block;margin-top:5px;color:#16834f;font-size:11px;font-weight:850;pointer-events:none}
+.admin-links a{display:flex!important;position:relative;z-index:3;min-width:0;gap:7px;cursor:pointer;pointer-events:auto;touch-action:manipulation;text-decoration:none!important}
+.admin-links a>*{pointer-events:none}
+.admin-links a:focus-visible{outline:3px solid rgba(22,131,79,.28);outline-offset:3px}
+@media(max-width:420px){.trc-parties{grid-template-columns:1fr;gap:7px}.trc-arrow{transform:rotate(-90deg)}.trc-actions{grid-template-columns:1fr}.trc-actions>*{min-height:46px;font-size:13px}}
+@media print{.trc-actions{display:none!important}.transfer-receipt-clean{max-width:none;border:0;box-shadow:none}}
 </style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol><symbol id='i-pubg' viewBox='0 0 24 24'><path d='M4 5h16v14H4zM8 9h8M8 12h5M8 15h8'/><path d='M2 8V4h4M18 4h4v4M2 16v4h4M18 20h4v-4'/></symbol><symbol id='i-freefire' viewBox='0 0 24 24'><path d='M13 2c1 5-4 6-3 11 1-2 3-3 4-5 4 4 5 7 3 11a7 7 0 0 1-13-3c0-4 3-7 5-9 0 4 1 5 2 6 0-5 1-8 2-11z'/></symbol><symbol id='i-ml' viewBox='0 0 24 24'><path d='M3 18 8 6l4 7 4-7 5 12M6 18h12'/><path d='m8 6 4 2 4-2'/></symbol><symbol id='i-fortnite' viewBox='0 0 24 24'><path d='M5 3h14v18H5zM9 7h7M9 11h5M9 15h7'/><path d='M8 3v18'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/store/profile' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/history'><span class='ico'><svg><use href='#i-bell'/></svg></span>المعاملات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>محفظتي</a><a href='/store/profile'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
@@ -611,8 +650,18 @@ def admin_identity():
 def store_notifications():
     u=user()
     rows=db().execute("SELECT * FROM notifications WHERE username=? ORDER BY id DESC LIMIT 100",(u["username"],)).fetchall()
+    items=[]
+    for row in rows:
+        item=dict(row)
+        transfer=db().execute("SELECT 1 FROM es_transfer_details WHERE reference=? AND (sender=? OR recipient=?)",
+                              (row["reference"],u["username"],u["username"])).fetchone() if row["reference"] else None
+        item["target"]="/store/transfer/receipt/"+row["reference"] if transfer else ("/store/history/"+row["reference"] if row["reference"] and db().execute("SELECT 1 FROM es_ledger WHERE reference=? AND account=?",(row["reference"],"user:"+u["username"])).fetchone() else "")
+        items.append(item)
     db().execute("UPDATE notifications SET is_read=1 WHERE username=?",(u["username"],))
-    body=render_template_string("""<section class='panel'><h1>الإشعارات</h1>{% for n in rows %}<article class='panel'><b>{{n['title']}}</b><p>{{n['message']}}</p><small>{{n['created_at']}}</small>{% if n['reference'] %}<p><small>المرجع: {{n['reference']}}</small></p>{% endif %}</article>{% else %}<div class='empty-state'>لا توجد إشعارات حالياً.</div>{% endfor %}</section>""",rows=rows)
+    body=render_template_string("""<section class='panel notification-page'><span class='tag'>مركز التنبيهات</span><h1>إشعاراتك</h1>
+      {% for n in items %}{% if n['target'] %}<a class='notification-card' href='{{n['target']}}'><span class='notification-symbol' aria-hidden='true'>✓</span><span class='notification-copy'><b>{{n['title']}}</b><span>{{n['message']}}</span><small>{{n['created_at']}}</small></span><span class='notification-arrow' aria-hidden='true'>←</span></a>
+      {% else %}<article class='notification-card'><span class='notification-symbol' aria-hidden='true'>i</span><span class='notification-copy'><b>{{n['title']}}</b><span>{{n['message']}}</span><small>{{n['created_at']}}</small></span></article>{% endif %}{% else %}<div class='empty-state'>لا توجد إشعارات حالياً.</div>{% endfor %}
+      </section>""",items=items)
     return page("الإشعارات",body)
 
 
@@ -880,25 +929,41 @@ def transaction_history():
 @empire_bp.get("/history/<reference>")
 @login_required
 def transaction_history_detail(reference):
-    u=user(); account="user:"+u["username"]
+    u=user()
+    account="user:"+u["username"]
     own=db().execute("SELECT currency,delta,memo,created_at FROM es_ledger WHERE reference=? AND account=? ORDER BY line_no",(reference,account)).fetchall()
-    if not own: abort(404)
-    row=own[0]
+    if not own:
+        abort(404)
     transfer=db().execute("SELECT sender,recipient,recipient_account,note FROM es_transfer_details WHERE reference=? AND (sender=? OR recipient=?)",
                           (reference,u["username"],u["username"])).fetchone()
-    movements=[{"currency":x["currency"],"delta":int(x["delta"])} for x in own]
+    movements=[]
     counterparty=""
+    memo=own[0]["memo"]
     if transfer:
-        other=transfer["recipient"] if transfer["sender"]==u["username"] else transfer["sender"]
+        is_sender=transfer["sender"]==u["username"]
+        other=transfer["recipient"] if is_sender else transfer["sender"]
         person=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(other,)).fetchone()
-        if person: counterparty=person["full_name"]+" · "+person["account_number"]
-    body=render_template_string("""<section class='panel'><span class='tag'>إشعار معاملة كامل</span><h1>{{memo}}</h1><div class='history-detail-hero'><small>رقم العملية</small><b dir='ltr'>{{reference}}</b><small>التاريخ والوقت (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
-      <h2>تفاصيل حركة محفظتك</h2>{% for x in movements %}<div class='profile-info'><span>{{'إضافة إلى المحفظة' if x['delta']>0 else 'خصم من المحفظة'}} · {{x['currency']}}</span><b>{{'+' if x['delta']>0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% endfor %}
+        if person:
+            counterparty=person["full_name"]+" · "+person["account_number"]
+        principal=[x for x in own if (int(x["delta"])<0 if is_sender else int(x["delta"])>0)]
+        if not principal:
+            abort(404)
+        main=max(principal,key=lambda x:abs(int(x["delta"])))
+        movements=[{"currency":main["currency"],"delta":int(main["delta"]),"label":"قيمة التحويل"}]
+        memo="تحويل صادر" if is_sender else "تحويل وارد"
+    else:
+        movements=[{"currency":x["currency"],"delta":int(x["delta"]),"label":"إضافة إلى المحفظة" if int(x["delta"])>0 else "خصم من المحفظة"} for x in own]
+    body=render_template_string("""<section class='panel notification-detail'><span class='tag'>إشعار معاملة</span><h1>{{memo}}</h1>
+      <div class='history-detail-hero'><small>رقم العملية</small><b dir='ltr'>{{reference}}</b><small>التاريخ والوقت (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
+      <h2>تفاصيل العملية</h2>{% for x in movements %}<div class='profile-info'><span>{{x['label']}} · {{x['currency']}}</span><b>{{'+' if x['delta']>0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% endfor %}
       {% if counterparty %}<div class='profile-info'><span>الطرف الآخر</span><b>{{counterparty}}</b></div>{% endif %}
       {% if note %}<div class='profile-info'><span>ملاحظة</span><b>{{note}}</b></div>{% endif %}
-      <p class='muted'>هذه التفاصيل تعرض حركات حسابك فقط، ولا تعرض رصيد الطرف الآخر.</p><a class='btn secondary' href='/store/history'>العودة إلى المعاملات السابقة</a></section>""",
-      memo=row["memo"],reference=reference,created_at=row["created_at"],movements=movements,counterparty=counterparty,note=transfer["note"] if transfer else "")
+      <p class='muted'>تعرض هذه الصفحة تفاصيل العملية الخاصة بحسابك فقط، دون أرصدة الحسابات الأخرى أو البيانات الداخلية.</p>
+      <a class='btn secondary' href='/store/history'>العودة إلى سجل المعاملات</a></section>""",
+      memo=memo,reference=reference,created_at=own[0]["created_at"],movements=movements,
+      counterparty=counterparty,note=(transfer["note"] or "").strip() if transfer else "")
     return page("إشعار المعاملة",body)
+
 
 @empire_bp.post("/admin/ice-codes/copied/<int:code_id>")
 @login_required
@@ -1515,44 +1580,54 @@ def transfer_epc():
 @login_required
 def transfer_receipt(reference):
     u=user()
-    rows=db().execute("SELECT account,currency,delta,memo,created_at FROM es_ledger WHERE reference=? ORDER BY line_no",(reference,)).fetchall()
     detail=db().execute("SELECT * FROM es_transfer_details WHERE reference=?",(reference,)).fetchone()
-    if not detail: abort(404)
-    sender=detail["sender"]; recipient=detail["recipient"]
-    if u["username"] not in (sender,recipient): abort(404)
-    user_rows=[row for row in rows if row["account"].startswith("user:")]
-    credit=next((row for row in user_rows if row["account"]=="user:"+recipient and row["delta"]>0),None)
-    if not credit: abort(404)
-    sender_debits=[row for row in user_rows if row["account"]=="user:"+sender and row["delta"]<0]
-    fee_row=next((row for row in sender_debits if abs(row["delta"])!=credit["delta"]),None)
-    fee=abs(fee_row["delta"]) if fee_row else 0
-    if u["username"] not in (sender,recipient): abort(404)
+    if not detail:
+        abort(404)
+    sender=detail["sender"]
+    recipient=detail["recipient"]
+    if u["username"] not in (sender,recipient):
+        abort(404)
+    credit=db().execute(
+        "SELECT currency,delta,created_at FROM es_ledger WHERE reference=? AND account=? AND delta>0 ORDER BY line_no LIMIT 1",
+        (reference,"user:"+recipient)
+    ).fetchone()
+    if not credit:
+        abort(404)
     sender_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(sender,)).fetchone()
     recipient_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(recipient,)).fetchone()
-    amount=credit["delta"]
-    body=render_template_string("""<section class='panel transfer-receipt'>
-      <div class='receipt-flag'><i></i><i></i><i></i><i></i></div>
-      <div style='text-align:center'><span class='tag'>إشعار تحويل رسمي</span><div style='font-size:42px;color:#16844f'>✓</div>
-      <h1>تم التحويل بنجاح</h1><p>الإمبراطورية إستوري · خدمة مالية سودانية</p></div>
-      <div style='background:#edf7f1;border:1px solid #d1eadb;border-radius:16px;padding:17px;text-align:center;margin:14px 0'>
-        <small>قيمة التحويل</small><div style='font-size:30px;font-weight:900;color:#145c3a'>{{'{:,}'.format(amount)}} {{currency}}</div><b style='color:#16844f'>عملية مكتملة</b>{% if fee and u_is_sender %}<p>عمولة التطبيق 3%: {{'{:,}'.format(fee)}} {{currency}} · خُصمت منفصلة من محفظة المرسل</p>{% endif %}
-      </div>
-      <div style='display:grid;gap:11px'>
-        <div><small>من المرسل</small><b>{{sender_name}} · {{sender_account}}</b></div>
-        <div><small>إلى المستلم</small><b>{{recipient_name}} · {{recipient_account}}</b></div>
-        <div><small>ملاحظات المرسل</small><b>{{note or 'لا توجد ملاحظات'}}</b></div>
+    if not sender_user or not recipient_user:
+        abort(404)
+    body=render_template_string("""<section class='transfer-receipt-clean'>
+      <header class='trc-header'>
+        <div class='trc-check' aria-hidden='true'>✓</div>
+        <span class='trc-label'>إيصال تحويل</span>
+        <h1>تم التحويل بنجاح</h1>
+        <p>تم تسجيل العملية في محفظة الإمبراطورية إستوري</p>
+      </header>
+      <section class='trc-amount'>
+        <small>المبلغ المحوّل</small>
+        <strong dir='ltr'>{{'{:,}'.format(amount)}} <span>{{currency}}</span></strong>
+        <span class='trc-status'>عملية مكتملة</span>
+      </section>
+      <section class='trc-parties'>
+        <div class='trc-person'><small>المرسل</small><b>{{sender_name}}</b><span dir='ltr'>{{sender_account}}</span></div>
+        <div class='trc-arrow' aria-hidden='true'>←</div>
+        <div class='trc-person'><small>المستلم</small><b>{{recipient_name}}</b><span dir='ltr'>{{recipient_account}}</span></div>
+      </section>
+      {% if note %}<section class='trc-field'><small>ملاحظة</small><b>{{note}}</b></section>{% endif %}
+      <section class='trc-meta'>
         <div><small>رقم العملية</small><b dir='ltr'>{{reference}}</b></div>
-        <div><small>تاريخ ووقت العملية (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
-      </div>
-      <p class='muted' style='margin-top:15px'>هذا إشعار يثبت تسجيل التحويل داخل محفظة الإمبراطورية إستوري. لا يعرض أرصدة أطراف العملية.</p>
-      <div style='display:flex;gap:8px;flex-wrap:wrap'><button type='button' onclick='window.print()'>حفظ الإشعار / PDF</button><a class='btn secondary' href='/store/'>الرئيسية</a></div>
+        <div><small>التاريخ والوقت (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
+      </section>
+      <p class='trc-foot'>هذا الإيصال يثبت إتمام التحويل. لا يتضمن أرصدة الحسابات أو تفاصيل داخلية.</p>
+      <div class='trc-actions'><button type='button' onclick='window.print()'>حفظ الإيصال</button><a class='btn secondary' href='/store/history'>سجل المعاملات</a><a class='btn secondary' href='/store/'>الرئيسية</a></div>
     </section>""",
-      amount=amount,currency=credit["currency"],reference=reference,
+      amount=int(credit["delta"]),currency=credit["currency"],reference=reference,
       sender_name=sender_user["full_name"],sender_account=sender_user["account_number"],
       recipient_name=recipient_user["full_name"],recipient_account=recipient_user["account_number"],
-      note=detail["note"],created_at=credit["created_at"],fee=fee,u_is_sender=(u["username"]==sender))
-    return page("إشعار التحويل",body)
-
+      note=(detail["note"] or "").strip(),created_at=credit["created_at"])
+    return page("إيصال التحويل",body)
+  
 @empire_bp.route("/exchange",methods=["GET","POST"])
 @login_required
 def exchange():
@@ -1871,22 +1946,22 @@ def admin():
     {% if is_founder or 'agents' in manager_permissions %}<article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>{% endif %}
     </div></section>
     {% if is_founder or 'payments' in manager_permissions or 'withdrawals' in manager_permissions or 'exchange' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>01 · العمليات المالية</span><h2>إدارة الأموال والمدفوعات</h2></div><div class='grid admin-links'>
-    {% if is_founder %}<a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a><a href='/store/admin/protection-fund'><b>صندوق حماية المستخدمين</b><small>إيرادات وعمولات التطبيق — المالك فقط</small></a>{% endif %}
-    {% if is_founder or 'payments' in manager_permissions %}<a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>{% endif %}
-    {% if is_founder or 'withdrawals' in manager_permissions %}<a href='/store/admin/withdrawals'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small></a>{% endif %}
-    {% if is_founder or 'exchange' in manager_permissions %}<a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder %}<a href='{{url_for('founder_panel')}}'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small><span class='admin-open'>فتح القسم ←</span></a><a href='{{url_for('empire.admin_protection_fund')}}'><b>صندوق حماية المستخدمين</b><small>إيرادات وعمولات التطبيق — المالك فقط</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'payments' in manager_permissions %}<a href='{{url_for('empire.admin_payments')}}'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'withdrawals' in manager_permissions %}<a href='{{url_for('empire.admin_withdrawals')}}'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'exchange' in manager_permissions %}<a href='{{url_for('empire.admin_exchange')}}'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
-    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/topups'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>{% endif %}
-    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/market-orders'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small></a>{% endif %}
-    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/disputes'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_topups')}}'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_market_orders')}}'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_disputes')}}'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
     {% if is_founder or 'products' in manager_permissions or 'catalog' in manager_permissions or 'agents' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>03 · المنتجات والشركاء</span><h2>إدارة الكتالوج والوكلاء</h2></div><div class='grid admin-links'>
-    {% if is_founder or 'products' in manager_permissions %}<a href='/store/admin/products'><b>باقات الألعاب والأسعار</b><small>أسعار البيع وتكلفة المورد</small></a>{% endif %}
-    {% if is_founder or 'catalog' in manager_permissions %}<a href='/store/admin/listings'><b>السوق والإعلانات</b><small>المنتجات والحسابات المعروضة</small></a>{% endif %}
-    {% if is_founder or 'agents' in manager_permissions %}<a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder or 'products' in manager_permissions %}<a href='{{url_for('empire.admin_products')}}'><b>باقات الألعاب والأسعار</b><small>أسعار البيع وتكلفة المورد</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'catalog' in manager_permissions %}<a href='{{url_for('empire.admin_listings')}}'><b>السوق والإعلانات</b><small>المنتجات والحسابات المعروضة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'agents' in manager_permissions %}<a href='{{url_for('empire.admin_agents')}}'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
     {% if is_founder or 'settings' in manager_permissions or 'audit' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
-    {% if is_founder or 'settings' in manager_permissions %}<a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>{% endif %}
-    {% if is_founder or 'audit' in manager_permissions %}<a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>{% endif %}
-    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/code-inventory'><b>مخزون أكواد الألعاب</b><small>إضافة الأكواد ومتابعة المتاح والمستخدم</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/store/admin/identity'><b>توثيق حسابات العملاء</b><small>مراجعة البريد والهاتف واعتماد العلامة ✓</small></a><a href='/founder/receiving-accounts'><b>🏦 حسابات الدفع والتحويل الخارجي</b><small>إضافة · تعديل · حذف · إيقاف — فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
+    {% if is_founder or 'settings' in manager_permissions %}<a href='{{url_for('empire.admin_settings')}}'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'audit' in manager_permissions %}<a href='{{url_for('empire.admin_audit')}}'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder %}<a href='{{url_for('empire.admin_managers')}}'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small><span class='admin-open'>فتح القسم ←</span></a><a href='{{url_for('empire.admin_code_inventory')}}'><b>مخزون أكواد الألعاب</b><small>إضافة الأكواد ومتابعة المتاح والمستخدم</small><span class='admin-open'>فتح القسم ←</span></a><a href='{{url_for('empire.admin_ice_codes')}}'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small><span class='admin-open'>فتح القسم ←</span></a><a href='{{url_for('empire.admin_identity')}}'><b>توثيق حسابات العملاء</b><small>مراجعة البريد والهاتف واعتماد العلامة ✓</small><span class='admin-open'>فتح القسم ←</span></a><a href='{{url_for('founder_receiving_accounts')}}'><b>🏦 حسابات الدفع والتحويل الخارجي</b><small>إضافة · تعديل · حذف · إيقاف — فوري · بنكك · برافو</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
       is_founder=is_founder,manager_permissions=manager_permissions)
     dashboard_title="لوحة المدير العام" if user()["role"]=="manager" else "لوحة المالك"
     return page(dashboard_title,body,manager_permissions=manager_permissions,is_founder=is_founder)
