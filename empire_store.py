@@ -1872,9 +1872,10 @@ def admin_topups():
         if action!="fulfill":
             abort(400,"إجراء غير معروف")
         code=request.form.get("delivery_code","").strip()
+        inventory_id=(request.form.get("inventory_id") or "").strip()
         note=request.form.get("note","").strip()[:300]
-        if len(code)<4 or len(code)>300:
-            flash("كود الباقة يجب أن يكون بين 4 و300 حرف.")
+        if not inventory_id and not 4<=len(code)<=300:
+            flash("اختر كوداً من المخزون أو أدخل كوداً يدوياً صحيحاً.")
             return redirect(url_for("empire.admin_topups"))
         d=db(); d.execute("BEGIN IMMEDIATE")
         try:
@@ -1884,6 +1885,20 @@ def admin_topups():
             if order["cost_sdg"]<=0 or order["cost_sdg"]>order["amount_sdg"]:
                 raise ValueError("راجع تكلفة المورد وسعر البيع قبل تسليم الكود.")
             margin=order["amount_sdg"]-order["cost_sdg"]
+            source_note="manual owner fulfillment"
+            if inventory_id:
+                if not inventory_id.isdigit():
+                    raise ValueError("اختيار كود المخزون غير صالح.")
+                stock=d.execute("SELECT * FROM es_game_code_inventory WHERE id=? AND product_id=? AND status='AVAILABLE'",
+                                (int(inventory_id),order["product_id"])).fetchone()
+                if not stock:
+                    raise ValueError("الكود المختار لم يعد متاحاً لهذه الباقة.")
+                code=encryption().decrypt(stock["code_cipher"].encode("utf-8")).decode("utf-8")
+                consumed=d.execute("UPDATE es_game_code_inventory SET status='USED',used_order_ref=?,used_at=? WHERE id=? AND status='AVAILABLE'",
+                                   (r,now(),stock["id"])).rowcount
+                if consumed!=1:
+                    raise ValueError("تم استهلاك الكود في طلب آخر؛ اختر كوداً جديداً.")
+                source_note="inventory_code_id="+str(stock["id"])
             cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
             post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("platform:revenue","SDG",margin)],
                  "تسوية كود لعبة وتسليم العميل")
@@ -1892,7 +1907,7 @@ def admin_topups():
             if changed!=1: raise ValueError("تغيرت حالة الطلب أثناء المعالجة.")
             d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
                       (order["buyer"],"كود لعبتك جاهز","تم تجهيز كود باقتك. افتح طلباتي لعرض الكود بأمان.",r,now()))
-            audit(user()["username"],"TOPUP_CODE_DELIVERED","topup",r,"manual owner fulfillment")
+            audit(user()["username"],"TOPUP_CODE_DELIVERED","topup",r,source_note)
             d.commit()
             flash("تم تسليم الكود للعميل وإغلاق الطلب بنجاح.")
         except Exception as exc:
@@ -1906,13 +1921,18 @@ def admin_topups():
     params=()
     if status!="ALL": query+=" WHERE t.status=?"; params=(status,)
     query+=" ORDER BY t.id DESC LIMIT 300"
-    rows=db().execute(query,params).fetchall()
+    raw_rows=db().execute(query,params).fetchall()
+    rows=[]
+    for row in raw_rows:
+        item=dict(row)
+        item["stock"]=db().execute("SELECT id,code_tail FROM es_game_code_inventory WHERE product_id=? AND status='AVAILABLE' ORDER BY id LIMIT 100",(item["product_id"],)).fetchall()
+        rows.append(item)
     labels={"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — جاهز لتسليم الكود","ASSIGNED":"استلمه وكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"تم تسليم الكود","REJECTED":"مرفوض","REFUNDED":"مسترد"}
     body=render_template_string("""<section class='panel'><span class='tag'>مركز تنفيذ الأكواد</span><h1>طلبات أكواد الألعاب</h1><p>لا يُطلب آيدي لاعب. بعد التحقق من الدفع، أدخل كود الباقة ليظهر للعميل داخل «طلباتي» بشكل آمن.</p>
       <div class='admin-filters'><a href='/store/admin/topups'>الكل</a>{% for k,v in labels.items() %}<a href='/store/admin/topups?status={{k}}'>{{v}}</a>{% endfor %}</div>
       {% for x in rows %}<article class='panel order-card'><div class='order-head'><b dir='ltr'>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
       <div class='order-grid'><div><small>العميل</small><b>{{x['buyer']}}</b></div><div><small>اللعبة / الباقة</small><b>{{x['game']}} · {{x['title']}}</b></div><div><small>المبلغ</small><b>{{'{:,}'.format(x['amount_sdg'])}} SDG</b></div><div><small>الوكيل</small><b>{{x['agent'] or 'تنفيذ المالك'}}</b></div><div><small>تاريخ الطلب</small><b>{{x['created_at']}}</b></div><div><small>آخر تحديث</small><b>{{x['updated_at']}}</b></div></div>
-      {% if x['status']=='PAID' and not x['agent'] %}<form method='post' class='fulfill-code-form'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='fulfill'><input type='hidden' name='reference' value='{{x['reference']}}'><label>كود الباقة</label><input name='delivery_code' maxlength='300' autocomplete='off' required placeholder='أدخل كود الشحن كما استلمته من المورد'><label>ملاحظة داخلية (اختياري)</label><input name='note' maxlength='300' placeholder='مرجع المورد أو ملاحظة تنفيذ'><button>تسليم الكود للعميل</button></form>{% endif %}
+      {% if x['status']=='PAID' and not x['agent'] %}<form method='post' class='fulfill-code-form'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='fulfill'><input type='hidden' name='reference' value='{{x['reference']}}'><label>كود جاهز من المخزون (اختياري)</label><select name='inventory_id'><option value=''>إدخال كود يدوي بدلاً منه</option>{% for code in x['stock'] %}<option value='{{code['id']}}'>كود مخزون ••••{{code['code_tail']}}</option>{% endfor %}</select><label>كود يدوي عند عدم استخدام المخزون</label><input name='delivery_code' maxlength='300' autocomplete='off' placeholder='أدخل كود الشحن من المورد'><label>ملاحظة داخلية (اختياري)</label><input name='note' maxlength='300' placeholder='مرجع المورد أو ملاحظة تنفيذ'><button>تسليم الكود للعميل</button></form>{% endif %}
       {% if x['note'] %}<p class='muted'>{{x['note']}}</p>{% endif %}</article>
       {% else %}<div class='empty-state'>لا توجد طلبات في هذا القسم.</div>{% endfor %}</section>""",rows=rows,labels=labels,csrf=session.get("csrf",""))
     return page("طلبات أكواد الألعاب",body)
