@@ -4965,7 +4965,7 @@ input{width:100%;min-height:43px;padding:10px 12px;border:1px solid #d8e4ec;bord
 {% else %}<div class="empty">لا يوجد سجل بعد.</div>{% endfor %}</section></main></body></html>
 """
 
-TRANSFER_INDEX_HTML = "
+TRANSFER_INDEX_HTML = """
 <!doctype html>
 <html lang="ar" dir="rtl">
 
