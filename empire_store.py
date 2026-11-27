@@ -114,6 +114,13 @@ def init_db():
         CHECK(status IN ('OPEN','RESOLVED_BUYER','RESOLVED_SELLER')),
       resolution TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, resolved_at TEXT);
     """)
+    tables={r["name"] for r in db().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "users" in tables:
+        user_cols={r["name"] for r in db().execute("PRAGMA table_info(users)").fetchall()}
+        if "email" not in user_cols:
+            db().execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+        if "phone" not in user_cols:
+            db().execute("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
     payment_cols={r["name"] for r in db().execute("PRAGMA table_info(es_payments)").fetchall()}
     if "quantity_epc" not in payment_cols:
         db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
@@ -153,6 +160,7 @@ def init_db():
     for k,v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
     seed_owner_assets()
+    seed_game_products()
 
 def user():
     username=session.get("username")
@@ -243,6 +251,24 @@ def seed_owner_assets():
         db().execute("INSERT INTO es_settings(key,value) VALUES('owner_urc_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
     return True
 
+def seed_game_products():
+    """Install requested packages once; keep them hidden until priced and activated by the founder."""
+    catalogue = {
+      "PUBG Mobile": ["10 شدات","60 شدة","325 شدة","385 شدة","660 شدة","720 شدة","985 شدة","1800 شدة","3850 شدة","8100 شدة","16200 شدة","16800 شدة","24300 شدة","32400 شدة"],
+      "Free Fire": ["110 جوهرة","231 جوهرة","341 جوهرة","583 جوهرة","650 جوهرة","1180 جوهرة","2420 جوهرة","4500 جوهرة"],
+      "Mobile Legends": ["278 ماسة","571 ماسة","1192 ماسة","Starlight Member Plus"]
+    }
+    for game, titles in catalogue.items():
+        for title in titles:
+            exists=db().execute("SELECT 1 FROM es_products WHERE game=? AND title=? LIMIT 1",(game,title)).fetchone()
+            if exists:
+                continue
+            code="CAT-"+secrets.token_hex(8).upper()
+            db().execute("""INSERT INTO es_products
+              (code,game,title,instructions,price_sdg,cost_sdg,active,created_at)
+              VALUES(?,?,?,'أدخل معرف اللاعب بدقة.',1,0,0,?)""",
+              (code,game,title,now()))
+
 def assert_epc_capacity(quantity):
     maximum=int(setting("epc_max_supply","15000000"))
     if maximum<=0: raise ValueError("يجب على المالك تحديد الحد الأقصى لإصدار URC قبل البيع")
@@ -258,14 +284,14 @@ def encryption():
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
-    <meta name='theme-color' content='#101326'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
+    <meta name='theme-color' content='#f4f8fb'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
     <meta name='description' content='الإمبراطورية إستوري — وجهتك لشحن الألعاب والتجارة الرقمية.'>
     <title>{{title}} | الإمبراطورية إستوري</title>
     
     <style>
 :root{color-scheme:light;--ink:#18364b;--muted:#718496;--blue:#0876b9;--green:#16834f;--line:#e3ebf1}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html{background:#f4f8fb;scroll-behavior:auto}
-body{margin:0;min-height:100vh;padding-bottom:calc(104px + env(safe-area-inset-bottom,0px));background:#f4f8fb!important;color:var(--ink)!important;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
+body{margin:0;min-height:100vh;padding-bottom:calc(104px + var(--native-bottom-inset,0px));background:#f4f8fb!important;color:var(--ink)!important;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
 a{color:var(--blue);text-decoration:none}header.app-header{position:sticky;top:0;z-index:50;height:66px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 13px!important;background:rgba(255,255,255,.97)!important;border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
 .header-brand{flex:1;min-width:0;text-align:center}.header-brand .brand{font-size:17px!important;font-weight:950;color:#153d5b!important;white-space:nowrap}.header-brand .brand:before{display:none!important}.header-brand small{display:block;margin:0!important;font-size:9px!important;color:#7890a1!important}
 .header-menu,.header-alert,.header-avatar{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border-radius:14px;background:#edf5fa;color:#075b91!important;font-size:0;font-weight:900}.header-menu svg,.header-alert svg,.header-avatar svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.header-alert{background:#fff0ef;color:#c34245!important}.header-avatar{background:#eaf6ef;color:#16834f!important}
@@ -291,19 +317,20 @@ input,textarea,select{display:block;width:100%;min-height:46px;margin:7px 0 14px
 .banner-copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:4px}.banner-copy span{color:#123f71;font-size:16px;font-weight:950}.banner-copy strong{color:#39718b;font-size:10px}
 .banner-flag{position:relative;display:flex;width:48px;height:32px;flex-direction:column;overflow:hidden;border-radius:4px;transform:rotate(-7deg);box-shadow:0 4px 10px rgba(20,45,65,.12)}.banner-flag i{flex:1}.banner-flag i:nth-child(1){background:#d92732}.banner-flag i:nth-child(2){background:#fff}.banner-flag i:nth-child(3){background:#111}.banner-flag b{position:absolute;left:0;top:0;width:0;height:0;border-top:16px solid transparent;border-bottom:16px solid transparent;border-left:22px solid #16864b}.banner-crown{position:absolute;left:28%;bottom:-20px;color:rgba(8,103,161,.07);font-size:80px;pointer-events:none}
 .recent-panel{margin-top:12px!important}.view-all{font-size:11px;font-weight:850;white-space:nowrap}.transaction-row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #edf1f5}.transaction-row:last-child{border-bottom:0}.transaction-symbol{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:50%;background:#e6f6ed;color:#13864e;font-size:21px;font-weight:900}.transaction-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.transaction-info b{overflow:hidden;color:#1b3e56;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.transaction-info small{font-size:9px}.transaction-value{font-size:10px;white-space:nowrap}.transaction-value.in{color:#13864e}.transaction-value.out{color:#c04b4b}
-.app-bottom{position:fixed;z-index:1000;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:9px 8px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:#fff;box-shadow:0 -7px 24px rgba(20,60,85,.09);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
+.app-bottom{position:fixed;z-index:1000;right:0;bottom:var(--native-bottom-inset,0px);left:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:9px 8px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:#fff;box-shadow:0 -7px 24px rgba(20,60,85,.09);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
 .app-bottom a{display:flex;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px 1px;color:#718496!important;font-size:10px;font-weight:850;line-height:1.1}.app-bottom a .ico{display:grid;place-items:center;width:26px;height:25px;font-size:0;line-height:1}.app-bottom a .ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.app-bottom a.active{color:#0875b9!important}.app-bottom a.active .ico{background:#e9f4fb;border-radius:9px;width:34px;height:29px}.app-bottom a:focus-visible{outline:2px solid #0875b9;outline-offset:2px;border-radius:10px}
 .empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
 footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;margin:18px auto!important;border-top:5px solid #16844f!important;background:#fff!important}.receipt-flag{display:flex;height:7px;margin-bottom:14px;overflow:hidden;border-radius:20px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
+.game-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}.game-catalog-card{display:flex;min-height:116px;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:14px 8px;border:1px solid var(--line);border-radius:18px;background:#f8fbfd;color:#18364b!important;text-align:center}.game-catalog-card .game-catalog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#e8f2fa;color:#0875b9}.game-catalog-card svg{width:27px;height:27px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.game-catalog-card small{font-size:10px}.game-catalog-card.pubg .game-catalog-icon{background:#fff1db;color:#a66b17}.game-catalog-card.ml .game-catalog-icon{background:#e9efff;color:#3d62b4}.game-catalog-card.freefire .game-catalog-icon{background:#fff0e8;color:#d65b24}.game-catalog-card.fortnite .game-catalog-icon{background:#e9f5ef;color:#188253}.profile-hero{display:flex;align-items:center;gap:10px}.profile-hero h1{margin:0}.profile-hero p{margin:0}.profile-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#eaf4ef;font-size:26px}.profile-info{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.profile-info span{color:var(--muted)}.profile-setting{display:grid;grid-template-columns:38px 1fr auto 16px;align-items:center;gap:8px;padding:13px 0;color:var(--ink)!important}.profile-setting span{font-size:22px}.profile-setting small{font-size:11px}.profile-setting strong{font-size:22px;color:var(--muted)}
 .table-wrap{max-width:100%;overflow-x:auto}
 @media(min-width:420px){main{padding-right:16px!important;padding-left:16px!important}.service-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.service-grid .service-card{min-height:112px!important}.service-grid .service-icon{width:49px!important;height:49px!important}}
 @media(min-width:620px){main{max-width:760px!important}.service-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.app-bottom{right:auto;left:50%;width:min(100%,760px);transform:translateX(-50%);border:1px solid #dce8f1;border-bottom:0;border-radius:17px 17px 0 0}}
 @media(max-width:360px){main{padding:0 10px!important}.wallet-top{grid-template-columns:44px minmax(0,1fr) 38px;gap:8px;padding:20px 11px 30px!important}.wallet-card-icon{width:44px;height:44px}.wallet-top .amount{font-size:22px!important}.service-grid{gap:8px}.service-grid .service-card{min-height:108px!important}.service-grid .service-icon{width:46px!important;height:46px!important}.app-bottom{gap:0;padding-left:3px;padding-right:3px}.app-bottom a{font-size:9px;min-height:52px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 @media print{body{background:#fff!important;padding:0}.app-header,.app-bottom,.nav,footer{display:none!important}.panel{box-shadow:none!important}}
-</style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/account_details' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
+</style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol><symbol id='i-pubg' viewBox='0 0 24 24'><path d='M4 5h16v14H4zM8 9h8M8 12h5M8 15h8'/><path d='M2 8V4h4M18 4h4v4M2 16v4h4M18 20h4v-4'/></symbol><symbol id='i-freefire' viewBox='0 0 24 24'><path d='M13 2c1 5-4 6-3 11 1-2 3-3 4-5 4 4 5 7 3 11a7 7 0 0 1-13-3c0-4 3-7 5-9 0 4 1 5 2 6 0-5 1-8 2-11z'/></symbol><symbol id='i-ml' viewBox='0 0 24 24'><path d='M3 18 8 6l4 7 4-7 5 12M6 18h12'/><path d='m8 6 4 2 4-2'/></symbol><symbol id='i-fortnite' viewBox='0 0 24 24'><path d='M5 3h14v18H5zM9 7h7M9 11h5M9 15h7'/><path d='M8 3v18'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/store/profile' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>عملاتي</a><a href='/account_details'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>عملاتي</a><a href='/store/profile'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
 (function(){
   const balance=document.getElementById('sdgBalance'),toggle=document.getElementById('balanceToggle');
   if(balance&&toggle){
@@ -317,10 +344,43 @@ footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;ma
 })();
 </script></body></html>"""
     current=user()
+    if current and "csrf" not in session:
+        session["csrf"]=secrets.token_urlsafe(32)
     ctx.setdefault("is_founder", bool(current and current["role"]=="founder"))
     ctx.setdefault("wallet_sdg", balance(current["username"],"SDG") if current else 0)
     ctx.setdefault("wallet_urc", balance(current["username"],"URC") if current else 0)
     return render_template_string(shell,title=title,body=body,**ctx)
+
+@empire_bp.route("/profile",methods=["GET","POST"])
+@login_required
+def profile():
+    u=user()
+    row=db().execute("SELECT username,full_name,account_number,role,active,email,phone FROM users WHERE username=?",(u["username"],)).fetchone()
+    if request.method=="POST":
+        csrf()
+        email=(request.form.get("email") or "").strip().lower()
+        phone=(request.form.get("phone") or "").strip()
+        if len(email)>254 or (email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",email)): abort(400,"البريد الإلكتروني غير صالح")
+        if len(phone)>30 or (phone and not re.fullmatch(r"[+0-9 ()-]{6,30}",phone)): abort(400,"رقم الهاتف غير صالح")
+        if email and db().execute("SELECT 1 FROM users WHERE lower(email)=? AND username<>?",(email,u["username"])).fetchone(): abort(409,"البريد الإلكتروني مرتبط بحساب آخر")
+        db().execute("UPDATE users SET email=?,phone=? WHERE username=?",(email,phone,u["username"]))
+        audit(u["username"],"PROFILE_CONTACT_UPDATED","profile",u["username"])
+        flash("تم حفظ معلومات الاتصال.")
+        return redirect(url_for("empire.profile"))
+    body=render_template_string("""<section class='panel profile-hero'><span class='profile-mark'>🇸🇩</span><div><h1>الملف الشخصي</h1><p>إدارة معلومات حسابك وإعداداتك.</p></div></section>
+    <section class='panel'><h2>الضبط</h2><a class='profile-setting' href='/store/notifications'><span>🔔</span><b>الإشعارات</b><small>عرض تنبيهات حسابك</small><strong>‹</strong></a></section>
+    <section class='panel'><h2>معلومات الحساب</h2><div class='profile-info'><span>الاسم</span><b>{{row['full_name']}}</b></div><div class='profile-info'><span>رقم الحساب</span><b dir='ltr'>{{row['account_number']}}</b></div><div class='profile-info'><span>الحالة</span><b><span class='tag'>{{'نشط' if row['active'] else 'موقوف'}}</span></b></div>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>البريد الإلكتروني المرتبط</label><input type='email' name='email' maxlength='254' value='{{row['email']}}' placeholder='name@example.com'><label>رقم الهاتف</label><input type='tel' name='phone' maxlength='30' value='{{row['phone']}}' placeholder='+249...'><button>حفظ معلومات الحساب</button></form></section>""",row=row,csrf=session.get("csrf",""))
+    return page("الملف الشخصي",body)
+
+@empire_bp.route("/notifications")
+@login_required
+def store_notifications():
+    u=user()
+    rows=db().execute("SELECT * FROM notifications WHERE username=? ORDER BY id DESC LIMIT 100",(u["username"],)).fetchall()
+    db().execute("UPDATE notifications SET is_read=1 WHERE username=?",(u["username"],))
+    body=render_template_string("""<section class='panel'><h1>الإشعارات</h1>{% for n in rows %}<article class='panel'><b>{{n['title']}}</b><p>{{n['message']}}</p><small>{{n['created_at']}}</small>{% if n['reference'] %}<p><small>المرجع: {{n['reference']}}</small></p>{% endif %}</article>{% else %}<div class='empty-state'>لا توجد إشعارات حالياً.</div>{% endfor %}</section>""",rows=rows)
+    return page("الإشعارات",body)
 
 @empire_bp.get("/healthz")
 def healthz():
@@ -338,7 +398,7 @@ def manifest():
 
 @empire_bp.get("/icon.svg")
 def app_icon():
-    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='#090909'/><path d='M256 68l44 70 82-22-12 84 72 45-72 45 12 84-82-22-44 70-44-70-82 22 12-84-72-45 72-45-12-84 82 22z' fill='none' stroke='#d8b45e' stroke-width='16' stroke-linejoin='round'/><path d='M160 310h192l-18 54H178z' fill='#d8b45e'/><path d='M180 284l-16-92 66 52 26-112 26 112 66-52-16 92z' fill='#d8b45e'/></svg>"""
+    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='#0b263d'/><circle cx='256' cy='256' r='206' fill='none' stroke='#d9b45b' stroke-width='18'/><rect x='106' y='155' width='300' height='202' rx='12' fill='#fff'/><path d='M106 167q0-12 12-12h276q12 0 12 12v55H106z' fill='#d92736'/><path d='M106 290h300v55q0 12-12 12H118q-12 0-12-12z' fill='#111820'/><path d='M106 155l135 101-135 101z' fill='#168447'/><path d='M256 203l15 24 29-8-4 30 25 16-25 16 4 30-29-8-15 24-15-24-29 8 4-30-25-16 25-16-4-30 29 8z' fill='#d9b45b'/></svg>"""
     return svg,200,{"Content-Type":"image/svg+xml"}
 
 @empire_bp.get("/sw.js")
@@ -362,7 +422,7 @@ def home():
     <a class="service-card" href="/store/transfer-epc"><i class="service-icon transfer"><svg><use href="#i-transfer"/></svg></i><strong>التحويلات</strong></a>
     <a class="service-card" href="/store/wallet"><i class="service-icon coins"><svg><use href="#i-coins"/></svg></i><strong>عملاتي</strong></a>
     <a class="service-card" href="/account/funding"><i class="service-icon funding"><svg><use href="#i-arrow-down"/></svg></i><strong>تغذية حسابي</strong></a>
-    <a class="service-card" href="/account_details"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
+    <a class="service-card" href="/store/profile"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
     <a class="service-card" href="/store/topups"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>الألعاب</strong></a>
     <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>صرف العملات</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
@@ -438,11 +498,25 @@ def withdrawal():
 @empire_bp.get("/topups")
 @login_required
 def topups():
-    products=db().execute("SELECT * FROM es_products WHERE active=1 ORDER BY game,title").fetchall()
-    body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>طلبات الشحن متاحة فقط للمنتجات التي يضيفها المالك، والتنفيذ يتطلب مورداً أو وكيلاً معتمداً.</p></section>
+    games=[
+      ("PUBG Mobile","ببجي موبايل","i-pubg","/store/topups?game=PUBG%20Mobile","pubg"),
+      ("Mobile Legends","موبايل ليجند","i-ml","/store/topups?game=Mobile%20Legends","ml"),
+      ("Free Fire","فري فاير","i-freefire","/store/topups?game=Free%20Fire","freefire"),
+      ("Fortnite","فورتنايت","i-fortnite","/store/topups?game=Fortnite","fortnite")
+    ]
+    selected=request.args.get("game","").strip()
+    allowed={x[0] for x in games}
+    if selected and selected not in allowed: abort(404)
+    if selected:
+        products=db().execute("SELECT * FROM es_products WHERE active=1 AND price_sdg>1 AND game=? ORDER BY id",(selected,)).fetchall()
+    else:
+        products=db().execute("SELECT * FROM es_products WHERE active=1 AND price_sdg>1 ORDER BY game,id").fetchall()
+    body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>اختر اللعبة لعرض باقات الشحن المتاحة. الأسعار يحددها المالك من لوحة التحكم.</p>
+    <div class='game-catalog-grid'>{% for g in games %}<a class='game-catalog-card {{g[4]}}' href='{{g[3]}}'><span class='game-catalog-icon'><svg><use href='#{{g[2]}}'/></svg></span><b>{{g[1]}}</b><small>{{g[0]}}</small></a>{% endfor %}</div>
+    {% if selected %}<h2>باقات {{selected}}</h2>{% endif %}<a class='btn secondary' href='/store/topups'>كل الألعاب</a></section>
     <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p><b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
     <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'>
-    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form></article>{% else %}<div class='empty-state'>نعمل على تجهيز باقات الشحن. تفقد الصفحة قريباً.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""))
+    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form></article>{% else %}<div class='empty-state'>لا توجد باقات مفعّلة حالياً لهذه اللعبة. سيضيف المالك الأسعار ثم يفعّلها.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
     return page("شحن الألعاب",body)
 
 @empire_bp.post("/topups/new")
@@ -1010,23 +1084,37 @@ def admin_listings():
 def admin_products():
     if request.method=="POST":
         csrf()
-        if request.form.get("action")=="toggle":
+        action=request.form.get("action","")
+        if action=="toggle":
             pid=request.form.get("product_id","")
             row=db().execute("SELECT * FROM es_products WHERE id=?",(pid,)).fetchone()
             if not row: abort(404)
-            db().execute("UPDATE es_products SET active=? WHERE id=?",(0 if row["active"] else 1,pid))
+            if row["price_sdg"]<=1: flash("حدد سعر البيع أولاً قبل تفعيل الباقة.")
+            else: db().execute("UPDATE es_products SET active=? WHERE id=?",(0 if row["active"] else 1,pid))
             audit(user()["username"],"PRODUCT_TOGGLED","product",pid)
+        elif action=="update":
+            pid=request.form.get("product_id","")
+            row=db().execute("SELECT * FROM es_products WHERE id=?",(pid,)).fetchone()
+            if not row: abort(404)
+            price=money_int(request.form.get("price_sdg"))
+            raw_cost=(request.form.get("cost_sdg") or "0").strip()
+            if not re.fullmatch(r"(?:0|[1-9][0-9]{0,11})",raw_cost): abort(400)
+            cost=int(raw_cost)
+            if cost>price: abort(400,"تكلفة المورد لا يمكن أن تتجاوز سعر البيع")
+            db().execute("UPDATE es_products SET price_sdg=?,cost_sdg=? WHERE id=?",(price,cost,pid))
+            audit(user()["username"],"PRODUCT_PRICE_UPDATED","product",pid,"price="+str(price)+";cost="+str(cost))
         else:
             game=request.form.get("game","").strip(); title=request.form.get("title","").strip()
-            price=money_int(request.form.get("price_sdg")); cost=money_int(request.form.get("cost_sdg")); code=ref()
-            if not game or not title or len(title)>120 or cost>price: abort(400)
+            price=money_int(request.form.get("price_sdg")); raw_cost=(request.form.get("cost_sdg") or "0").strip()
+            if not re.fullmatch(r"(?:0|[1-9][0-9]{0,11})",raw_cost): abort(400)
+            cost=int(raw_cost); code=ref()
+            if game not in ("PUBG Mobile","Free Fire","Mobile Legends","Fortnite") or not title or len(title)>120 or cost>price: abort(400)
             db().execute("INSERT INTO es_products(code,game,title,price_sdg,cost_sdg,created_at) VALUES(?,?,?,?,?,?)",(code,game,title,price,cost,now()))
             audit(user()["username"],"PRODUCT_CREATED","product",code)
-    rows=db().execute("SELECT * FROM es_products ORDER BY id DESC").fetchall()
-    body=render_template_string("""<section class='panel'><h1>باقات شحن الألعاب</h1><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
-    <input name='game' placeholder='اللعبة' required><input name='title' placeholder='اسم الباقة' required><input name='price_sdg' type='number' min='1' placeholder='سعر البيع SDG' required><input name='cost_sdg' type='number' min='0' placeholder='تكلفة المورد SDG' required><button>إضافة باقة</button></form>
-    {% for x in rows %}<article class='panel'><p>{{x['game']}} · {{x['title']}} · البيع {{x['price_sdg']}} SDG · التكلفة {{x['cost_sdg']}} SDG · {{'فعال' if x['active'] else 'متوقف'}}</p>
-    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'><button name='action' value='toggle'>{{'إيقاف' if x['active'] else 'تفعيل'}}</button></form></article>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
+    rows=db().execute("SELECT * FROM es_products ORDER BY game,id").fetchall()
+    body=render_template_string("""<section class='panel'><h1>إدارة أسعار شحن الألعاب</h1><p>تظهر الباقات للعملاء بعد تحديد السعر وتفعيلها. أي تعديل محفوظ هنا ينعكس مباشرة في صفحة اللعبة.</p>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>اللعبة</label><select name='game' required><option>PUBG Mobile</option><option>Free Fire</option><option>Mobile Legends</option><option>Fortnite</option></select><label>اسم الباقة</label><input name='title' placeholder='مثال: باقة جديدة' required><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' required><label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' value='0' required><button>إضافة باقة</button></form>
+    {% for x in rows %}<article class='panel'><b>{{x['game']}} · {{x['title']}}</b><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' value='{{x['price_sdg']}}' required><label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' value='{{x['cost_sdg']}}' required><button name='action' value='update'>حفظ السعر والتكلفة</button><button class='btn secondary' name='action' value='toggle'>{{'إيقاف الباقة' if x['active'] else 'تفعيل الباقة'}}</button></form><small>{{'فعالة' if x['active'] else 'متوقفة'}}</small></article>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("باقات الشحن",body)
 
 @empire_bp.route("/admin/payments",methods=["GET","POST"])
