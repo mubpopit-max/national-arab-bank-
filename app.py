@@ -4491,7 +4491,8 @@ body {
 <div class="menu-icons">
 
 {% if user["role"] == "founder" %}
-<a href="/founder/panel" title="لوحة المؤسس" style="font-size:16px;background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:4px;">👑 المؤسس</a>
+<a href="/founder/panel" title="مراجعة تغذية الحسابات" style="font-size:15px;background:rgba(255,255,255,0.2);padding:6px 9px;border-radius:8px;">👑 المالية</a>
+<a href="/store/admin" title="لوحة إدارة المتجر والصرف" style="font-size:15px;background:rgba(255,255,255,0.2);padding:6px 9px;border-radius:8px;">🏛 لوحة المالك</a>
 {% endif %}
 
 <a href="/notifications">
