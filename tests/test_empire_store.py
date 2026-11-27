@@ -1,7 +1,7 @@
 import unittest
 
 import app as app_module
-from empire_store import db, post, balance, assert_epc_capacity
+from empire_store import db, post, balance, assert_epc_capacity, fx_reserve_balance
 
 
 class EmpireLedgerTests(unittest.TestCase):
@@ -52,6 +52,26 @@ class EmpireLedgerTests(unittest.TestCase):
             ], "must fail")
         d.rollback()
         self.assertEqual(balance("founder", "SDG"), 0)
+
+    def test_exchange_reserve_is_separate_from_protection_fund(self):
+        d = db()
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-PROTECTION-FEE", [
+            ("protection:fund", "SDG", 1000),
+            ("external:fees", "SDG", -1000),
+        ], "test protection fee")
+        post("TEST-FX-RESERVE", [
+            ("fx:reserve", "SDG", 500),
+            ("external:cash_reserve", "SDG", -500),
+        ], "test fx reserve")
+        d.commit()
+
+        self.assertEqual(fx_reserve_balance("SDG"), 500)
+        protection = d.execute(
+            "SELECT COALESCE(SUM(delta),0) n FROM es_ledger "
+            "WHERE account='protection:fund' AND currency='SDG'"
+        ).fetchone()["n"]
+        self.assertEqual(protection, 1000)
 
     def test_urc_supply_cap_counts_issued_units(self):
         d = db()

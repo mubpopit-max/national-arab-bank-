@@ -196,8 +196,12 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id)")
     for k,v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
-    # Consolidate historical revenue and exchange reserves into the protected fund.
-    conn.execute("UPDATE es_ledger SET account='protection:fund' WHERE account IN ('platform:revenue','platform:fx_pool')")
+    # Keep exchange liquidity separate from platform revenue/protected funds.
+    # Legacy exchange-pool entries are migrated only when they still have their
+    # original account name. Older deployments may already have merged them;
+    # those historical amounts are deliberately not guessed or reclassified.
+    conn.execute("UPDATE es_ledger SET account='protection:fund' WHERE account='platform:revenue'")
+    conn.execute("UPDATE es_ledger SET account='fx:reserve' WHERE account='platform:fx_pool'")
     # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
     for key in ("fx_manual_rate","fx_market_rate"):
         current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
@@ -327,6 +331,18 @@ def post(reference, entries, memo):
 def balance(username,currency):
     row=db().execute("SELECT balance FROM es_wallets WHERE username=? AND currency=?",(username,currency)).fetchone()
     return row["balance"] if row else 0
+
+def fx_reserve_balance(currency):
+    if currency not in ("SDG","URC"):
+        raise ValueError("عملة احتياطي الصرف غير مدعومة")
+    row=db().execute(
+        "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='fx:reserve' AND currency=?",
+        (currency,)
+    ).fetchone()
+    amount=int(row["n"])
+    if amount < 0:
+        raise ValueError("رصيد احتياطي الصرف غير متوازن؛ أوقف النظام وراجع القيود.")
+    return amount
 
 def seed_owner_assets():
     """Create the founder's opening URC allocation once; never alter bank account IDs."""
@@ -1707,11 +1723,12 @@ def exchange_quote():
     rate=(base*(10000-sell))//10000 if direction=="URC_TO_SDG" else (base*(10000+buy)+9999)//10000
     source="URC" if direction=="URC_TO_SDG" else "SDG"
     target="SDG" if source=="URC" else "URC"
-    reserve_raw=db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(target,)).fetchone()["n"]
-    reserve=max(0,int(reserve_raw))
+    reserve=fx_reserve_balance(target)
     wallet=max(0,int(balance(user()["username"],source)))
     minimum=1 if source=="URC" else max(1,rate)
     reserve_limit=reserve//rate if source=="URC" and rate>0 else (max(0,(reserve+1)*rate-1) if rate>0 else 0)
+    if source=="URC" and rate>0:
+        reserve_limit=min(reserve_limit,9_000_000_000_000_000_000//rate)
     lo,hi=0,wallet
     while lo<hi:
         mid=(lo+hi+1)//2
@@ -1760,11 +1777,7 @@ def exchange():
         raise ValueError("اتجاه التحويل غير صالح")
 
     def fund_balance(currency):
-        row=db().execute(
-            "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",
-            (currency,)
-        ).fetchone()
-        return max(0,int(row["n"]))
+        return fx_reserve_balance(currency)
 
     def affordable_limit(wallet_amount):
         lo,hi=0,max(0,int(wallet_amount))
@@ -1836,13 +1849,13 @@ def exchange():
                 raise ValueError("قيمة التحويل غير صالحة وفق سعر الصرف الحالي.")
             fee=platform_fee(amount)
             if direction=="URC_TO_SDG":
-                post(r,[("user:"+u["username"],"URC",-amount),("protection:fund","URC",amount),
-                        ("protection:fund","SDG",-result),("user:"+u["username"],"SDG",result),
+                post(r,[("user:"+u["username"],"URC",-amount),("fx:reserve","URC",amount),
+                        ("fx:reserve","SDG",-result),("user:"+u["username"],"SDG",result),
                         ("user:"+u["username"],"URC",-fee),("protection:fund","URC",fee)],
                      "تحويل URC إلى SDG · عمولة التطبيق 3%")
             else:
-                post(r,[("user:"+u["username"],"SDG",-amount),("protection:fund","SDG",amount),
-                        ("protection:fund","URC",-result),("user:"+u["username"],"URC",result),
+                post(r,[("user:"+u["username"],"SDG",-amount),("fx:reserve","SDG",amount),
+                        ("fx:reserve","URC",-result),("user:"+u["username"],"URC",result),
                         ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],
                      "تحويل SDG إلى URC · عمولة التطبيق 3%")
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate)+";source_amount="+str(amount)+";target_amount="+str(result)+";fee="+str(fee))
@@ -1962,7 +1975,7 @@ def admin_exchange():
             if currency not in ("URC","SDG"): abort(400)
             d=db(); d.execute("BEGIN IMMEDIATE")
             try:
-                post(ref(),[("user:"+u["username"],currency,-amount),("protection:fund",currency,amount)],"تمويل احتياطي الصرف من محفظة المالك")
+                post(ref(),[("user:"+u["username"],currency,-amount),("fx:reserve",currency,amount)],"تمويل احتياطي الصرف من محفظة المالك")
                 audit(u["username"],"FX_LIQUIDITY_ADDED","fx_pool",currency+" "+str(amount))
                 d.commit()
             except Exception:
@@ -1979,7 +1992,7 @@ def admin_exchange():
             d=db(); d.execute("BEGIN IMMEDIATE")
             try:
                 ledger_ref="FXEXT"+hashlib.sha256(external_ref.encode("utf-8")).hexdigest()[:24].upper()
-                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("protection:fund","SDG",amount)],
+                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("fx:reserve","SDG",amount)],
                      "إيداع احتياطي SDG خارجي مؤكد من المالك")
                 audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",
                       str(amount)+" SDG; external_reference="+external_ref)
@@ -2000,13 +2013,13 @@ def admin_exchange():
         audit(u["username"],"FX_RATES_UPDATED","settings",mode)
         flash("تم حفظ إعدادات سعر الصرف.")
     is_founder=u["role"]=="founder"
-    pools={c:int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(c,)).fetchone()["n"]) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
+    pools={c:fx_reserve_balance(c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
     owner_row=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
     owner_username=owner_row["username"] if owner_row else u["username"]
     owner={c:balance(owner_username,c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
-    return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف</h1>
+    return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف</h1><p class='muted'>احتياطي الصرف مستقل محاسبياً عن صندوق حماية المستخدمين؛ رسوم التطبيق وإيراداته لا تُستخدم لتغطية التحويلات.</p>
       {% if is_founder %}<div class='grid'><article class='panel'><small>أصول المالك URC</small><h2>{{'{:,}'.format(owner['URC'])}}</h2></article><article class='panel'><small>أصول المالك SDG</small><h2>{{'{:,}'.format(owner['SDG'])}}</h2></article>
-      <article class='panel'><small>صندوق الحماية URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>صندوق الحماية SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article></div>{% endif %}
+      <article class='panel'><small>احتياطي الصرف URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي الصرف SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article></div>{% endif %}
       <h2>مصدر سعر الصرف</h2>{% if is_founder %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>طريقة التسعير</label><select name='fx_rate_mode'><option value='market' {% if values['fx_rate_mode']=='market' %}selected{% endif %}>سعر السوق المرجعي</option><option value='manual' {% if values['fx_rate_mode']=='manual' %}selected{% endif %}>سعر يدوي</option></select>
       <label>سعر السوق المرجعي (SDG لكل URC)</label><input name='fx_market_rate' type='number' min='1' value='{{values["fx_market_rate"]}}'>
@@ -2058,7 +2071,7 @@ def admin_protection_fund():
         return redirect(url_for("empire.admin_protection_fund"))
     balances={c:int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(c,)).fetchone()["n"]) for c in ("SDG","URC")}
     rows=db().execute("SELECT reference,currency,delta,memo,created_at FROM es_ledger WHERE account='protection:fund' ORDER BY id DESC LIMIT 300").fetchall()
-    body=render_template_string("""<section class='panel'><span class='tag'>خاص بالمالك فقط</span><h1>صندوق حماية المستخدمين</h1><p>تُسجل هنا عمولات التطبيق وإيراداته، إضافة إلى حركات الصرف المقابلة. هذه الصفحة لا تظهر إلا لحساب المالك.</p>
+    body=render_template_string("""<section class='panel'><span class='tag'>خاص بالمالك فقط</span><h1>صندوق حماية المستخدمين</h1><p>تُسجل هنا عمولات التطبيق وإيراداته فقط. سيولة الصرف محفوظة في احتياطي مستقل ولا تُخلط بأموال هذا الصندوق.</p>
       <div class='grid'><article class='panel'><small>الرصيد المحاسبي SDG</small><h2>{{'{:,}'.format(balances['SDG'])}}</h2></article><article class='panel'><small>الرصيد المحاسبي URC</small><h2>{{'{:,}'.format(balances['URC'])}}</h2></article></div>
       <h2>تحويل من الصندوق</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>رقم حساب المستلم</label><input name='destination' inputmode='numeric' pattern='[0-9]{7}' maxlength='7' required><label>العملة</label><select name='currency'><option>SDG</option><option>URC</option></select><label>المبلغ</label><input name='amount' type='number' min='1' required><label>سبب التحويل</label><textarea name='note' minlength='4' maxlength='250' required></textarea><button>تأكيد التحويل من الصندوق</button></form>
       <h2>سجل الصندوق</h2>{% for x in rows %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small dir='ltr'>{{x['reference']}}</small><small>{{x['created_at']}}</small></div><strong>{{'+' if x['delta']>0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</strong></article>{% else %}<p class='empty-state'>لا توجد حركات بعد.</p>{% endfor %}</section>""",balances=balances,rows=rows,csrf=session.get("csrf",""))
