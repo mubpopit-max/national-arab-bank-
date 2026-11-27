@@ -291,7 +291,7 @@ def page(title,body,**ctx):
     <style>
 :root{color-scheme:light;--ink:#18364b;--muted:#718496;--blue:#0876b9;--green:#16834f;--line:#e3ebf1}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html{background:#f4f8fb;scroll-behavior:auto}
-body{margin:0;min-height:100vh;padding-bottom:calc(104px + var(--native-bottom-inset,0px));background:#f4f8fb!important;color:var(--ink)!important;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
+body{margin:0;min-height:100vh;padding-bottom:24px;background:#f4f8fb!important;color:var(--ink)!important;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
 a{color:var(--blue);text-decoration:none}header.app-header{position:sticky;top:0;z-index:50;height:66px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 13px!important;background:rgba(255,255,255,.97)!important;border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
 .header-brand{flex:1;min-width:0;text-align:center}.header-brand .brand{font-size:17px!important;font-weight:950;color:#153d5b!important;white-space:nowrap}.header-brand .brand:before{display:none!important}.header-brand small{display:block;margin:0!important;font-size:9px!important;color:#7890a1!important}
 .header-menu,.header-alert,.header-avatar{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border-radius:14px;background:#edf5fa;color:#075b91!important;font-size:0;font-weight:900}.header-menu svg,.header-alert svg,.header-avatar svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.header-alert{background:#fff0ef;color:#c34245!important}.header-avatar{background:#eaf6ef;color:#16834f!important}
@@ -317,14 +317,14 @@ input,textarea,select{display:block;width:100%;min-height:46px;margin:7px 0 14px
 .banner-copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:4px}.banner-copy span{color:#123f71;font-size:16px;font-weight:950}.banner-copy strong{color:#39718b;font-size:10px}
 .banner-flag{position:relative;display:flex;width:48px;height:32px;flex-direction:column;overflow:hidden;border-radius:4px;transform:rotate(-7deg);box-shadow:0 4px 10px rgba(20,45,65,.12)}.banner-flag i{flex:1}.banner-flag i:nth-child(1){background:#d92732}.banner-flag i:nth-child(2){background:#fff}.banner-flag i:nth-child(3){background:#111}.banner-flag b{position:absolute;left:0;top:0;width:0;height:0;border-top:16px solid transparent;border-bottom:16px solid transparent;border-left:22px solid #16864b}.banner-crown{position:absolute;left:28%;bottom:-20px;color:rgba(8,103,161,.07);font-size:80px;pointer-events:none}
 .recent-panel{margin-top:12px!important}.view-all{font-size:11px;font-weight:850;white-space:nowrap}.transaction-row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #edf1f5}.transaction-row:last-child{border-bottom:0}.transaction-symbol{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:50%;background:#e6f6ed;color:#13864e;font-size:21px;font-weight:900}.transaction-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.transaction-info b{overflow:hidden;color:#1b3e56;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.transaction-info small{font-size:9px}.transaction-value{font-size:10px;white-space:nowrap}.transaction-value.in{color:#13864e}.transaction-value.out{color:#c04b4b}
-.app-bottom{position:fixed;z-index:1000;right:0;bottom:var(--native-bottom-inset,0px);left:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:9px 8px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:#fff;box-shadow:0 -7px 24px rgba(20,60,85,.09);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
+.app-bottom{position:relative;z-index:1;right:auto;bottom:auto;left:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:16px 0 0;padding:8px 8px 10px;border-top:1px solid #e0eaf1;background:#fff;box-shadow:0 -3px 12px rgba(20,60,85,.05);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
 .app-bottom a{display:flex;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px 1px;color:#718496!important;font-size:10px;font-weight:850;line-height:1.1}.app-bottom a .ico{display:grid;place-items:center;width:26px;height:25px;font-size:0;line-height:1}.app-bottom a .ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.app-bottom a.active{color:#0875b9!important}.app-bottom a.active .ico{background:#e9f4fb;border-radius:9px;width:34px;height:29px}.app-bottom a:focus-visible{outline:2px solid #0875b9;outline-offset:2px;border-radius:10px}
 .empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
 footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;margin:18px auto!important;border-top:5px solid #16844f!important;background:#fff!important}.receipt-flag{display:flex;height:7px;margin-bottom:14px;overflow:hidden;border-radius:20px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
 .game-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}.game-catalog-card{display:flex;min-height:116px;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:14px 8px;border:1px solid var(--line);border-radius:18px;background:#f8fbfd;color:#18364b!important;text-align:center}.game-catalog-card .game-catalog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#e8f2fa;color:#0875b9}.game-catalog-card svg{width:27px;height:27px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.game-catalog-card small{font-size:10px}.game-catalog-card.pubg .game-catalog-icon{background:#fff1db;color:#a66b17}.game-catalog-card.ml .game-catalog-icon{background:#e9efff;color:#3d62b4}.game-catalog-card.freefire .game-catalog-icon{background:#fff0e8;color:#d65b24}.game-catalog-card.fortnite .game-catalog-icon{background:#e9f5ef;color:#188253}.profile-hero{display:flex;align-items:center;gap:10px}.profile-hero h1{margin:0}.profile-hero p{margin:0}.profile-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#eaf4ef;font-size:26px}.profile-info{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.profile-info span{color:var(--muted)}.profile-setting{display:grid;grid-template-columns:38px 1fr auto 16px;align-items:center;gap:8px;padding:13px 0;color:var(--ink)!important}.profile-setting span{font-size:22px}.profile-setting small{font-size:11px}.profile-setting strong{font-size:22px;color:var(--muted)}
 .table-wrap{max-width:100%;overflow-x:auto}
 @media(min-width:420px){main{padding-right:16px!important;padding-left:16px!important}.service-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.service-grid .service-card{min-height:112px!important}.service-grid .service-icon{width:49px!important;height:49px!important}}
-@media(min-width:620px){main{max-width:760px!important}.service-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.app-bottom{right:auto;left:50%;width:min(100%,760px);transform:translateX(-50%);border:1px solid #dce8f1;border-bottom:0;border-radius:17px 17px 0 0}}
+@media(min-width:620px){main{max-width:760px!important}.service-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.app-bottom{right:auto;left:auto;width:100%;transform:none;border:1px solid #dce8f1;border-bottom:0;border-radius:17px 17px 0 0}}
 @media(max-width:360px){main{padding:0 10px!important}.wallet-top{grid-template-columns:44px minmax(0,1fr) 38px;gap:8px;padding:20px 11px 30px!important}.wallet-card-icon{width:44px;height:44px}.wallet-top .amount{font-size:22px!important}.service-grid{gap:8px}.service-grid .service-card{min-height:108px!important}.service-grid .service-icon{width:46px!important;height:46px!important}.app-bottom{gap:0;padding-left:3px;padding-right:3px}.app-bottom a{font-size:9px;min-height:52px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 @media print{body{background:#fff!important;padding:0}.app-header,.app-bottom,.nav,footer{display:none!important}.panel{box-shadow:none!important}}
@@ -508,15 +508,18 @@ def topups():
     allowed={x[0] for x in games}
     if selected and selected not in allowed: abort(404)
     if selected:
-        products=db().execute("SELECT * FROM es_products WHERE active=1 AND price_sdg>1 AND game=? ORDER BY id",(selected,)).fetchall()
+        products=db().execute("SELECT * FROM es_products WHERE game=? ORDER BY id",(selected,)).fetchall()
     else:
-        products=db().execute("SELECT * FROM es_products WHERE active=1 AND price_sdg>1 ORDER BY game,id").fetchall()
+        products=db().execute("SELECT * FROM es_products ORDER BY CASE game WHEN 'PUBG Mobile' THEN 1 WHEN 'Free Fire' THEN 2 WHEN 'Mobile Legends' THEN 3 ELSE 4 END,id").fetchall()
     body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>اختر اللعبة لعرض باقات الشحن المتاحة. الأسعار يحددها المالك من لوحة التحكم.</p>
     <div class='game-catalog-grid'>{% for g in games %}<a class='game-catalog-card {{g[4]}}' href='{{g[3]}}'><span class='game-catalog-icon'><svg><use href='#{{g[2]}}'/></svg></span><b>{{g[1]}}</b><small>{{g[0]}}</small></a>{% endfor %}</div>
     {% if selected %}<h2>باقات {{selected}}</h2>{% endif %}<a class='btn secondary' href='/store/topups'>كل الألعاب</a></section>
-    <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p><b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
+    <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p>
+    {% if p['active'] and p['price_sdg'] > 1 %}<b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
     <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'>
-    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form></article>{% else %}<div class='empty-state'>لا توجد باقات مفعّلة حالياً لهذه اللعبة. سيضيف المالك الأسعار ثم يفعّلها.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
+    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form>
+    {% else %}<p class='muted'>الباقة مسجلة — غير متاحة للطلب حالياً.</p>{% endif %}
+    </article>{% else %}<div class='empty-state'>لا توجد باقات مسجلة لهذه اللعبة حالياً.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
     return page("شحن الألعاب",body)
 
 @empire_bp.post("/topups/new")
@@ -1082,43 +1085,85 @@ def admin_listings():
 @login_required
 @founder_required
 def admin_products():
-    if request.method=="POST":
+    if request.method == "POST":
         csrf()
-        action=request.form.get("action","")
-        if action=="toggle":
-            pid=request.form.get("product_id","")
-            row=db().execute("SELECT * FROM es_products WHERE id=?",(pid,)).fetchone()
-            if not row: abort(404)
-            if row["price_sdg"]<=1: flash("حدد سعر البيع أولاً قبل تفعيل الباقة.")
+        action = (request.form.get("action") or "").strip()
+        pid = (request.form.get("product_id") or "").strip()
+        try:
+            if action == "toggle":
+                row = db().execute("SELECT * FROM es_products WHERE id=?", (pid,)).fetchone()
+                if not row:
+                    flash("الباقة المطلوبة غير موجودة.")
+                elif int(row["price_sdg"]) <= 1:
+                    flash("أدخل سعر البيع أولاً ثم فعّل الباقة.")
+                else:
+                    active = 0 if int(row["active"]) else 1
+                    db().execute("UPDATE es_products SET active=? WHERE id=?", (active, pid))
+                    if active:
+                        db().execute("INSERT INTO es_settings(key,value) VALUES('topups_enabled','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+                    audit(user()["username"], "PRODUCT_TOGGLED", "product", pid)
+                    flash("تم تحديث حالة الباقة.")
+            elif action == "update":
+                row = db().execute("SELECT * FROM es_products WHERE id=?", (pid,)).fetchone()
+                if not row:
+                    flash("الباقة المطلوبة غير موجودة.")
+                else:
+                    raw_price = (request.form.get("price_sdg") or "").strip().replace(",", "").replace("٬", "")
+                    raw_price = raw_price.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+                    if not re.fullmatch(r"[1-9][0-9]{0,11}", raw_price):
+                        raise ValueError("أدخل سعر بيع صحيحاً بالأرقام.")
+                    price = int(raw_price)
+                    raw_cost = (request.form.get("cost_sdg") or str(row["cost_sdg"])).strip().replace(",", "").replace("٬", "")
+                    raw_cost = raw_cost.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+                    if not re.fullmatch(r"(?:0|[1-9][0-9]{0,11})", raw_cost):
+                        raise ValueError("تكلفة المورد غير صحيحة.")
+                    cost = int(raw_cost)
+                    if cost > price:
+                        raise ValueError("تكلفة المورد لا يمكن أن تتجاوز سعر البيع.")
+                    db().execute("UPDATE es_products SET price_sdg=?, cost_sdg=? WHERE id=?", (price, cost, pid))
+                    audit(user()["username"], "PRODUCT_PRICE_UPDATED", "product", pid, "price="+str(price)+";cost="+str(cost))
+                    flash("تم حفظ السعر والتكلفة بنجاح.")
+            elif action == "create":
+                game = (request.form.get("game") or "").strip()
+                title = (request.form.get("title") or "").strip()
+                raw_price = (request.form.get("price_sdg") or "").strip().replace(",", "").replace("٬", "")
+                raw_price = raw_price.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+                raw_cost = (request.form.get("cost_sdg") or "0").strip().replace(",", "").replace("٬", "")
+                raw_cost = raw_cost.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+                if game not in ("PUBG Mobile", "Free Fire", "Mobile Legends", "Fortnite") or not title or len(title) > 120:
+                    raise ValueError("بيانات الباقة غير مكتملة.")
+                if not re.fullmatch(r"[1-9][0-9]{0,11}", raw_price) or not re.fullmatch(r"(?:0|[1-9][0-9]{0,11})", raw_cost):
+                    raise ValueError("أدخل السعر والتكلفة بشكل صحيح.")
+                price, cost = int(raw_price), int(raw_cost)
+                if cost > price:
+                    raise ValueError("تكلفة المورد لا يمكن أن تتجاوز سعر البيع.")
+                code = ref()
+                db().execute("INSERT INTO es_products(code,game,title,price_sdg,cost_sdg,created_at) VALUES(?,?,?,?,?,?)", (code, game, title, price, cost, now()))
+                audit(user()["username"], "PRODUCT_CREATED", "product", code)
+                flash("تمت إضافة الباقة.")
             else:
-                db().execute("UPDATE es_products SET active=? WHERE id=?",(0 if row["active"] else 1,pid))
-                if not row["active"]:
-                    db().execute("INSERT INTO es_settings(key,value) VALUES('topups_enabled','1') ON CONFLICT(key) DO UPDATE SET value='1'")
-            audit(user()["username"],"PRODUCT_TOGGLED","product",pid)
-        elif action=="update":
-            pid=request.form.get("product_id","")
-            row=db().execute("SELECT * FROM es_products WHERE id=?",(pid,)).fetchone()
-            if not row: abort(404)
-            price=money_int(request.form.get("price_sdg"))
-            raw_cost=(request.form.get("cost_sdg") or "0").strip()
-            if not re.fullmatch(r"(?:0|[1-9][0-9]{0,11})",raw_cost): abort(400)
-            cost=int(raw_cost)
-            if cost>price: abort(400,"تكلفة المورد لا يمكن أن تتجاوز سعر البيع")
-            db().execute("UPDATE es_products SET price_sdg=?,cost_sdg=? WHERE id=?",(price,cost,pid))
-            audit(user()["username"],"PRODUCT_PRICE_UPDATED","product",pid,"price="+str(price)+";cost="+str(cost))
-        else:
-            game=request.form.get("game","").strip(); title=request.form.get("title","").strip()
-            price=money_int(request.form.get("price_sdg")); raw_cost=(request.form.get("cost_sdg") or "0").strip()
-            if not re.fullmatch(r"(?:0|[1-9][0-9]{0,11})",raw_cost): abort(400)
-            cost=int(raw_cost); code=ref()
-            if game not in ("PUBG Mobile","Free Fire","Mobile Legends","Fortnite") or not title or len(title)>120 or cost>price: abort(400)
-            db().execute("INSERT INTO es_products(code,game,title,price_sdg,cost_sdg,created_at) VALUES(?,?,?,?,?,?)",(code,game,title,price,cost,now()))
-            audit(user()["username"],"PRODUCT_CREATED","product",code)
-    rows=db().execute("SELECT * FROM es_products ORDER BY game,id").fetchall()
-    body=render_template_string("""<section class='panel'><h1>إدارة أسعار شحن الألعاب</h1><p>تظهر الباقات للعملاء بعد تحديد السعر وتفعيلها. أي تعديل محفوظ هنا ينعكس مباشرة في صفحة اللعبة.</p>
-    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>اللعبة</label><select name='game' required><option>PUBG Mobile</option><option>Free Fire</option><option>Mobile Legends</option><option>Fortnite</option></select><label>اسم الباقة</label><input name='title' placeholder='مثال: باقة جديدة' required><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' required><label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' value='0' required><button>إضافة باقة</button></form>
-    {% for x in rows %}<article class='panel'><b>{{x['game']}} · {{x['title']}}</b><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' value='{{x['price_sdg']}}' required><label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' value='{{x['cost_sdg']}}' required><button name='action' value='update'>حفظ السعر والتكلفة</button><button class='btn secondary' name='action' value='toggle'>{{'إيقاف الباقة' if x['active'] else 'تفعيل الباقة'}}</button></form><small>{{'فعالة' if x['active'] else 'متوقفة'}}</small></article>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
-    return page("باقات الشحن",body)
+                raise ValueError("طلب غير معروف. أعد تحميل الصفحة وحاول مجدداً.")
+        except ValueError as exc:
+            flash(str(exc))
+        return redirect(url_for("empire.admin_products"))
+
+    rows = db().execute("SELECT * FROM es_products ORDER BY CASE game WHEN 'PUBG Mobile' THEN 1 WHEN 'Free Fire' THEN 2 WHEN 'Mobile Legends' THEN 3 ELSE 4 END, id").fetchall()
+    body = render_template_string("""<section class='panel'><h1>إدارة أسعار شحن الألعاب</h1>
+    <p>كل الباقات المطلوبة موجودة هنا. أدخل سعر البيع الذي تحدده، ثم فعّل الباقة لتظهر للعملاء. لا تُعرض أي باقة بسعر افتراضي.</p>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='create'>
+    <label>اللعبة</label><select name='game' required><option>PUBG Mobile</option><option>Free Fire</option><option>Mobile Legends</option><option>Fortnite</option></select>
+    <label>اسم الباقة</label><input name='title' required><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' step='1' required>
+    <label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' step='1' value='0' required><button>إضافة باقة جديدة</button></form>
+    {% for x in rows %}<article class='panel'><b>{{x['game']}} · {{x['title']}}</b>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'>
+    <input type='hidden' name='action' value='update'><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' step='1' value='{{'' if x['price_sdg'] <= 1 else x['price_sdg']}}' placeholder='أدخل السعر' required>
+    <label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' step='1' value='{{x['cost_sdg']}}' required>
+    <button type='submit'>حفظ السعر</button></form>
+    <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'><input type='hidden' name='action' value='toggle'>
+    <button class='btn secondary' type='submit' {% if x['price_sdg'] <= 1 %}disabled{% endif %}>{{'إيقاف الباقة' if x['active'] else 'تفعيل الباقة'}}</button></form>
+    <small>{{'فعالة' if x['active'] else ('بانتظار تحديد السعر' if x['price_sdg'] <= 1 else 'السعر محفوظ — الباقة متوقفة')}}</small></article>{% endfor %}
+    </section>""", rows=rows, csrf=session.get("csrf",""))
+    return page("باقات الشحن", body)
 
 @empire_bp.route("/admin/payments",methods=["GET","POST"])
 @login_required
