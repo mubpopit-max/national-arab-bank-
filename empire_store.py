@@ -387,7 +387,7 @@ def manifest():
 
 @empire_bp.get("/icon.svg")
 def app_icon():
-    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='#090909'/><path d='M256 68l44 70 82-22-12 84 72 45-72 45 12 84-82-22-44 70-44-70-82 22 12-84-72-45 72-45-12-84 82 22z' fill='none' stroke='#d8b45e' stroke-width='16' stroke-linejoin='round'/><path d='M160 310h192l-18 54H178z' fill='#d8b45e'/><path d='M180 284l-16-92 66 52 26-112 26 112 66-52-16 92z' fill='#d8b45e'/></svg>"""
+    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='#0b263d'/><circle cx='256' cy='256' r='206' fill='none' stroke='#d9b45b' stroke-width='18'/><rect x='106' y='155' width='300' height='202' rx='12' fill='#fff'/><path d='M106 167q0-12 12-12h276q12 0 12 12v55H106z' fill='#d92736'/><path d='M106 290h300v55q0 12-12 12H118q-12 0-12-12z' fill='#111820'/><path d='M106 155l135 101-135 101z' fill='#168447'/><path d='M256 203l15 24 29-8-4 30 25 16-25 16 4 30-29-8-15 24-15-24-29 8 4-30-25-16 25-16-4-30 29 8z' fill='#d9b45b'/></svg>"""
     return svg,200,{"Content-Type":"image/svg+xml"}
 
 @empire_bp.get("/sw.js")
