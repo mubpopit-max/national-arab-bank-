@@ -73,6 +73,62 @@ class EmpireLedgerTests(unittest.TestCase):
         ).fetchone()["n"]
         self.assertEqual(protection, 1000)
 
+    def test_both_currency_exchange_directions_execute_atomically(self):
+        client = app_module.app.test_client()
+        login = client.post("/login", data={
+            "account_number": "5147234",
+            "password": "CI-only-password-123!",
+        }, follow_redirects=True)
+        self.assertEqual(login.status_code, 200)
+        with client.session_transaction() as session:
+            username = session["username"]
+            csrf_token = session["csrf"]
+
+        d = db()
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-FX-USER-URC", [
+            ("user:" + username, "URC", 100),
+            ("external:test_fx_user_urc", "URC", -100),
+        ], "test user URC funding")
+        post("TEST-FX-USER-SDG", [
+            ("user:" + username, "SDG", 100000),
+            ("external:test_fx_user_sdg", "SDG", -100000),
+        ], "test user SDG funding")
+        post("TEST-FX-RESERVE-SDG", [
+            ("fx:reserve", "SDG", 560000),
+            ("external:test_fx_reserve_sdg", "SDG", -560000),
+        ], "test SDG exchange reserve")
+        post("TEST-FX-RESERVE-URC", [
+            ("fx:reserve", "URC", 100),
+            ("external:test_fx_reserve_urc", "URC", -100),
+        ], "test URC exchange reserve")
+        d.commit()
+
+        first = client.post("/store/exchange", data={
+            "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
+        }, follow_redirects=True)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(fx_reserve_balance("SDG"), 504000)
+        self.assertEqual(balance(username, "SDG"), 156000)
+
+        second = client.post("/store/exchange", data={
+            "csrf": csrf_token, "direction": "SDG_TO_URC", "amount": "56000",
+        }, follow_redirects=True)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(fx_reserve_balance("URC"), 100)
+        self.assertEqual(balance(username, "URC"), 99)
+
+        protection_fees = d.execute(
+            "SELECT COALESCE(SUM(delta),0) n FROM es_ledger "
+            "WHERE account='protection:fund' AND currency IN ('SDG','URC')"
+        ).fetchone()["n"]
+        self.assertGreater(protection_fees, 0)
+        unbalanced = d.execute(
+            "SELECT reference,currency,SUM(delta) total FROM es_ledger "
+            "GROUP BY reference,currency HAVING total != 0"
+        ).fetchall()
+        self.assertEqual(unbalanced, [])
+
     def test_urc_supply_cap_counts_issued_units(self):
         d = db()
         d.execute("BEGIN IMMEDIATE")
