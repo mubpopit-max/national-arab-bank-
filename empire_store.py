@@ -1923,7 +1923,7 @@ def exchange():
       feeOut.textContent=fmt(data.fee)+' '+data.source_currency;totalOut.textContent=fmt(data.total_debit)+' '+data.source_currency;
       quoteId.value=data.quote_id;expiresAt=Date.now()+data.expires_in*1000;submit.disabled=false;hint.textContent='السعر مثبت لهذا العرض.';tick();
       }catch(error){if(id!==requestNo)return;timer.textContent='تعذر تحديث السعر';hint.textContent=error.message;reset();}}
-      function tick(){if(!quoteId.value)return;const left=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));timer.textContent=left?'ينتهي عرض السعر خلال '+left+' ثانية':'انتهى عرض السعر · حدّث السعر';if(!left)reset();}
+      function tick(){if(!quoteId.value)return;const left=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));timer.textContent=left?'ينتهي عرض السعر خلال '+left+' ثانية':'انتهى عرض السعر · جارٍ تحديثه';if(!left){reset();if(amount.value.trim())update();}}
       direction.addEventListener('change',()=>{clearTimeout(debounce);amount.value='';reset();available.textContent=direction.value==='URC_TO_SDG'?'{{'{:,}'.format(user_urc)}} URC':'{{'{:,}'.format(user_sdg)}} SDG';target.textContent=direction.value==='URC_TO_SDG'?'SDG · الجنيه السوداني':'URC · العملة الرقمية';update();});
       amount.addEventListener('input',()=>{clearTimeout(debounce);reset();debounce=setTimeout(update,250);});
       document.getElementById('fxForm').addEventListener('submit',e=>{if(!quoteId.value||submit.disabled){e.preventDefault();return;}submit.disabled=true;submit.textContent='جارٍ تنفيذ التحويل…';});
