@@ -62,16 +62,16 @@ def init_db():
 
     CREATE TABLE IF NOT EXISTS es_products(
       id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, game TEXT NOT NULL,
-      title TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT 'أدخل معرف اللاعب بدقة.',
+      title TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT 'سيتم تسليم كود الباقة بعد تأكيد الدفع.',
       price_sdg INTEGER NOT NULL CHECK(price_sdg>0), cost_sdg INTEGER NOT NULL DEFAULT 0 CHECK(cost_sdg>=0), active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_topup_orders(
       id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, buyer TEXT NOT NULL,
-      product_id INTEGER NOT NULL REFERENCES es_products(id), player_id TEXT NOT NULL,
+      product_id INTEGER NOT NULL REFERENCES es_products(id), player_id TEXT NOT NULL DEFAULT '',
       amount_sdg INTEGER NOT NULL CHECK(amount_sdg>0),
       status TEXT NOT NULL DEFAULT 'PENDING_PAYMENT'
         CHECK(status IN ('PENDING_PAYMENT','PAID','ASSIGNED','PROCESSING','COMPLETED','REJECTED','REFUNDED')),
-      agent TEXT, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      agent TEXT, note TEXT NOT NULL DEFAULT '', delivery_cipher TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 
     CREATE TABLE IF NOT EXISTS es_wallets(
       username TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),
@@ -134,6 +134,12 @@ def init_db():
     product_cols={r["name"] for r in db().execute("PRAGMA table_info(es_products)").fetchall()}
     if "cost_sdg" not in product_cols:
         db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
+    topup_cols={r["name"] for r in db().execute("PRAGMA table_info(es_topup_orders)").fetchall()}
+    if "delivery_cipher" not in topup_cols:
+        db().execute("ALTER TABLE es_topup_orders ADD COLUMN delivery_cipher TEXT NOT NULL DEFAULT ''")
+    # Game orders deliver redeem codes; no player ID is collected or retained.
+    db().execute("UPDATE es_topup_orders SET player_id='' WHERE player_id IS NOT NULL AND player_id!=''")
+    db().execute("UPDATE es_products SET instructions='سيتم تسليم كود الباقة داخل التطبيق بعد تأكيد الدفع.' WHERE instructions='أدخل معرف اللاعب بدقة.'")
     defaults = {
       "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"15000000",
       "fx_rate_mode":"manual", "fx_market_rate":"0", "fx_manual_rate":"0", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
@@ -266,7 +272,7 @@ def seed_game_products():
             code="CAT-"+secrets.token_hex(8).upper()
             db().execute("""INSERT INTO es_products
               (code,game,title,instructions,price_sdg,cost_sdg,active,created_at)
-              VALUES(?,?,?,'أدخل معرف اللاعب بدقة.',1,0,0,?)""",
+              VALUES(?,?,?,'سيتم تسليم كود الباقة بعد تأكيد الدفع.',1,0,0,?)""",
               (code,game,title,now()))
 
 def assert_epc_capacity(quantity):
@@ -319,9 +325,9 @@ input,textarea,select{display:block;width:100%;min-height:46px;margin:7px 0 14px
 .recent-panel{margin-top:12px!important}.view-all{font-size:11px;font-weight:850;white-space:nowrap}.transaction-row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #edf1f5}.transaction-row:last-child{border-bottom:0}.transaction-symbol{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:50%;background:#e6f6ed;color:#13864e;font-size:21px;font-weight:900}.transaction-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.transaction-info b{overflow:hidden;color:#1b3e56;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.transaction-info small{font-size:9px}.transaction-value{font-size:10px;white-space:nowrap}.transaction-value.in{color:#13864e}.transaction-value.out{color:#c04b4b}
 .app-bottom{position:sticky;z-index:60;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:16px 0 0;padding:8px 8px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:rgba(255,255,255,.97);box-shadow:0 -5px 20px rgba(20,60,85,.08);backdrop-filter:blur(14px);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
 .app-bottom a{display:flex;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px 1px;color:#718496!important;font-size:10px;font-weight:850;line-height:1.1}.app-bottom a .ico{display:grid;place-items:center;width:26px;height:25px;font-size:0;line-height:1}.app-bottom a .ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.app-bottom a.active{color:#0875b9!important}.app-bottom a.active .ico{background:#e9f4fb;border-radius:9px;width:34px;height:29px}.app-bottom a:focus-visible{outline:2px solid #0875b9;outline-offset:2px;border-radius:10px}
-.admin-links a{display:flex;min-width:0;min-height:76px;flex-direction:column;justify-content:center;gap:5px;padding:13px;border:1px solid #e1ebf1;border-radius:15px;background:linear-gradient(145deg,#fff,#f7fbfd);color:#164d70!important;font-weight:850;transition:transform .16s ease,border-color .16s ease}.admin-links a:active{transform:scale(.985)}.admin-links a small{font-size:11px;color:#16834f}.admin-filters{display:flex;gap:7px;overflow:auto;padding:5px 0 12px}.admin-filters a{flex:0 0 auto;padding:7px 11px;border:1px solid #dce8ef;border-radius:30px;background:#f7fafc;color:#175d85;font-size:11px;font-weight:800}.order-card{padding:15px!important}.order-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.order-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.order-grid>div{min-width:0;padding:9px;border-radius:11px;background:#f7fafc}.order-grid small{display:block;color:#718496;font-size:10px}.order-grid b{display:block;overflow-wrap:anywhere;font-size:12px;color:#183d56}@media(max-width:380px){.order-grid{grid-template-columns:1fr}}\n.empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
+.admin-section{margin:16px 0 20px;padding:15px;border:1px solid #e1eaf0;border-radius:20px;background:linear-gradient(150deg,#fff,#f7fafc);box-shadow:0 5px 18px rgba(20,60,85,.04)}.admin-section-head{margin:0 2px 12px;padding-bottom:10px;border-bottom:1px solid #e8eef3}.admin-section-head span{color:#16834f;font-size:10px;font-weight:900;letter-spacing:.4px}.admin-section-head h2{margin:4px 0 0;font-size:17px}.admin-links a{display:flex;min-width:0;min-height:76px;flex-direction:column;justify-content:center;gap:5px;padding:13px;border:1px solid #e1ebf1;border-radius:15px;background:linear-gradient(145deg,#fff,#f7fbfd);color:#164d70!important;font-weight:850;transition:transform .16s ease,border-color .16s ease}.admin-links a:active{transform:scale(.985)}.admin-links a small{font-size:11px;color:#16834f}.admin-filters{display:flex;gap:7px;overflow:auto;padding:5px 0 12px}.admin-filters a{flex:0 0 auto;padding:7px 11px;border:1px solid #dce8ef;border-radius:30px;background:#f7fafc;color:#175d85;font-size:11px;font-weight:800}.order-card{padding:15px!important}.order-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.order-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.order-grid>div{min-width:0;padding:9px;border-radius:11px;background:#f7fafc}.order-grid small{display:block;color:#718496;font-size:10px}.order-grid b{display:block;overflow-wrap:anywhere;font-size:12px;color:#183d56}@media(max-width:380px){.order-grid{grid-template-columns:1fr}}\n.transfer-step{padding:20px!important}.transfer-step>p{line-height:1.8}.transfer-step form{margin-top:18px}.recipient-confirm{display:grid;gap:6px;margin:16px 0;padding:17px;border:1px solid #dcebe3;border-radius:17px;background:linear-gradient(135deg,#f1faf5,#f3f8fc)}.recipient-confirm small{color:#678}.recipient-confirm strong{font-size:20px;color:#173e58}.recipient-confirm span{font-weight:850;letter-spacing:1px}.recipient-confirm em{justify-self:start;padding:4px 10px;border-radius:20px;font-size:11px;font-style:normal;font-weight:800}.recipient-confirm .verified{background:#e1f5e9;color:#137343}.recipient-confirm .unverified{background:#fff3df;color:#98640d}.transfer-submit{width:100%;min-height:50px;margin:10px 0 4px;background:linear-gradient(110deg,#0876b9,#16834f)!important;box-shadow:0 7px 16px rgba(8,118,185,.16)!important}.fulfill-code-form{margin-top:14px;padding:14px;border:1px solid #dcebe3;border-radius:15px;background:#f5fbf7}.fulfill-code-form button{width:100%}.empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
 footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;margin:18px auto!important;border-top:5px solid #16844f!important;background:#fff!important}.receipt-flag{display:flex;height:7px;margin-bottom:14px;overflow:hidden;border-radius:20px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
-.game-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}.game-catalog-card{display:flex;min-height:116px;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:14px 8px;border:1px solid var(--line);border-radius:18px;background:#f8fbfd;color:#18364b!important;text-align:center}.game-catalog-card .game-catalog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#e8f2fa;color:#0875b9}.game-catalog-card svg{width:27px;height:27px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.game-catalog-card small{font-size:10px}.game-catalog-card.pubg .game-catalog-icon{background:#fff1db;color:#a66b17}.game-catalog-card.ml .game-catalog-icon{background:#e9efff;color:#3d62b4}.game-catalog-card.freefire .game-catalog-icon{background:#fff0e8;color:#d65b24}.game-catalog-card.fortnite .game-catalog-icon{background:#e9f5ef;color:#188253}.profile-hero{display:flex;align-items:center;gap:10px}.profile-hero h1{margin:0}.profile-hero p{margin:0}.profile-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#eaf4ef;font-size:26px}.profile-info{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.profile-info span{color:var(--muted)}.profile-setting{display:grid;grid-template-columns:38px 1fr auto 16px;align-items:center;gap:8px;padding:13px 0;color:var(--ink)!important}.profile-setting span{font-size:22px}.profile-setting small{font-size:11px}.profile-setting strong{font-size:22px;color:var(--muted)}
+.game-intro{background:linear-gradient(145deg,#fff,#f1f8fc)!important}.game-products{align-items:stretch}.game-product{display:flex;flex-direction:column;min-width:0}.game-price{display:block;margin:2px 0 12px;color:#146e49;font-size:20px}.game-buy{width:100%;margin-top:auto}.redeem-code{display:grid;gap:8px;margin:12px 0;padding:14px;border:1px dashed #16834f;border-radius:15px;background:#eff9f3}.redeem-code small{color:#17633d;font-weight:800}.redeem-code strong{padding:10px;border-radius:10px;background:#fff;color:#153d56;font-size:19px;overflow-wrap:anywhere;text-align:center;letter-spacing:.5px}.game-order-card{border-right:4px solid #16834f!important}.game-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}.game-catalog-card{display:flex;min-height:116px;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:14px 8px;border:1px solid var(--line);border-radius:18px;background:#f8fbfd;color:#18364b!important;text-align:center}.game-catalog-card .game-catalog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#e8f2fa;color:#0875b9}.game-catalog-card svg{width:27px;height:27px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.game-catalog-card small{font-size:10px}.game-catalog-card.pubg .game-catalog-icon{background:#fff1db;color:#a66b17}.game-catalog-card.ml .game-catalog-icon{background:#e9efff;color:#3d62b4}.game-catalog-card.freefire .game-catalog-icon{background:#fff0e8;color:#d65b24}.game-catalog-card.fortnite .game-catalog-icon{background:#e9f5ef;color:#188253}.profile-hero{display:flex;align-items:center;gap:10px}.profile-hero h1{margin:0}.profile-hero p{margin:0}.profile-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#eaf4ef;font-size:26px}.profile-info{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.profile-info span{color:var(--muted)}.profile-setting{display:grid;grid-template-columns:38px 1fr auto 16px;align-items:center;gap:8px;padding:13px 0;color:var(--ink)!important}.profile-setting span{font-size:22px}.profile-setting small{font-size:11px}.profile-setting strong{font-size:22px;color:var(--muted)}
 .table-wrap{max-width:100%;overflow-x:auto}
 @media(min-width:420px){main{padding-right:16px!important;padding-left:16px!important}.service-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.service-grid .service-card{min-height:112px!important}.service-grid .service-icon{width:49px!important;height:49px!important}}
 @media(min-width:620px){main{max-width:760px!important}.service-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.app-bottom{right:auto;left:auto;width:100%;transform:none;border:1px solid #dce8f1;border-bottom:0;border-radius:17px 17px 0 0}}
@@ -511,13 +517,12 @@ def topups():
         products=db().execute("SELECT * FROM es_products WHERE game=? ORDER BY id",(selected,)).fetchall()
     else:
         products=db().execute("SELECT * FROM es_products ORDER BY CASE game WHEN 'PUBG Mobile' THEN 1 WHEN 'Free Fire' THEN 2 WHEN 'Mobile Legends' THEN 3 ELSE 4 END,id").fetchall()
-    body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>اختر اللعبة لعرض باقات الشحن المتاحة. الأسعار يحددها المالك من لوحة التحكم.</p>
+    body=render_template_string("""<section class='panel game-intro'><span class='tag'>أكواد رقمية</span><h1>باقات الألعاب</h1><p>اختر اللعبة والباقة المناسبة. لا نطلب آيدي اللاعب ولا ندخل إلى حسابك؛ بعد تأكيد الدفع نسلّمك كود الباقة داخل التطبيق.</p>
     <div class='game-catalog-grid'>{% for g in games %}<a class='game-catalog-card {{g[4]}}' href='{{g[3]}}'><span class='game-catalog-icon'><svg><use href='#{{g[2]}}'/></svg></span><b>{{g[1]}}</b><small>{{g[0]}}</small></a>{% endfor %}</div>
     {% if selected %}<h2>باقات {{selected}}</h2>{% endif %}<a class='btn secondary' href='/store/topups'>كل الألعاب</a></section>
-    <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p>
-    {% if p['active'] and p['price_sdg'] > 1 %}<b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
-    <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'>
-    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form>
+    <div class='grid game-products'>{% for p in products %}<article class='panel game-product'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p>
+    {% if p['active'] and p['price_sdg'] > 1 %}<b class='game-price'>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
+    <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'><button class='game-buy'>شراء الكود</button></form>
     {% else %}<p class='muted'>الباقة مسجلة — غير متاحة للطلب حالياً.</p>{% endif %}
     </article>{% else %}<div class='empty-state'>لا توجد باقات مسجلة لهذه اللعبة حالياً.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
     return page("شحن الألعاب",body)
@@ -529,11 +534,9 @@ def new_topup():
     if setting("topups_enabled","0")!="1": abort(503,"طلبات الشحن متوقفة حالياً")
     p=db().execute("SELECT * FROM es_products WHERE id=? AND active=1 AND price_sdg>1",(request.form.get("product_id"),)).fetchone()
     if not p: abort(404)
-    player=request.form.get("player_id","").strip()
-    if not player or len(player)>100: abort(400)
     r=ref()
-    db().execute("INSERT INTO es_topup_orders(reference,buyer,product_id,player_id,amount_sdg,status,created_at,updated_at) VALUES(?,?,?,?,?,'PENDING_PAYMENT',?,?)",
-                 (r,u["username"],p["id"],player,p["price_sdg"],now(),now()))
+    db().execute("INSERT INTO es_topup_orders(reference,buyer,product_id,player_id,amount_sdg,status,created_at,updated_at) VALUES(?,?,?,'',?,'PENDING_PAYMENT',?,?)",
+                 (r,u["username"],p["id"],p["price_sdg"],now(),now()))
     audit(u["username"],"TOPUP_ORDER_CREATED","topup",r)
     flash("تم إنشاء طلب الشحن. سيظهر كطلب غير مدفوع حتى اعتماد وسيلة الدفع.")
     return redirect(url_for("empire.orders"))
@@ -704,7 +707,7 @@ def complete_topup():
     agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
     if not agent or agent["status"]!="APPROVED": abort(403)
     r=request.form.get("reference",""); note=request.form.get("note","").strip()
-    if len(note)<4 or len(note)>300: abort(400)
+    if len(note)>300: abort(400)
     d=db(); d.execute("BEGIN IMMEDIATE")
     try:
         order=d.execute("SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.reference=? AND t.agent=? AND t.status='ASSIGNED'",
@@ -719,9 +722,15 @@ def complete_topup():
         post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),
                     ("user:"+u["username"],"SDG",commission),("platform:revenue","SDG",platform_profit)],
              "تسوية شحن لعبة وتسجيل عمولة الوكيل")
-        d.execute("UPDATE es_topup_orders SET status='COMPLETED',note=?,updated_at=? WHERE reference=? AND agent=? AND status='ASSIGNED'",
-                  (note,now(),r,u["username"]))
-        audit(u["username"],"TOPUP_COMPLETED","topup",r,"commission="+str(commission)+"; "+note)
+        delivery_code=request.form.get("delivery_code","").strip()
+        if len(delivery_code)<4 or len(delivery_code)>300:
+            raise ValueError("أدخل كود الباقة الصحيح (4 إلى 300 حرف).")
+        delivery_cipher=encryption().encrypt(delivery_code.encode("utf-8")).decode("utf-8")
+        d.execute("UPDATE es_topup_orders SET status='COMPLETED',note=?,delivery_cipher=?,updated_at=? WHERE reference=? AND agent=? AND status='ASSIGNED'",
+                  (note,delivery_cipher,now(),r,u["username"]))
+        d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                  (order["buyer"],"كود لعبتك جاهز","تم تجهيز كود باقتك. افتح طلباتك لعرض الكود بأمان.",r,now()))
+        audit(u["username"],"TOPUP_COMPLETED","topup",r,"commission="+str(commission)+"; code delivered")
         d.commit()
     except Exception: d.rollback(); raise
     flash("تم إغلاق الطلب وتسجيل عمولتك بعد احتساب تكلفة المورد.")
@@ -739,20 +748,29 @@ def orders():
             try: item["delivery_text"]=encryption().decrypt(item["delivery_cipher"].encode()).decode()
             except Exception: item["delivery_text"]="تعذر فك بيانات التسليم؛ تواصل مع الدعم."
         markets.append(item)
-    top=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.buyer=? OR t.agent=? ORDER BY t.id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
+    top_rows=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.buyer=? OR t.agent=? ORDER BY t.id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
+    top=[]
+    for row in top_rows:
+        item=dict(row); item["delivery_code_text"]=""
+        if item["buyer"]==u["username"] and item["status"]=="COMPLETED" and item.get("delivery_cipher"):
+            try: item["delivery_code_text"]=encryption().decrypt(item["delivery_cipher"].encode()).decode()
+            except Exception: item["delivery_code_text"]="تعذر عرض الكود حالياً؛ تواصل مع الدعم."
+        top.append(item)
     agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
     open_jobs=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.status='PAID' AND t.agent IS NULL ORDER BY t.id LIMIT 50").fetchall() if agent and agent["status"]=="APPROVED" else []
+    topup_labels={"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — بانتظار التنفيذ","ASSIGNED":"قيد التنفيذ لدى الوكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"تم تسليم الكود","REJECTED":"مرفوض","REFUNDED":"مسترد"}
     body=render_template_string("""<section class='panel'><h1>طلباتي</h1><h2>صفقات الحسابات</h2>{% for x in markets %}<article class='panel'><b>{{x['reference']}}</b> · {{x['price_sdg']}} SDG · {{x['status']}}<p>المشتري: {{x['buyer']}} — البائع: {{x['seller']}}</p>
     {% if x['seller']==me and x['status']=='ESCROWED' %}<form method='post' action='/store/order/deliver'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><textarea name='delivery' minlength='10' maxlength='3000' placeholder='بيانات التسليم الآمنة' required></textarea><button>تسليم للمشتري</button></form>{% endif %}
     {% if x['buyer']==me and x['status']=='DELIVERED' %}<div class='panel'><b>بيانات التسليم</b><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>{{x['delivery_text']}}</pre></div><form method='post' action='/store/order/confirm'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تأكيد الاستلام وإطلاق مستحقات البائع</button></form>{% endif %}
     {% if x['status'] in ('ESCROWED','DELIVERED') and (x['buyer']==me or x['seller']==me) %}<form method='post' action='/store/order/dispute'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><input name='reason' maxlength='500' required placeholder='سبب النزاع'><button>فتح نزاع</button></form>{% endif %}</article>{% else %}<p>لا توجد صفقات.</p>{% endfor %}
-    <h2>طلبات شحن الألعاب</h2>{% for x in top %}<article class='panel'><p>{{x['reference']}} · {{x['game']}} {{x['title']}} · {{x['status']}} · {{x['amount_sdg']}} SDG · اللاعب {{x['player_id']}}</p>
+    <h2>أكواد الألعاب وطلباتي</h2>{% for x in top %}<article class='panel game-order-card'><div class='order-head'><b>{{x['game']}} · {{x['title']}}</b><span class='tag'>{{topup_labels.get(x['status'],x['status'])}}</span></div><p>رقم الطلب: <b dir='ltr'>{{x['reference']}}</b> · {{'{:,}'.format(x['amount_sdg'])}} SDG</p>
+    {% if x['buyer']==me and x['status']=='COMPLETED' and x['delivery_code_text'] %}<div class='redeem-code'><small>كود الباقة الخاص بك</small><strong dir='ltr'>{{x['delivery_code_text']}}</strong><button type='button' class='btn secondary' onclick='navigator.clipboard&&navigator.clipboard.writeText({{x['delivery_code_text']|tojson}}).then(()=>this.textContent="تم النسخ").catch(()=>{})'>نسخ الكود</button></div>{% endif %}
     {% if x['buyer']==me and x['status']=='PENDING_PAYMENT' %}<form method='post' action='/store/topups/pay'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>الدفع من محفظة SDG</button></form>{% endif %}
     {% if agent and agent['status']=='APPROVED' and x['status']=='PAID' and not x['agent'] %}<form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب كوكيل</button></form>{% endif %}
-    {% if x['agent']==me and x['status']=='ASSIGNED' %}<form method='post' action='/store/agent/topup/complete'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><input name='note' placeholder='مرجع تنفيذ المورد' required><button>تأكيد التنفيذ</button></form>{% endif %}
+    {% if x['agent']==me and x['status']=='ASSIGNED' %}<form method='post' action='/store/agent/topup/complete'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><label>كود الباقة</label><input name='delivery_code' maxlength='300' required><label>مرجع المورد (اختياري)</label><input name='note' maxlength='300' placeholder='مرجع التنفيذ'><button>تسليم الكود للعميل</button></form>{% endif %}
     </article>{% else %}<p>لا توجد طلبات.</p>{% endfor %}
-    {% if agent and agent['status']=='APPROVED' %}<h2>طلبات متاحة للوكلاء</h2>{% for x in open_jobs %}<article class='panel'><p>{{x['reference']}} · {{x['game']}} {{x['title']}} · {{x['amount_sdg']}} SDG · اللاعب {{x['player_id']}}</p>
-    <form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب</button></form></article>{% else %}<p>لا توجد طلبات متاحة.</p>{% endfor %}{% endif %}</section>""",markets=markets,top=top,agent=agent,open_jobs=open_jobs,me=u["username"],csrf=session.get("csrf",""))
+    {% if agent and agent['status']=='APPROVED' %}<h2>طلبات متاحة للوكلاء</h2>{% for x in open_jobs %}<article class='panel'><p>{{x['reference']}} · {{x['game']}} {{x['title']}} · {{'{:,}'.format(x['amount_sdg'])}} SDG</p>
+    <form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب</button></form></article>{% else %}<p>لا توجد طلبات متاحة.</p>{% endfor %}{% endif %}</section>""",markets=markets,top=top,agent=agent,open_jobs=open_jobs,topup_labels=topup_labels,me=u["username"],csrf=session.get("csrf",""))
     return page("طلباتي",body)
 
 @empire_bp.post("/order/deliver")
@@ -838,41 +856,55 @@ def transfer_epc():
     u=user()
     if request.method=="POST":
         csrf()
+        action=request.form.get("action","lookup").strip()
         account=request.form.get("recipient_account","").strip()
+        target=db().execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone() if re.fullmatch(r"[0-9]{5,20}",account) else None
+        if action=="lookup":
+            if not target or not target["active"] or target["username"]==u["username"]:
+                flash("لم نعثر على حساب مستلم صالح. راجع الرقم وحاول مجدداً.")
+                return redirect(url_for("empire.transfer_epc"))
+            status=db().execute("SELECT status FROM es_identity_status WHERE username=?",(target["username"],)).fetchone()
+            verified=bool(status and status["status"]=="VERIFIED")
+            body=render_template_string("""<section class='panel transfer-step'><span class='tag'>الخطوة 2 من 2 · تم التحقق</span><h1>تأكيد بيانات المستلم</h1>
+              <div class='recipient-confirm'><small>سيتم التحويل إلى</small><strong>{{target['full_name']}}</strong><span dir='ltr'>{{target['account_number']}}</span><em class='{{"verified" if verified else "unverified"}}'>{{"حساب موثق" if verified else "حساب غير موثق"}}</em></div>
+              <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='execute'><input type='hidden' name='recipient_account' value='{{target['account_number']}}'>
+              <label>عملة التحويل</label><select name='currency'><option value='SDG'>الجنيه السوداني · SDG</option><option value='URC'>URC</option></select>
+              <label>المبلغ</label><input name='quantity' type='number' min='1' step='1' inputmode='numeric' placeholder='أدخل المبلغ' required>
+              <label>ملاحظات للمستلم <span class='muted'>(اختياري)</span></label><textarea name='note' maxlength='250' placeholder='اكتب ملاحظة مختصرة'></textarea>
+              <button class='transfer-submit'>تأكيد وإرسال التحويل</button></form>
+              <a class='btn secondary' href='/store/transfer-epc'>تغيير رقم الحساب</a></section>""",target=target,verified=verified,csrf=session.get("csrf",""))
+            return page("تأكيد المستلم",body)
+        if action!="execute":
+            abort(400,"طلب تحويل غير صالح")
+        if not target or not target["active"] or target["username"]==u["username"]:
+            abort(400,"تعذر التحقق من المستلم. ابدأ العملية من جديد.")
         currency=request.form.get("currency","URC").strip()
         qty=money_int(request.form.get("quantity"))
         note=request.form.get("note","").strip()[:250]
-        if currency not in ("SDG","URC") or not re.fullmatch(r"[0-9]{5,20}",account): abort(400,"بيانات التحويل غير صالحة")
-        target=db().execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
-        if not target or not target["active"] or target["username"]==u["username"]: abort(400,"المستلم غير صالح")
+        if currency not in ("SDG","URC"):
+            abort(400,"عملة التحويل غير مدعومة")
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
-            post(r,[("user:"+u["username"],currency,-qty),("user:"+target["username"],currency,qty)],"تحويل "+currency+" إلى "+target["full_name"])
+            current_target=d.execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
+            if not current_target or not current_target["active"] or current_target["username"]==u["username"]:
+                raise ValueError("حساب المستلم لم يعد صالحاً.")
+            post(r,[("user:"+u["username"],currency,-qty),("user:"+current_target["username"],currency,qty)],"تحويل "+currency+" إلى "+current_target["full_name"])
             d.execute("INSERT INTO es_transfer_details(reference,sender,recipient,recipient_account,currency,note,created_at) VALUES(?,?,?,?,?,?,?)",
-                      (r,u["username"],target["username"],account,currency,note,now()))
+                      (r,u["username"],current_target["username"],account,currency,note,now()))
             d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
-                      (target["username"],"وصلك تحويل جديد","استلمت تحويلًا بقيمة "+format(qty,",")+" "+currency+" من "+u["full_name"]+" · رقم العملية "+r,r,now()))
+                      (current_target["username"],"وصلك تحويل جديد","استلمت تحويلاً بقيمة "+format(qty,",")+" "+currency+" من "+u["full_name"]+" · رقم العملية "+r,r,now()))
             d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
-                      (u["username"],"تم التحويل بنجاح","تم إرسال "+format(qty,",")+" "+currency+" إلى "+target["full_name"]+" · رقم العملية "+r,r,now()))
-            audit(u["username"],"WALLET_TRANSFER","wallet",r,"to="+target["username"]+";currency="+currency)
+                      (u["username"],"تم التحويل بنجاح","تم إرسال "+format(qty,",")+" "+currency+" إلى "+current_target["full_name"]+" · رقم العملية "+r,r,now()))
+            audit(u["username"],"WALLET_TRANSFER","wallet",r,"to="+current_target["username"]+";currency="+currency)
             d.commit()
         except Exception:
-            d.rollback(); raise
+            d.rollback()
+            raise
         return redirect(url_for("empire.transfer_receipt",reference=r))
-    body=render_template_string("""<section class='panel'><span class='tag'>تحويل آمن</span><h1>إرسال تحويل</h1>
-      <p>أدخل رقم حساب المستلم أولاً، وسنعرض اسمه وحالة التوثيق قبل المتابعة.</p>
-      <form method='post' id='transferForm'><input type='hidden' name='csrf' value='{{csrf}}'>
-      <label>رقم حساب المستلم</label><input id='recipientAccount' name='recipient_account' inputmode='numeric' pattern='[0-9]{5,20}' maxlength='20' required>
-      <div id='recipientInfo' class='panel' style='display:none;background:#f2f8fc!important;margin:8px 0'></div>
-      <label>عملة التحويل</label><select name='currency'><option value='SDG'>جنيه سوداني SDG</option><option value='URC'>عملة URC</option></select>
-      <label>المبلغ</label><input name='quantity' type='number' min='1' step='1' required>
-      <label>ملاحظات (اختياري)</label><textarea name='note' maxlength='250' placeholder='أضف ملاحظة للمستلم'></textarea>
-      <button id='sendTransfer' disabled>إرسال التحويل</button></form></section>
-      <script>
-      (function(){const input=document.getElementById('recipientAccount'),box=document.getElementById('recipientInfo'),btn=document.getElementById('sendTransfer');let timer=null,last='';
-      input.addEventListener('input',()=>{clearTimeout(timer);btn.disabled=true;box.style.display='none';const value=input.value.trim();if(!value)return;timer=setTimeout(async()=>{if(value===last)return;last=value;try{const r=await fetch('/store/transfer/lookup?account_number='+encodeURIComponent(value),{credentials:'same-origin'});const j=await r.json();box.style.display='block';if(j.ok){box.replaceChildren();const name=document.createElement('b');name.textContent='المستلم: '+j.name;const acc=document.createElement('div');acc.textContent='رقم الحساب: '+j.account_number;const ver=document.createElement('div');ver.textContent='حالة التوثيق: '+j.verification;box.append(name,acc,ver);btn.disabled=false}else{box.textContent=j.message||'تعذر العثور على الحساب';}}catch(e){box.style.display='block';box.textContent='تعذر التحقق من الحساب. حاول مجدداً.';}},350);});
-      document.getElementById('transferForm').addEventListener('submit',e=>{if(btn.disabled){e.preventDefault();alert('تحقق من بيانات المستلم أولاً');}});
-      })();</script>""",csrf=session.get("csrf",""))
+    body=render_template_string("""<section class='panel transfer-step'><span class='tag'>تحويل آمن · الخطوة 1 من 2</span><h1>إلى من تريد التحويل؟</h1><p>أدخل رقم حساب المستلم واضغط تحقق. لن نعرض أي رصيد، ولن نطلب منك المبلغ إلا بعد التأكد من بيانات المستلم.</p>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='lookup'>
+      <label>رقم حساب المستلم</label><input name='recipient_account' inputmode='numeric' pattern='[0-9]{5,20}' maxlength='20' placeholder='رقم الحساب' required>
+      <button class='transfer-submit'>تحقق من الحساب</button></form></section>""",csrf=session.get("csrf",""))
     return page("التحويلات",body)
 
 @empire_bp.get("/transfer/receipt/<reference>")
@@ -1042,15 +1074,22 @@ def admin():
     <article class='panel'><small>طلبات السحب المعلقة</small><h2>{{stats['withdrawals']}}</h2></article>
     <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
     <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div></section>
-    <section class='panel'><h2>مركز الطلبات — كل نوع في قسم مستقل</h2><div class='grid admin-links'>
-    <a href='/founder/panel'><b>طلبات تغذية الحساب</b><small>{{stats['funding']}} طلب معلق</small></a>
+    <section class='admin-section'><div class='admin-section-head'><span>01 · العمليات المالية</span><h2>إدارة الأموال والمدفوعات</h2></div><div class='grid admin-links'>
+    <a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a>
     <a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>
-    <a href='/store/admin/topups'><b>طلبات شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>
+    <a href='/store/admin/withdrawals'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small></a>
+    <a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a></div></section>
+    <section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
+    <a href='/store/admin/topups'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>
     <a href='/store/admin/market-orders'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small></a>
-    <a href='/store/admin/withdrawals'>طلبات السحب</a><a href='/store/admin/disputes'>النزاعات</a>
-    <a href='/store/admin/products'>باقات الشحن والتكلفة</a><a href='/store/admin/listings'>إدارة السوق والإعلانات</a>
-    <a href='/store/admin/agents'>إدارة الوكلاء</a><a href='/store/admin/exchange'>إدارة الصرف والسيولة</a>
-    <a href='/store/admin/settings'>إعدادات المنصة والأسعار</a><a href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
+    <a href='/store/admin/disputes'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small></a></div></section>
+    <section class='admin-section'><div class='admin-section-head'><span>03 · المنتجات والشركاء</span><h2>إدارة الكتالوج والوكلاء</h2></div><div class='grid admin-links'>
+    <a href='/store/admin/products'><b>باقات الألعاب والأسعار</b><small>أسعار البيع وتكلفة المورد</small></a>
+    <a href='/store/admin/listings'><b>السوق والإعلانات</b><small>المنتجات والحسابات المعروضة</small></a>
+    <a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a></div></section>
+    <section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
+    <a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>
+    <a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a></div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
     return page("لوحة المالك",body)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
@@ -1345,28 +1384,61 @@ def admin_disputes():
     <button name='action' value='BUYER'>استرداد المبلغ للمشتري</button><button name='action' value='SELLER'>تحرير مستحقات البائع</button></form></article>{% else %}<p>لا توجد نزاعات مفتوحة.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("النزاعات",body)
 
-@empire_bp.get("/admin/topups")
+@empire_bp.route("/admin/topups",methods=["GET","POST"])
 @login_required
 @founder_required
 def admin_topups():
-    allowed = {"ALL","PENDING_PAYMENT","PAID","ASSIGNED","PROCESSING","COMPLETED","REJECTED","REFUNDED"}
-    status = request.args.get("status","ALL").upper()
-    if status not in allowed:
-        abort(400)
-    query = """SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id"""
-    params = ()
-    if status != "ALL":
-        query += " WHERE t.status=?"
-        params = (status,)
-    query += " ORDER BY t.id DESC LIMIT 300"
-    rows = db().execute(query,params).fetchall()
-    labels = {"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — بانتظار التنفيذ","ASSIGNED":"استلمه وكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"مكتمل","REJECTED":"مرفوض","REFUNDED":"مسترد"}
-    body = render_template_string("""<section class='panel'><h1>طلبات شحن الألعاب</h1><p>قسم مستقل لطلبات PUBG وFree Fire وMobile Legends وغيرها. لا يعتبر الطلب مكتملاً إلا بعد توثيق التنفيذ.</p>
+    if request.method=="POST":
+        csrf()
+        action=request.form.get("action","")
+        r=request.form.get("reference","").strip()
+        if action!="fulfill":
+            abort(400,"إجراء غير معروف")
+        code=request.form.get("delivery_code","").strip()
+        note=request.form.get("note","").strip()[:300]
+        if len(code)<4 or len(code)>300:
+            flash("كود الباقة يجب أن يكون بين 4 و300 حرف.")
+            return redirect(url_for("empire.admin_topups"))
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            order=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
+                               WHERE t.reference=? AND t.status='PAID' AND t.agent IS NULL""",(r,)).fetchone()
+            if not order: raise ValueError("الطلب لم يعد متاحاً للتسليم اليدوي.")
+            if order["cost_sdg"]<=0 or order["cost_sdg"]>order["amount_sdg"]:
+                raise ValueError("راجع تكلفة المورد وسعر البيع قبل تسليم الكود.")
+            margin=order["amount_sdg"]-order["cost_sdg"]
+            cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
+            post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("platform:revenue","SDG",margin)],
+                 "تسوية كود لعبة وتسليم العميل")
+            changed=d.execute("UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
+                              (cipher,note,now(),r)).rowcount
+            if changed!=1: raise ValueError("تغيرت حالة الطلب أثناء المعالجة.")
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (order["buyer"],"كود لعبتك جاهز","تم تجهيز كود باقتك. افتح طلباتي لعرض الكود بأمان.",r,now()))
+            audit(user()["username"],"TOPUP_CODE_DELIVERED","topup",r,"manual owner fulfillment")
+            d.commit()
+            flash("تم تسليم الكود للعميل وإغلاق الطلب بنجاح.")
+        except Exception as exc:
+            d.rollback()
+            flash(str(exc))
+        return redirect(url_for("empire.admin_topups"))
+    allowed={"ALL","PENDING_PAYMENT","PAID","ASSIGNED","PROCESSING","COMPLETED","REJECTED","REFUNDED"}
+    status=request.args.get("status","ALL").upper()
+    if status not in allowed: abort(400)
+    query="SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id"
+    params=()
+    if status!="ALL": query+=" WHERE t.status=?"; params=(status,)
+    query+=" ORDER BY t.id DESC LIMIT 300"
+    rows=db().execute(query,params).fetchall()
+    labels={"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — جاهز لتسليم الكود","ASSIGNED":"استلمه وكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"تم تسليم الكود","REJECTED":"مرفوض","REFUNDED":"مسترد"}
+    body=render_template_string("""<section class='panel'><span class='tag'>مركز تنفيذ الأكواد</span><h1>طلبات أكواد الألعاب</h1><p>لا يُطلب آيدي لاعب. بعد التحقق من الدفع، أدخل كود الباقة ليظهر للعميل داخل «طلباتي» بشكل آمن.</p>
       <div class='admin-filters'><a href='/store/admin/topups'>الكل</a>{% for k,v in labels.items() %}<a href='/store/admin/topups?status={{k}}'>{{v}}</a>{% endfor %}</div>
-      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
-      <div class='order-grid'><div><small>العميل</small><b>{{x['buyer']}}</b></div><div><small>اللعبة / الباقة</small><b>{{x['game']}} · {{x['title']}}</b></div><div><small>معرف اللاعب</small><b dir='ltr'>{{x['player_id']}}</b></div><div><small>القيمة</small><b>{{'{:,}'.format(x['amount_sdg'])}} SDG</b></div><div><small>الوكيل</small><b>{{x['agent'] or 'لم يعيّن بعد'}}</b></div><div><small>آخر تحديث</small><b>{{x['updated_at']}}</b></div></div>{% if x['note'] %}<p>{{x['note']}}</p>{% endif %}</article>
-      {% else %}<div class='empty-state'>لا توجد طلبات في هذا القسم.</div>{% endfor %}</section>""",rows=rows,labels=labels)
-    return page("طلبات شحن الألعاب",body)
+      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b dir='ltr'>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
+      <div class='order-grid'><div><small>العميل</small><b>{{x['buyer']}}</b></div><div><small>اللعبة / الباقة</small><b>{{x['game']}} · {{x['title']}}</b></div><div><small>المبلغ</small><b>{{'{:,}'.format(x['amount_sdg'])}} SDG</b></div><div><small>الوكيل</small><b>{{x['agent'] or 'تنفيذ المالك'}}</b></div><div><small>تاريخ الطلب</small><b>{{x['created_at']}}</b></div><div><small>آخر تحديث</small><b>{{x['updated_at']}}</b></div></div>
+      {% if x['status']=='PAID' and not x['agent'] %}<form method='post' class='fulfill-code-form'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='fulfill'><input type='hidden' name='reference' value='{{x['reference']}}'><label>كود الباقة</label><input name='delivery_code' maxlength='300' autocomplete='off' required placeholder='أدخل كود الشحن كما استلمته من المورد'><label>ملاحظة داخلية (اختياري)</label><input name='note' maxlength='300' placeholder='مرجع المورد أو ملاحظة تنفيذ'><button>تسليم الكود للعميل</button></form>{% endif %}
+      {% if x['note'] %}<p class='muted'>{{x['note']}}</p>{% endif %}</article>
+      {% else %}<div class='empty-state'>لا توجد طلبات في هذا القسم.</div>{% endfor %}</section>""",rows=rows,labels=labels,csrf=session.get("csrf",""))
+    return page("طلبات أكواد الألعاب",body)
 
 @empire_bp.get("/admin/market-orders")
 @login_required
