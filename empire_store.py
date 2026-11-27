@@ -1969,7 +1969,7 @@ def exchange():
       const result=document.getElementById('fxResult'),rateOut=document.getElementById('fxRate'),feeOut=document.getElementById('fxFee'),totalOut=document.getElementById('fxTotal');
       const quoteId=document.getElementById('fxQuoteId'),timer=document.getElementById('fxTimer'),available=document.getElementById('fxAvailable');
       const maxAvailable=document.getElementById('fxMaximum'),target=document.getElementById('fxTarget'),hint=document.getElementById('fxHint');
-      const fmt=n=>{const value=String(n??'0');try{return /^-?\\d+$/.test(value)?BigInt(value).toLocaleString('en-US'):Number(n).toLocaleString('en-US');}catch(_){return '—';}};
+      const fmt=n=>{const value=String(n??'0');try{return /^-?\d+$/.test(value)?BigInt(value).toLocaleString('en-US'):Number(n).toLocaleString('en-US');}catch(_){return '—';}};
       let requestNo=0,expiresAt=0,debounce=null;
       function reset(){quoteId.value='';submit.disabled=true;result.textContent='—';rateOut.textContent='—';feeOut.textContent='—';totalOut.textContent='—';}
       async function update(){const id=++requestNo,dir=direction.value,raw=amount.value.trim();reset();if(!raw){timer.textContent='أدخل المبلغ لعرض السعر';return;}
