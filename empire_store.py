@@ -166,7 +166,7 @@ def init_db():
     db().execute("UPDATE es_products SET instructions='سيتم تسليم كود الباقة داخل التطبيق بعد تأكيد الدفع.' WHERE instructions='أدخل معرف اللاعب بدقة.'")
     defaults = {
       "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"15000000",
-      "fx_rate_mode":"manual", "fx_market_rate":"0", "fx_manual_rate":"0", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
+      "fx_rate_mode":"manual", "fx_market_rate":"5600", "fx_manual_rate":"5600", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
       "store_name":"الإمبراطورية إستوري", "market_fee_bps":"0",
       "topups_enabled":"0", "epc_sales_enabled":"0"
@@ -189,6 +189,11 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id)")
     for k,v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
+    # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
+    for key in ("fx_manual_rate","fx_market_rate"):
+        current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
+        if not current or not str(current["value"]).isdigit() or int(current["value"])<=0:
+            conn.execute("INSERT INTO es_settings(key,value) VALUES(?, '5600') ON CONFLICT(key) DO UPDATE SET value='5600'",(key,))
     seed_owner_assets()
     seed_game_products()
 
@@ -1056,19 +1061,64 @@ def cancel_payment():
     flash("تم إلغاء طلب الشراء وإتاحة الكمية المحجوزة من URC.")
     return redirect(url_for("empire.wallet"))
 
+def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic inventory fulfillment"):
+    """Consume one matching stock code and complete a paid top-up atomically."""
+    if order["status"]!="PAID" or order["agent"] is not None:
+        raise ValueError("الطلب ليس مؤهلاً للتسليم التلقائي.")
+    cost=int(order["cost_sdg"])
+    if cost<=0 or cost>int(order["amount_sdg"]):
+        raise ValueError("يجب ضبط تكلفة المورد الصحيحة قبل التسليم.")
+    code=encryption().decrypt(stock["code_cipher"].encode("utf-8")).decode("utf-8")
+    consumed=d.execute(
+        "UPDATE es_game_code_inventory SET status='USED',used_order_ref=?,used_at=? WHERE id=? AND product_id=? AND status='AVAILABLE'",
+        (order["reference"],now(),stock["id"],order["product_id"])
+    ).rowcount
+    if consumed!=1:
+        raise ValueError("كود المخزون لم يعد متاحاً.")
+    cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
+    margin=int(order["amount_sdg"])-cost
+    post(order["reference"]+"T",[
+        ("clearing:topups","SDG",-int(order["amount_sdg"])),
+        ("supplier:topup_cost","SDG",cost),
+        ("platform:revenue","SDG",margin)
+    ],"تسوية وتسليم تلقائي لكود لعبة")
+    changed=d.execute(
+        "UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
+        (cipher,note,now(),order["reference"])
+    ).rowcount
+    if changed!=1:
+        raise ValueError("تغيرت حالة الطلب أثناء التسليم.")
+    d.execute(
+        "INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+        (order["buyer"],"تم تسليم كود لعبتك تلقائياً","تم التحقق من الدفع وتسليم كود الباقة. افتح طلباتي لعرضه بأمان.",order["reference"],now())
+    )
+    audit(actor,"TOPUP_AUTO_DELIVERED","topup",order["reference"],"inventory_code_id="+str(stock["id"]))
+    return code
+
 @empire_bp.post("/topups/pay")
 @login_required
 def pay_topup():
     csrf(); u=user(); r=request.form.get("reference","")
     d=db(); d.execute("BEGIN IMMEDIATE")
     try:
-        row=d.execute("SELECT * FROM es_topup_orders WHERE reference=? AND buyer=? AND status='PENDING_PAYMENT'",(r,u["username"])).fetchone()
+        row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
+                           WHERE t.reference=? AND t.buyer=? AND t.status='PENDING_PAYMENT'""",(r,u["username"])).fetchone()
         if not row: raise ValueError("طلب الشحن غير متاح للدفع")
-        post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب")
-        d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=?",(now(),r))
-        audit(u["username"],"TOPUP_PAID","topup",r); d.commit()
+        post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب من محفظة SDG")
+        d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
+        stock=d.execute("SELECT * FROM es_game_code_inventory WHERE product_id=? AND status='AVAILABLE' ORDER BY id LIMIT 1",(row["product_id"],)).fetchone()
+        if stock and int(row["cost_sdg"])>0 and int(row["cost_sdg"])<=int(row["amount_sdg"]):
+            fulfill_topup_from_inventory(d,row,stock,u["username"])
+            d.commit()
+            delivered=True
+        else:
+            audit(u["username"],"TOPUP_PAID","topup",r,"awaiting matching game code inventory or valid supplier cost")
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (u["username"],"تم استلام دفع طلب الشحن","تم خصم المبلغ من محفظتك. سيُسلّم الكود تلقائياً فور توفر كود مطابق وتكلفة مورد صحيحة.",r,now()))
+            d.commit()
+            delivered=False
     except Exception: d.rollback(); raise
-    flash("تم دفع طلب الشحن من محفظة المتجر. ينتظر تعيين وكيل لتنفيذه.")
+    flash("تم الدفع وتسليم كود الباقة تلقائياً." if delivered else "تم الدفع بنجاح. سيُسلّم الكود تلقائياً فور توفره في المخزون واعتماد تكلفة المورد.")
     return redirect(url_for("empire.orders"))
 
 @empire_bp.post("/agent/topup/claim")
@@ -1847,9 +1897,19 @@ def admin_code_inventory():
                 cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
                 d.execute("INSERT INTO es_game_code_inventory(product_id,code_cipher,code_hash,code_tail,status,created_by,created_at) VALUES(?,?,?,?, 'AVAILABLE',?,?)",
                           (int(product_id),cipher,digest,code[-4:],user()["username"],now()))
-            audit(user()["username"],"GAME_CODES_IMPORTED","game_code_inventory",product_id,"count="+str(len(normalized)))
+            pending=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
+                                  WHERE t.product_id=? AND t.status='PAID' AND t.agent IS NULL ORDER BY t.id""",(int(product_id),)).fetchall()
+            auto_delivered=0
+            for paid_order in pending:
+                if int(paid_order["cost_sdg"])<=0 or int(paid_order["cost_sdg"])>int(paid_order["amount_sdg"]):
+                    continue
+                stock=d.execute("SELECT * FROM es_game_code_inventory WHERE product_id=? AND status='AVAILABLE' ORDER BY id LIMIT 1",(int(product_id),)).fetchone()
+                if not stock: break
+                fulfill_topup_from_inventory(d,paid_order,stock,user()["username"],"automatic delivery after inventory import")
+                auto_delivered+=1
+            audit(user()["username"],"GAME_CODES_IMPORTED","game_code_inventory",product_id,"count="+str(len(normalized))+";auto_delivered="+str(auto_delivered))
             d.commit()
-            flash("تمت إضافة "+str(len(normalized))+" كوداً إلى مخزون "+product["game"]+" · "+product["title"]+".")
+            flash("تمت إضافة "+str(len(normalized))+" كوداً. تم التسليم التلقائي لـ "+str(auto_delivered)+" طلب مدفوع عند توفر المخزون.")
         except sqlite3.IntegrityError:
             d.rollback()
             flash("توجد أكواد مكررة مسبقاً في المخزون؛ لم تُحفظ أي أكواد من هذه الدفعة.")
