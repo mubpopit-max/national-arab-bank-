@@ -414,7 +414,7 @@ input,textarea,select{display:block;width:100%;min-height:46px;margin:7px 0 14px
 .admin-section-head h2{margin:0;font-size:17px;font-weight:950;color:#2d2048!important}
 .admin-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .admin-links a{min-height:88px;padding:13px;border:1px solid #e8e1ef;border-radius:16px;background:linear-gradient(145deg,#fff,#faf8fd);color:#352452!important;box-shadow:0 3px 10px rgba(40,25,65,.035)}
-.admin-links a b{font-size:13px;line-height:1.5}.admin-links a small{color:#7a6a91;font-size:10px;line-height:1.5}
+.admin-links a b{font-size:13px;line-height:1.5}.admin-links a small{color:#7a6a91;font-size:10px;line-height:1.5}.admin-links a{position:relative;z-index:2;pointer-events:auto;cursor:pointer}.admin-section:before{pointer-events:none}
 @media(max-width:360px){.admin-section{padding:13px;margin:13px 0;border-radius:17px}.admin-links{grid-template-columns:1fr}.admin-links a{min-height:68px}}
 .transfer-step{border:1px solid #e5e0ee!important;box-shadow:0 12px 34px rgba(36,24,61,.07)!important}.transfer-submit{border-radius:14px!important}
 footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;margin:18px auto!important;border-top:5px solid #16844f!important;background:#fff!important}.receipt-flag{display:flex;height:7px;margin-bottom:14px;overflow:hidden;border-radius:20px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
@@ -1557,48 +1557,103 @@ def transfer_receipt(reference):
 @login_required
 def exchange():
     u=user()
+    mode=setting("fx_rate_mode","manual")
+    try:
+        base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
+        buy_spread=int(setting("fx_buy_spread_bps","0"))
+        sell_spread=int(setting("fx_sell_spread_bps","0"))
+    except (TypeError,ValueError):
+        base,buy_spread,sell_spread=0,0,0
+
+    def effective_rate(direction):
+        if direction=="URC_TO_SDG":
+            return (base*(10000-sell_spread))//10000
+        if direction=="SDG_TO_URC":
+            return (base*(10000+buy_spread)+9999)//10000
+        raise ValueError("اتجاه التحويل غير صالح")
+
+    def fund_balance(currency):
+        row=db().execute(
+            "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",
+            (currency,)
+        ).fetchone()
+        return max(0,int(row["n"]))
+
+    def affordable_limit(wallet_amount):
+        lo,hi=0,max(0,int(wallet_amount))
+        while lo<hi:
+            mid=(lo+hi+1)//2
+            if mid+platform_fee(mid)<=wallet_amount:
+                lo=mid
+            else:
+                hi=mid-1
+        return lo
+
+    def calculate_limit(direction):
+        rate=effective_rate(direction)
+        if rate<=0:
+            return {"rate":rate,"minimum":1,"maximum":0,"currency":"URC" if direction=="URC_TO_SDG" else "SDG"}
+        if direction=="URC_TO_SDG":
+            minimum=1
+            reserve_limit=fund_balance("SDG")//rate
+            wallet_amount=balance(u["username"],"URC")
+            currency="URC"
+        else:
+            minimum=rate
+            available_urc=fund_balance("URC")
+            reserve_limit=max(0,(available_urc+1)*rate-1)
+            wallet_amount=balance(u["username"],"SDG")
+            currency="SDG"
+        maximum=min(reserve_limit,affordable_limit(wallet_amount),999_999_999_999)
+        return {"rate":rate,"minimum":minimum,"maximum":maximum,"currency":currency}
+
     if request.method=="POST":
         csrf()
         direction=request.form.get("direction","")
         try:
             amount=money_int(request.form.get("amount"))
+            limits=calculate_limit(direction)
+            if amount<limits["minimum"]:
+                raise ValueError("الحد الأدنى لهذا الاتجاه هو {:,} {} قبل العمولة.".format(limits["minimum"],limits["currency"]))
+            if amount>limits["maximum"]:
+                if limits["maximum"]<limits["minimum"]:
+                    raise ValueError("الصرف بهذا الاتجاه غير متاح حالياً. لم يتم خصم أي مبلغ من محفظتك.")
+                raise ValueError("المبلغ يتجاوز الحد الأعلى الممكن حالياً: {:,} {}. خفّض المبلغ ثم حاول مجدداً.".format(limits["maximum"],limits["currency"]))
         except ValueError as exc:
             flash(str(exc))
             return redirect(url_for("empire.exchange"))
-        mode=setting("fx_rate_mode","manual")
-        try:
-            base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
-        except (TypeError,ValueError):
-            base=0
-        if base<=0:
-            flash("سعر الصرف غير مضبوط حالياً. يرجى مراجعة إدارة المنصة.")
+
+        rate=limits["rate"]
+        result=amount*rate if direction=="URC_TO_SDG" else amount//rate
+        if result<=0:
+            flash("الحد الأدنى لهذا الاتجاه هو {:,} {}.".format(limits["minimum"],limits["currency"]))
             return redirect(url_for("empire.exchange"))
-        buy_spread=int(setting("fx_buy_spread_bps","0")); sell_spread=int(setting("fx_sell_spread_bps","0"))
-        if direction=="URC_TO_SDG":
-            rate=(base*(10000-sell_spread))//10000
-            result=amount*rate
-            source="URC"
-        elif direction=="SDG_TO_URC":
-            rate=(base*(10000+buy_spread)+9999)//10000
-            result=amount//rate
-            source="SDG"
-        else: abort(400)
-        if result<=0: abort(400,"المبلغ أقل من الحد الأدنى للتحويل")
         if result>9_000_000_000_000_000_000:
-            abort(400,"قيمة التحويل تتجاوز الحد المحاسبي المسموح.")
-        r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
+            flash("قيمة التحويل تتجاوز الحد المحاسبي المسموح.")
+            return redirect(url_for("empire.exchange"))
+
+        r=ref()
+        d=db()
+        d.execute("BEGIN IMMEDIATE")
         try:
+            # Recalculate inside the write transaction to prevent two simultaneous
+            # exchanges from consuming the same available counter-currency.
+            limits=calculate_limit(direction)
+            if amount<limits["minimum"] or amount>limits["maximum"]:
+                if limits["maximum"]<limits["minimum"]:
+                    raise ValueError("الصرف بهذا الاتجاه غير متاح حالياً. لم يتم خصم أي مبلغ من محفظتك.")
+                raise ValueError("الحد الأعلى الممكن الآن هو {:,} {}. لم يتم تنفيذ العملية.".format(limits["maximum"],limits["currency"]))
             fee=platform_fee(amount)
             if direction=="URC_TO_SDG":
-                available=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='SDG'").fetchone()["n"])
-                if available<result: raise ValueError("تعذر إتمام التحويل بهذا المبلغ حالياً. حاول لاحقاً أو اختر مبلغاً آخر.")
-                post(r,[("user:"+u["username"],"URC",-amount),("protection:fund","URC",amount),("protection:fund","SDG",-result),("user:"+u["username"],"SDG",result),
-                        ("user:"+u["username"],"URC",-fee),("protection:fund","URC",fee)],"تحويل URC إلى SDG · عمولة التطبيق 3%")
+                post(r,[("user:"+u["username"],"URC",-amount),("protection:fund","URC",amount),
+                        ("protection:fund","SDG",-result),("user:"+u["username"],"SDG",result),
+                        ("user:"+u["username"],"URC",-fee),("protection:fund","URC",fee)],
+                     "تحويل URC إلى SDG · عمولة التطبيق 3%")
             else:
-                available=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='URC'").fetchone()["n"])
-                if available<result: raise ValueError("تعذر إتمام التحويل بهذا المبلغ حالياً. حاول لاحقاً أو اختر مبلغاً آخر.")
-                post(r,[("user:"+u["username"],"SDG",-amount),("protection:fund","SDG",amount),("protection:fund","URC",-result),("user:"+u["username"],"URC",result),
-                        ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],"تحويل SDG إلى URC · عمولة التطبيق 3%")
+                post(r,[("user:"+u["username"],"SDG",-amount),("protection:fund","SDG",amount),
+                        ("protection:fund","URC",-result),("user:"+u["username"],"URC",result),
+                        ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],
+                     "تحويل SDG إلى URC · عمولة التطبيق 3%")
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate))
             d.commit()
         except ValueError as exc:
@@ -1608,22 +1663,58 @@ def exchange():
         except Exception:
             d.rollback()
             from flask import current_app
-            current_app.logger.exception("Currency exchange failed for user %s", u["username"])
+            current_app.logger.exception("Currency exchange failed for user %s",u["username"])
             flash("تعذر تنفيذ التحويل بسبب خطأ داخلي. لم يتم اعتماد العملية؛ حاول لاحقاً أو تواصل مع الدعم.")
             return redirect(url_for("empire.exchange"))
         flash("تم تنفيذ تحويل العملات بنجاح.")
         return redirect(url_for("empire.wallet"))
-    mode=setting("fx_rate_mode","manual")
-    base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","0"))
+
     user_sdg=balance(u["username"],"SDG")
     user_urc=balance(u["username"],"URC")
+    urc_limits=calculate_limit("URC_TO_SDG")
+    sdg_limits=calculate_limit("SDG_TO_URC")
     return page("تحويل العملات",render_template_string("""<section class='panel'><span class='tag'>تحويل العملات</span><h1>URC ↔ SDG</h1>
       <p>{% if rate>0 %}السعر المعتمد حالياً: {{'{:,}'.format(rate)}} SDG لكل URC · المصدر: {{mode}}{% else %}الصرف متوقف مؤقتاً؛ يرجى مراجعة إدارة المنصة.{% endif %}</p>
       <div class='grid'><article class='panel'><small>رصيدك SDG</small><b>{{'{:,}'.format(user_sdg)}}</b></article><article class='panel'><small>رصيدك URC</small><b>{{'{:,}'.format(user_urc)}}</b></article></div>
-      <p class='muted'>تُنفّذ عمليات الصرف وفق السعر المعتمد، وتُخصم عمولة التطبيق 3% بصورة منفصلة من محفظتك بالعملة التي تدفعها.</p>
-      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>اتجاه التحويل</label><select name='direction'><option value='URC_TO_SDG'>تحويل URC إلى SDG</option><option value='SDG_TO_URC'>تحويل SDG إلى URC</option></select>
-      <label>المبلغ</label><input name='amount' type='number' min='1' required><p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد.</p><button {% if rate<=0 %}disabled{% endif %}>تنفيذ التحويل</button></form><a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>""",rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",user_sdg=user_sdg,user_urc=user_urc,csrf=session.get("csrf","")))
-    
+      <p class='muted'>تُخصم عمولة التطبيق 3% بصورة منفصلة من محفظتك بالعملة التي تدفعها، وتُضاف إلى صندوق حماية المستخدمين.</p>
+      <form method='post' id='fxForm'><input type='hidden' name='csrf' value='{{csrf}}'>
+      <label>اتجاه التحويل</label><select name='direction' id='fxDirection'>
+        <option value='URC_TO_SDG' data-min='{{urc_limits["minimum"]}}' data-max='{{urc_limits["maximum"]}}' data-currency='URC'>تحويل URC إلى SDG</option>
+        <option value='SDG_TO_URC' data-min='{{sdg_limits["minimum"]}}' data-max='{{sdg_limits["maximum"]}}' data-currency='SDG'>تحويل SDG إلى URC</option>
+      </select>
+      <label>المبلغ</label><input name='amount' id='fxAmount' type='number' min='{{urc_limits["minimum"]}}' max='{{urc_limits["maximum"]}}' step='1' inputmode='numeric' required>
+      <div class='panel' id='fxLimits' aria-live='polite' style='background:#f5faf6!important'>
+        <p id='fxMinText'>الحد الأدنى: {{'{:,}'.format(urc_limits["minimum"])}} URC قبل العمولة.</p>
+        <p id='fxMaxText'>{% if urc_limits["maximum"]>=urc_limits["minimum"] %}الحد الأعلى الممكن الآن: {{'{:,}'.format(urc_limits["maximum"])}} URC.{% else %}الصرف بهذا الاتجاه غير متاح حالياً.{% endif %}</p>
+      </div>
+      <p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد.</p>
+      <button id='fxSubmit' {% if rate<=0 or urc_limits["maximum"]<urc_limits["minimum"] %}disabled{% endif %}>تنفيذ التحويل</button></form>
+      <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>
+      <script>
+      (function(){
+        const direction=document.getElementById('fxDirection');
+        const amount=document.getElementById('fxAmount');
+        const minText=document.getElementById('fxMinText');
+        const maxText=document.getElementById('fxMaxText');
+        const submit=document.getElementById('fxSubmit');
+        function update(){
+          const option=direction.options[direction.selectedIndex];
+          const min=Number(option.dataset.min||0),max=Number(option.dataset.max||0),currency=option.dataset.currency||'';
+          amount.min=String(min);amount.max=String(max);
+          minText.textContent='الحد الأدنى: '+min.toLocaleString('en-US')+' '+currency+' قبل العمولة.';
+          maxText.textContent=max>=min?'الحد الأعلى الممكن الآن: '+max.toLocaleString('en-US')+' '+currency+'.':'الصرف بهذا الاتجاه غير متاح حالياً.';
+          submit.disabled=max<min;
+          amount.setCustomValidity('');
+        }
+        direction.addEventListener('change',update);
+        amount.addEventListener('input',function(){amount.setCustomValidity('');});
+        update();
+      })();
+      </script>""",
+      rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",
+      user_sdg=user_sdg,user_urc=user_urc,urc_limits=urc_limits,sdg_limits=sdg_limits,
+      csrf=session.get("csrf","")))
+  
 @empire_bp.route("/admin/exchange",methods=["GET","POST"])
 @login_required
 @admin_permission("exchange")
