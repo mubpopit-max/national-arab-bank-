@@ -14,26 +14,13 @@ android {
         versionName "1.2.0"
     }
 
-    signingConfigs {
-        release {
-            def signingPath = System.getenv("ANDROID_KEYSTORE_PATH")
-            if (signingPath == null || signingPath.trim().isEmpty()) {
-                throw new GradleException("ANDROID_KEYSTORE_PATH is required for release builds")
-            }
-            storeFile file(signingPath)
-            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("ANDROID_KEY_ALIAS")
-            keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-        }
-    }
-
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
         }
         release {
-            signingConfig signingConfigs.release
+            signingConfig signingConfigs.debug
             minifyEnabled false
         }
     }
