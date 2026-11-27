@@ -258,8 +258,11 @@ def seed_game_products():
     }
     for game, titles in catalogue.items():
         for title in titles:
+            exists=db().execute("SELECT 1 FROM es_products WHERE game=? AND title=? LIMIT 1",(game,title)).fetchone()
+            if exists:
+                continue
             code="CAT-"+secrets.token_hex(8).upper()
-            db().execute("""INSERT OR IGNORE INTO es_products
+            db().execute("""INSERT INTO es_products
               (code,game,title,instructions,price_sdg,cost_sdg,active,created_at)
               VALUES(?,?,?,'أدخل معرف اللاعب بدقة.',1,0,0,?)""",
               (code,game,title,now()))
@@ -279,7 +282,7 @@ def encryption():
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
-    <meta name='theme-color' content='#101326'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
+    <meta name='theme-color' content='#f4f8fb'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg'>
     <meta name='description' content='الإمبراطورية إستوري — وجهتك لشحن الألعاب والتجارة الرقمية.'>
     <title>{{title}} | الإمبراطورية إستوري</title>
     
@@ -408,7 +411,7 @@ def home():
     <a class="service-card" href="/store/transfer-epc"><i class="service-icon transfer"><svg><use href="#i-transfer"/></svg></i><strong>التحويلات</strong></a>
     <a class="service-card" href="/store/wallet"><i class="service-icon coins"><svg><use href="#i-coins"/></svg></i><strong>عملاتي</strong></a>
     <a class="service-card" href="/account/funding"><i class="service-icon funding"><svg><use href="#i-arrow-down"/></svg></i><strong>تغذية حسابي</strong></a>
-    <a class="service-card" href="/account_details"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
+    <a class="service-card" href="/store/profile"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
     <a class="service-card" href="/store/topups"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>الألعاب</strong></a>
     <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>صرف العملات</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
