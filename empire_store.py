@@ -358,7 +358,7 @@ def profile():
         csrf()
         email=(request.form.get("email") or "").strip().lower()
         phone=(request.form.get("phone") or "").strip()
-        if len(email)>254 or (email and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+",email)): abort(400,"البريد الإلكتروني غير صالح")
+        if len(email)>254 or (email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",email)): abort(400,"البريد الإلكتروني غير صالح")
         if len(phone)>30 or (phone and not re.fullmatch(r"[+0-9 ()-]{6,30}",phone)): abort(400,"رقم الهاتف غير صالح")
         if email and db().execute("SELECT 1 FROM users WHERE lower(email)=? AND username<>?",(email,u["username"])).fetchone(): abort(409,"البريد الإلكتروني مرتبط بحساب آخر")
         db().execute("UPDATE users SET email=?,phone=? WHERE username=?",(email,phone,u["username"]))
