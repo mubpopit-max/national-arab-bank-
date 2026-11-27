@@ -810,7 +810,7 @@ def admin_managers():
         "orders":"متابعة الطلبات والتسليم",
         "payments":"مراجعة طلبات الدفع",
         "withdrawals":"مراجعة طلبات السحب",
-        "exchange":"إدارة الصرف والسيولة",
+        "exchange":"إدارة تحويل العملة والسيولة",
         "catalog":"إدارة إعلانات السوق",
         "agents":"إدارة الوكلاء",
         "settings":"إعدادات المنصة",
@@ -1182,7 +1182,7 @@ def home():
     <a class="service-card" href="/account/funding"><i class="service-icon funding"><svg><use href="#i-arrow-down"/></svg></i><strong>تغذية حسابي</strong></a>
     <a class="service-card" href="/store/profile"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
     <a class="service-card" href="/store/topups"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>الألعاب</strong></a>
-    <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>صرف العملات</strong></a>
+    <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>تحويل العملة</strong></a>
     <a class="service-card" href="/store/history"><i class="service-icon funding"><svg><use href="#i-bell"/></svg></i><strong>المعاملات السابقة</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
     <a class="service-card" href="/store/agents"><i class="service-icon agents"><svg><use href="#i-user"/></svg></i><strong>الوكلاء</strong></a>
@@ -1934,64 +1934,74 @@ def exchange():
         flash("تم التحويل بنجاح."); return redirect(url_for("empire.transaction_history_detail",reference=r))
     user_sdg=balance(u["username"],"SDG"); user_urc=balance(u["username"],"URC")
     urc_limits=calculate_limit("URC_TO_SDG"); sdg_limits=calculate_limit("SDG_TO_URC")
-    return page("تحويل العملات",render_template_string("""<style>
-      .fx-shell{max-width:620px;margin:0 auto;padding:4px 0 24px}.fx-head{text-align:center;padding:8px 8px 18px}
-      .fx-mark{width:58px;height:58px;border-radius:19px;margin:0 auto 12px;display:grid;place-items:center;background:linear-gradient(145deg,#f7e7b4,#c49a43);color:#171717;font-size:27px;box-shadow:0 8px 24px #c59b4430}
-      .fx-head h1{font-size:25px;margin:0 0 6px;color:var(--text,#171717)}.fx-head p{margin:0;color:var(--muted,#777);font-size:13px}
-      .fx-card{background:var(--surface,#fff);border:1px solid var(--border,#e8e8e8);border-radius:20px;padding:17px;margin:12px 0;box-shadow:0 8px 28px #1111}
-      .fx-label{display:block;font-size:13px;font-weight:700;margin:0 0 9px;color:var(--text,#222)}
-      .fx-select,.fx-input{width:100%;box-sizing:border-box;border:1px solid var(--border,#ddd);border-radius:13px;padding:14px;background:var(--surface,#fff);color:var(--text,#222);font-size:16px;outline:none}
-      .fx-input:focus,.fx-select:focus{border-color:#c59b44;box-shadow:0 0 0 3px #c59b4422}
-      .fx-balance{display:flex;justify-content:space-between;gap:12px;margin-top:9px;font-size:12px;color:var(--muted,#777)}
-      .fx-quote{background:linear-gradient(145deg,#fbf7eb,#fff);border:1px solid #ead9ac;border-radius:17px;padding:15px;margin-top:15px;color:#222}
-      .fx-quote-main{text-align:center;padding:7px 0 13px}.fx-quote-main small{display:block;color:#78663e;font-size:12px}
-      .fx-quote-main strong{display:block;font-size:25px;margin-top:5px;color:#8d6a24;direction:ltr}
-      .fx-line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #e9dfc7;font-size:13px}.fx-line b{direction:ltr;text-align:left}
-      .fx-timer{font-size:12px;text-align:center;color:#80652c;margin-top:10px}
-      .fx-submit{width:100%;border:0;border-radius:14px;padding:15px;margin-top:14px;background:linear-gradient(110deg,#d9b65f,#b68a31);color:#171717;font-size:16px;font-weight:800;cursor:pointer}
-      .fx-submit:disabled{opacity:.45;cursor:not-allowed}.fx-hint{font-size:12px;color:var(--muted,#777);text-align:center;min-height:18px;margin:9px 0 0}
-      @media(max-width:420px){.fx-card{padding:13px;border-radius:16px}.fx-head h1{font-size:22px}}
-      </style>
-      <section class="fx-shell"><header class="fx-head"><div class="fx-mark">⇄</div><h1>تحويل العملات</h1><p>حوّل بين URC وSDG بسهولة</p></header>
-      <form method="post" id="fxForm" class="fx-card"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="quote_id" id="fxQuoteId" value="">
-      <label class="fx-label" for="fxDirection">التحويل من</label><select class="fx-select" name="direction" id="fxDirection">
-      <option value="URC_TO_SDG">URC · العملة الرقمية</option><option value="SDG_TO_URC">SDG · الجنيه السوداني</option></select>
-      <div class="fx-balance"><span>رصيد محفظتك</span><b id="fxAvailable">{{'{:,}'.format(user_urc)}} URC</b></div>
-      <div class="fx-balance"><span>أقصى مبلغ متاح للتحويل حالياً</span><b id="fxMaximum">{{'{:,}'.format(urc_limits['maximum'])}} URC</b></div><div style="height:15px"></div>
-      <label class="fx-label" for="fxAmount">المبلغ</label><input class="fx-input" name="amount" id="fxAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" autocomplete="off" required>
-      <div class="fx-balance"><span>سيتم التحويل إلى</span><b id="fxTarget">SDG · الجنيه السوداني</b></div>
-      <div class="fx-quote" aria-live="polite"><div class="fx-quote-main"><small>ستحصل على</small><strong id="fxResult">—</strong></div>
-      <div class="fx-line"><span>سعر التحويل</span><b id="fxRate">—</b></div><div class="fx-line"><span>الرسوم</span><b id="fxFee">—</b></div>
-      <div class="fx-line"><span>إجمالي الخصم</span><b id="fxTotal">—</b></div><div class="fx-timer" id="fxTimer">أدخل المبلغ لعرض السعر</div></div>
-      <button class="fx-submit" id="fxSubmit" type="submit" disabled>تأكيد التحويل</button><p class="fx-hint" id="fxHint">راجع تفاصيل التحويل قبل التأكيد.</p></form></section>
-      <script>(function(){
-      const direction=document.getElementById('fxDirection'),amount=document.getElementById('fxAmount'),submit=document.getElementById('fxSubmit');
-      const result=document.getElementById('fxResult'),rateOut=document.getElementById('fxRate'),feeOut=document.getElementById('fxFee'),totalOut=document.getElementById('fxTotal');
-      const quoteId=document.getElementById('fxQuoteId'),timer=document.getElementById('fxTimer'),available=document.getElementById('fxAvailable');
-      const maxAvailable=document.getElementById('fxMaximum'),target=document.getElementById('fxTarget'),hint=document.getElementById('fxHint');
-      const fmt=n=>{const value=String(n??'0');try{return /^-?\d+$/.test(value)?BigInt(value).toLocaleString('en-US'):Number(n).toLocaleString('en-US');}catch(_){return '—';}};
-      let requestNo=0,expiresAt=0,debounce=null;
-      function reset(){quoteId.value='';submit.disabled=true;result.textContent='—';rateOut.textContent='—';feeOut.textContent='—';totalOut.textContent='—';}
-      async function update(){const id=++requestNo,dir=direction.value,raw=amount.value.trim();reset();if(!raw){timer.textContent='أدخل المبلغ لعرض السعر';return;}
-      timer.textContent='جارٍ تحديث السعر…';hint.textContent='';
-      try{const query=new URLSearchParams({direction:dir,amount:raw});const response=await fetch('/store/exchange/quote?'+query.toString(),{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
-      const data=await response.json();if(id!==requestNo)return;if(!response.ok||!data.ok)throw new Error(data.message||'تعذر جلب السعر.');
-      available.textContent=fmt(data.wallet_balance)+' '+data.source_currency;
-      maxAvailable.textContent=fmt(data.max_convertible??data.maximum)+' '+data.source_currency;
-      target.textContent=data.target_currency+' · '+(data.target_currency==='URC'?'العملة الرقمية':'الجنيه السوداني');
-      if(data.converted!==undefined){result.textContent=fmt(data.converted)+' '+data.target_currency;rateOut.textContent=fmt(data.rate)+' SDG / URC';
-        feeOut.textContent=fmt(data.fee)+' '+data.source_currency;totalOut.textContent=fmt(data.total_debit)+' '+data.source_currency;}
-      if(!data.valid){timer.textContent=data.message||'المبلغ غير متاح';hint.textContent=data.message||'';return;}
-      quoteId.value=data.quote_id;expiresAt=Date.now()+data.expires_in*1000;submit.disabled=false;hint.textContent='السعر مثبت لهذا العرض.';tick();
-      }catch(error){if(id!==requestNo)return;timer.textContent='تعذر تحديث السعر';hint.textContent=error.message;reset();}}
-      function tick(){if(!quoteId.value)return;const left=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));timer.textContent=left?'ينتهي عرض السعر خلال '+left+' ثانية':'انتهى عرض السعر · جارٍ تحديثه';if(!left){reset();if(amount.value.trim())update();}}
-      direction.addEventListener('change',()=>{clearTimeout(debounce);amount.value='';reset();available.textContent=direction.value==='URC_TO_SDG'?'{{'{:,}'.format(user_urc)}} URC':'{{'{:,}'.format(user_sdg)}} SDG';
-        maxAvailable.textContent=direction.value==='URC_TO_SDG'?'{{'{:,}'.format(urc_limits['maximum'])}} URC':'{{'{:,}'.format(sdg_limits['maximum'])}} SDG';
-        target.textContent=direction.value==='URC_TO_SDG'?'SDG · الجنيه السوداني':'URC · العملة الرقمية';update();});
-      amount.addEventListener('input',()=>{clearTimeout(debounce);reset();debounce=setTimeout(update,250);});
-      document.getElementById('fxForm').addEventListener('submit',e=>{if(!quoteId.value||submit.disabled){e.preventDefault();return;}submit.disabled=true;submit.textContent='جارٍ تنفيذ التحويل…';});
-      setInterval(tick,500);
-      })();</script>""",user_sdg=user_sdg,user_urc=user_urc,csrf=session.get("csrf","")))
+    return page("تحويل العملة",render_template_string("""<style>
+.fx-shell{max-width:560px;margin:0 auto;padding:8px 0 24px}.fx-head{text-align:center;padding:8px 8px 18px}
+.fx-head h1{font-size:24px;margin:0 0 5px;color:var(--text,#171717)}.fx-head p{margin:0;color:var(--muted,#777);font-size:13px}
+.fx-card{background:var(--surface,#fff);border:1px solid var(--border,#e8e8e8);border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 8px 28px #1111}
+.fx-pair{display:grid;grid-template-columns:1fr 42px 1fr;gap:9px;align-items:end}
+.fx-label{display:block;font-size:12px;font-weight:700;margin:0 0 8px;color:var(--text,#222)}
+.fx-select,.fx-input{width:100%;box-sizing:border-box;border:1px solid var(--border,#ddd);border-radius:12px;padding:13px;background:var(--surface,#fff);color:var(--text,#222);font-size:15px;outline:none}
+.fx-input:focus,.fx-select:focus{border-color:#c59b44;box-shadow:0 0 0 3px #c59b4422}
+.fx-swap{height:44px;width:42px;border:1px solid var(--border,#ddd);border-radius:12px;background:var(--surface,#fff);color:#9a762d;font-size:23px;cursor:pointer}
+.fx-balance{display:flex;justify-content:space-between;gap:10px;margin-top:13px;font-size:12px;color:var(--muted,#777)}
+.fx-result{margin-top:16px;padding:16px;border:1px solid #e8d7aa;border-radius:15px;background:linear-gradient(145deg,#fbf7eb,#fff);text-align:center;color:#222}
+.fx-result small{display:block;color:#78663e;font-size:12px}.fx-result strong{display:block;font-size:25px;margin-top:6px;color:#8d6a24;direction:ltr}
+.fx-rate{font-size:12px;text-align:center;color:var(--muted,#777);margin-top:10px}
+.fx-message{min-height:18px;text-align:center;font-size:12px;color:var(--muted,#777);margin:10px 0 0}
+.fx-submit{width:100%;border:0;border-radius:13px;padding:14px;margin-top:14px;background:linear-gradient(110deg,#d9b65f,#b68a31);color:#171717;font-size:16px;font-weight:800;cursor:pointer}
+.fx-submit:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:420px){.fx-card{padding:13px}.fx-pair{gap:6px}}
+</style>
+<section class="fx-shell"><header class="fx-head"><h1>تحويل العملة</h1><p>حوّل بين URC وSDG بالسعر المحدد</p></header>
+<form method="post" id="fxForm" class="fx-card">
+<input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="quote_id" id="fxQuoteId" value="">
+<input type="hidden" name="direction" id="fxDirection" value="URC_TO_SDG">
+<div class="fx-pair">
+<div><label class="fx-label" for="fxFrom">من</label><select class="fx-select" id="fxFrom"><option value="URC">URC</option><option value="SDG">SDG</option></select></div>
+<button class="fx-swap" type="button" id="fxSwap" aria-label="عكس اتجاه التحويل">⇄</button>
+<div><label class="fx-label" for="fxTo">إلى</label><select class="fx-select" id="fxTo"><option value="SDG">SDG</option><option value="URC">URC</option></select></div>
+</div>
+<div class="fx-balance"><span>رصيدك المتاح</span><b id="fxBalance">{{'{:,}'.format(user_urc)}} URC</b></div>
+<div style="height:16px"></div>
+<label class="fx-label" for="fxAmount">المبلغ</label>
+<input class="fx-input" name="amount" id="fxAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="أدخل المبلغ" autocomplete="off" required>
+<div class="fx-result" aria-live="polite"><small>المبلغ المقابل</small><strong id="fxResult">—</strong></div>
+<div class="fx-rate" id="fxRate">سعر الصرف: —</div>
+<p class="fx-message" id="fxMessage">أدخل المبلغ لعرض القيمة المقابلة.</p>
+<button class="fx-submit" id="fxSubmit" type="submit" disabled>تحويل الآن</button>
+</form></section>
+<script>(function(){
+const from=document.getElementById('fxFrom'),to=document.getElementById('fxTo'),swap=document.getElementById('fxSwap');
+const direction=document.getElementById('fxDirection'),amount=document.getElementById('fxAmount'),submit=document.getElementById('fxSubmit');
+const balanceOut=document.getElementById('fxBalance'),result=document.getElementById('fxResult'),rateOut=document.getElementById('fxRate');
+const message=document.getElementById('fxMessage'),quoteId=document.getElementById('fxQuoteId');
+const fmt=n=>{const v=String(n??'0');try{return /^-?\d+$/.test(v)?BigInt(v).toLocaleString('en-US'):Number(n).toLocaleString('en-US');}catch(_){return '—';}};
+let requestNo=0,debounce=null;
+function clearQuote(){quoteId.value='';submit.disabled=true;}
+function setPair(){if(from.value===to.value)to.value=from.value==='URC'?'SDG':'URC';direction.value=from.value+'_TO_'+to.value;update();}
+async function update(){
+ const id=++requestNo,src=from.value,dst=to.value,raw=amount.value.trim();
+ direction.value=src+'_TO_'+dst;clearQuote();result.textContent='—';rateOut.textContent='سعر الصرف: —';
+ if(!raw){message.textContent='أدخل المبلغ لعرض القيمة المقابلة.';return;}
+ if(!/^\d{1,12}$/.test(raw)){message.textContent='أدخل مبلغاً صحيحاً.';return;}
+ message.textContent='جارٍ حساب المبلغ المقابل…';
+ try{
+  const q=new URLSearchParams({direction:direction.value,amount:raw});
+  const response=await fetch('/store/exchange/quote?'+q.toString(),{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
+  const data=await response.json();if(id!==requestNo)return;
+  if(!response.ok||!data.ok)throw new Error(data.message||'تعذر حساب التحويل.');
+  balanceOut.textContent=fmt(data.wallet_balance)+' '+src;
+  if(data.converted!==undefined)result.textContent=fmt(data.converted)+' '+dst;
+  rateOut.textContent='سعر الصرف: '+fmt(data.rate)+' SDG لكل URC';
+  if(!data.valid){message.textContent=data.message||'الرصيد أو السيولة غير كافية.';return;}
+  quoteId.value=data.quote_id;submit.disabled=false;message.textContent='الرصيد كافٍ، يمكنك تنفيذ التحويل.';
+ }catch(error){if(id!==requestNo)return;message.textContent=error.message;clearQuote();}
+}
+from.addEventListener('change',setPair);to.addEventListener('change',setPair);
+swap.addEventListener('click',()=>{const v=from.value;from.value=to.value;to.value=v;setPair();});
+amount.addEventListener('input',()=>{clearTimeout(debounce);clearQuote();debounce=setTimeout(update,120);});
+document.getElementById('fxForm').addEventListener('submit',e=>{if(!quoteId.value||submit.disabled){e.preventDefault();return;}submit.disabled=true;submit.textContent='جارٍ التحويل…';});
+})();</script>""",user_sdg=user_sdg,user_urc=user_urc,csrf=session.get("csrf","")))
 
 
 @empire_bp.route("/admin/exchange",methods=["GET","POST"])
@@ -2162,7 +2172,7 @@ def admin():
     {% if is_founder %}<a href='{{url_for('founder_panel')}}'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small><span class='admin-open'>فتح القسم ←</span></a><a href='{{url_for('empire.admin_protection_fund')}}'><b>صندوق حماية المستخدمين</b><small>إيرادات وعمولات التطبيق — المالك فقط</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
     {% if is_founder or 'payments' in manager_permissions %}<a href='{{url_for('empire.admin_payments')}}'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
     {% if is_founder or 'withdrawals' in manager_permissions %}<a href='{{url_for('empire.admin_withdrawals')}}'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
-    {% if is_founder or 'exchange' in manager_permissions %}<a href='{{url_for('empire.admin_exchange')}}'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder or 'exchange' in manager_permissions %}<a href='{{url_for('empire.admin_exchange')}}'><b>إدارة تحويل العملة</b><small>أسعار التحويل وأرصدة السيولة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
     {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_topups')}}'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_market_orders')}}'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
