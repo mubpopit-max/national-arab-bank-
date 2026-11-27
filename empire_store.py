@@ -285,6 +285,21 @@ def platform_fee(amount):
     amount=int(amount)
     return (amount*300+9999)//10000 if amount>0 else 0
 
+def notify_protection_income(reference,currency,amount,source):
+    """Notify the founder when a real fee or platform margin is posted to the protected fund."""
+    amount=int(amount)
+    if amount<=0:
+        return
+    founder=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+    if not founder:
+        return
+    db().execute(
+        "INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+        (founder["username"],"إيراد جديد لصندوق حماية المستخدمين",
+         "تم تسجيل "+format(amount,",")+" "+currency+" من "+source+" في صندوق حماية المستخدمين. مرجع العملية: "+reference,
+         reference,now())
+    )
+
 def ref():
     return secrets.token_hex(8).upper()
 
@@ -1112,6 +1127,7 @@ def withdrawal():
         try:
             fee=platform_fee(amount)
             post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("protection:fund","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
+            notify_protection_income(r,"SDG",fee,"رسوم طلب سحب")
             d.execute("INSERT INTO es_withdrawals(reference,username,amount_sdg,payout_method,payout_details_cipher,created_at) VALUES(?,?,?,?,?,?)",
                       (r,u["username"],amount,method,encrypted,now()))
             audit(u["username"],"WITHDRAWAL_REQUESTED","withdrawal",r)
@@ -1219,6 +1235,7 @@ def listing_new():
         try:
             if listing_type=="ACCOUNT":
                 post(r+"F",[("user:"+u["username"],"SDG",-1000),("protection:fund","SDG",1000)],"رسوم نشر حساب للبيع")
+                notify_protection_income(r+"F","SDG",1000,"رسوم نشر إعلان")
             d.execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at,listing_type,category) VALUES(?,?,?,?,?,?,?,'PUBLISHED',?,?,?)",
                       (r,u["username"],category,title,desc,price,image_path,now(),listing_type,category))
             audit(u["username"],"LISTING_CREATED","listing",r,"type="+listing_type)
@@ -1254,6 +1271,7 @@ def buy_listing():
         if not listing: raise ValueError("الإعلان لم يعد متاحاً")
         fee=platform_fee(listing["price_sdg"])
         post(r,[("user:"+u["username"],"SDG",-(listing["price_sdg"]+fee)),("escrow:market","SDG",listing["price_sdg"]),("protection:fund","SDG",fee)],"حجز قيمة صفقة سوق · عمولة التطبيق 3%")
+        notify_protection_income(r,"SDG",fee,"عمولة صفقة سوق")
         d.execute("INSERT INTO es_market_orders(reference,listing_id,buyer,seller,price_sdg,status,created_at,updated_at) VALUES(?,?,?,?,?,'ESCROWED',?,?)",
                   (r,listing["id"],u["username"],listing["seller"],listing["price_sdg"],now(),now()))
         d.execute("UPDATE es_listings SET status='SOLD' WHERE id=?",(listing["id"],))
@@ -1318,6 +1336,7 @@ def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic invento
         entries.append(("supplier:topup_cost","SDG",cost))
     entries.append(("protection:fund","SDG",margin))
     post(order["reference"]+"T",entries,"تسوية وتسليم تلقائي لكود لعبة")
+    notify_protection_income(order["reference"]+"T","SDG",margin,"هامش ربح تسليم تلقائي لكود لعبة")
     changed=d.execute(
         "UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
         (cipher,note,now(),order["reference"])
@@ -1343,6 +1362,7 @@ def pay_topup():
         fee=platform_fee(row["amount_sdg"])
         post(r,[("user:"+u["username"],"SDG",-(row["amount_sdg"]+fee)),("clearing:topups","SDG",row["amount_sdg"]),
                 ("protection:fund","SDG",fee)],"دفع طلب شحن ألعاب من المحفظة · عمولة التطبيق 3%")
+                notify_protection_income(r,"SDG",fee,"عمولة شحن ألعاب")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
         row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
                          WHERE t.reference=? AND t.status='PAID'""",(r,)).fetchone()
@@ -1396,6 +1416,7 @@ def complete_topup():
         post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),
                     ("user:"+u["username"],"SDG",commission),("protection:fund","SDG",platform_profit)],
              "تسوية شحن لعبة وتسجيل عمولة الوكيل")
+             notify_protection_income(r+"T","SDG",platform_profit,"حصة المنصة من ربح شحن الألعاب")
         delivery_code=request.form.get("delivery_code","").strip()
         if len(delivery_code)<4 or len(delivery_code)>300:
             raise ValueError("أدخل كود الباقة الصحيح (4 إلى 300 حرف).")
@@ -2212,6 +2233,7 @@ def buy_epc():
                 assert_epc_capacity(qty)
                 fee=platform_fee(cost)
                 post(r,[("user:"+u["username"],"SDG",-(cost+fee)),("platform:epc_sales","SDG",cost),("protection:fund","SDG",fee),("user:"+u["username"],"URC",qty),("issuer:urc","URC",-qty)],"شراء URC من محفظة SDG · عمولة التطبيق 3%")
+                notify_protection_income(r,"SDG",fee,"عمولة شراء URC")
                 audit(u["username"],"EPC_PURCHASE","wallet",r); d.commit()
             except Exception: d.rollback(); raise
             flash("تم شراء URC وإضافتها إلى محفظتك.")
@@ -2430,6 +2452,7 @@ def admin_topups():
             cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
             post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("protection:fund","SDG",margin)],
                  "تسوية كود لعبة وتسليم العميل")
+                 notify_protection_income(r+"T","SDG",margin,"هامش ربح تسليم كود لعبة")
             changed=d.execute("UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
                               (cipher,note,now(),r)).rowcount
             if changed!=1: raise ValueError("تغيرت حالة الطلب أثناء المعالجة.")
