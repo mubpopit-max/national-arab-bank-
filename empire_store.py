@@ -1982,17 +1982,17 @@ function setPair(){if(from.value===to.value)to.value=from.value==='URC'?'SDG':'U
 async function update(){
  const id=++requestNo,src=from.value,dst=to.value,raw=amount.value.trim();
  direction.value=src+'_TO_'+dst;clearQuote();result.textContent='—';rateOut.textContent='سعر الصرف: —';
- if(!raw){message.textContent='أدخل المبلغ لعرض القيمة المقابلة.';return;}
- if(!/^\d{1,12}$/.test(raw)){message.textContent='أدخل مبلغاً صحيحاً.';return;}
- message.textContent='جارٍ حساب المبلغ المقابل…';
+ if(raw&&!/^\d{1,12}$/.test(raw)){message.textContent='أدخل مبلغاً صحيحاً.';return;}
+ message.textContent=raw?'جارٍ حساب المبلغ المقابل…':'أدخل المبلغ لعرض القيمة المقابلة.';
  try{
-  const q=new URLSearchParams({direction:direction.value,amount:raw});
+  const q=new URLSearchParams({direction:direction.value});if(raw)q.set('amount',raw);
   const response=await fetch('/store/exchange/quote?'+q.toString(),{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
   const data=await response.json();if(id!==requestNo)return;
   if(!response.ok||!data.ok)throw new Error(data.message||'تعذر حساب التحويل.');
   balanceOut.textContent=fmt(data.wallet_balance)+' '+src;
-  if(data.converted!==undefined)result.textContent=fmt(data.converted)+' '+dst;
   rateOut.textContent='سعر الصرف: '+fmt(data.rate)+' SDG لكل URC';
+  if(!raw)return;
+  if(data.converted!==undefined)result.textContent=fmt(data.converted)+' '+dst;
   if(!data.valid){message.textContent=data.message||'الرصيد أو السيولة غير كافية.';return;}
   quoteId.value=data.quote_id;submit.disabled=false;message.textContent='الرصيد كافٍ، يمكنك تنفيذ التحويل.';
  }catch(error){if(id!==requestNo)return;message.textContent=error.message;clearQuote();}
