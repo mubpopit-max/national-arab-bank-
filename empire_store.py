@@ -1452,22 +1452,25 @@ def admin_exchange():
         audit(u["username"],"FX_RATES_UPDATED","settings",mode)
         flash("تم حفظ إعدادات سعر الصرف.")
     pools={c:int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency=?",(c,)).fetchone()["n"]) for c in ("URC","SDG")}
-    owner={c:balance(u["username"],c) for c in ("URC","SDG")}
+    owner_row=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+    owner_username=owner_row["username"] if owner_row else u["username"]
+    owner={c:balance(owner_username,c) for c in ("URC","SDG")}
+    is_founder=u["role"]=="founder"
     return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف والسيولة</h1>
       <div class='grid'><article class='panel'><small>أصول المالك URC</small><h2>{{'{:,}'.format(owner['URC'])}}</h2></article><article class='panel'><small>أصول المالك SDG</small><h2>{{'{:,}'.format(owner['SDG'])}}</h2></article>
       <article class='panel'><small>احتياطي URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article></div>
-      <h2>مصدر سعر الصرف</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
+      <h2>مصدر سعر الصرف</h2>{% if is_founder %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>طريقة التسعير</label><select name='fx_rate_mode'><option value='market' {% if values['fx_rate_mode']=='market' %}selected{% endif %}>سعر السوق المرجعي</option><option value='manual' {% if values['fx_rate_mode']=='manual' %}selected{% endif %}>سعر يدوي</option></select>
       <label>سعر السوق المرجعي (SDG لكل URC)</label><input name='fx_market_rate' type='number' min='1' value='{{values["fx_market_rate"]}}'>
       <label>السعر اليدوي (SDG لكل URC)</label><input name='fx_manual_rate' type='number' min='1' value='{{values["fx_manual_rate"]}}'>
       <label>هامش شراء URC بالنقاط الأساسية</label><input name='fx_buy_spread_bps' type='number' min='0' max='10000' value='{{values["fx_buy_spread_bps"]}}'>
       <label>هامش بيع URC بالنقاط الأساسية</label><input name='fx_sell_spread_bps' type='number' min='0' max='10000' value='{{values["fx_sell_spread_bps"]}}'><button>حفظ الأسعار</button></form>
-      <p class='muted'>سعر السوق هنا سعر مرجعي يدخله المالك أو يحدّثه؛ لا يوجد حالياً اتصال تلقائي بمزوّد أسعار خارجي.</p>
-      <h2>تمويل احتياطي الصرف</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='liquidity'>
+      <p class='muted'>سعر السوق هنا سعر مرجعي يدخله المالك أو يحدّثه؛ لا يوجد حالياً اتصال تلقائي بمزوّد أسعار خارجي.</p>{% else %}<p class='muted'>عرض فقط: لا تملك صلاحية تعديل سعر الصرف أو احتياطي المنصة.</p>{% endif %}
+      {% if is_founder %}<h2>تمويل احتياطي الصرف</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='liquidity'>
       <label>العملة</label><select name='currency'><option>URC</option><option>SDG</option></select><label>المبلغ من محفظة المالك</label><input name='amount' type='number' min='1' required><button>إضافة إلى احتياطي الصرف</button></form>
       <h2>تسجيل احتياطي SDG نقدي مستلم فعلياً</h2><p class='muted'>استخدم هذا الخيار فقط بعد استلام النقد فعلياً والتحقق منه خارج المنصة. يسجل النظام مرجع العملية في سجل التدقيق ولا ينشئ رصيداً للعميل.</p>
-      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form></section>""",
-      owner=owner,pools=pools,values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","0"),("fx_manual_rate","0"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form>{% endif %}</section>""",
+      owner=owner,pools=pools,is_founder=is_founder,values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","0"),("fx_manual_rate","0"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
 
 @empire_bp.get("/admin")
 @login_required
