@@ -540,6 +540,7 @@ def store_notifications():
 @login_required
 @founder_required
 def admin_managers():
+    session.setdefault("csrf", secrets.token_urlsafe(32))
     allowed_permissions = {
         "products":"إدارة أسعار وباقات المنتجات",
         "orders":"متابعة الطلبات والتسليم",
@@ -644,6 +645,7 @@ def admin_managers():
 @empire_bp.route("/ice-empire",methods=["GET","POST"])
 @login_required
 def ice_empire():
+    session.setdefault("csrf", secrets.token_urlsafe(32))
     u=user()
     if request.method=="POST":
         csrf()
@@ -694,6 +696,7 @@ def ice_empire():
 @login_required
 @founder_required
 def admin_ice_codes():
+    session.setdefault("csrf", secrets.token_urlsafe(32))
     if request.method=="POST":
         csrf()
         count_raw=(request.form.get("count") or "1").strip()
