@@ -232,6 +232,7 @@ def init_db():
         current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
         if not current or not str(current["value"]).isdigit() or int(current["value"])<=0:
             conn.execute("INSERT INTO es_settings(key,value) VALUES(?, '5600') ON CONFLICT(key) DO UPDATE SET value='5600'",(key,))
+    reconcile_wallet_balances()
     seed_owner_assets()
     seed_game_products()
 
@@ -337,25 +338,87 @@ def ensure_wallet(username,currency):
     db().execute("INSERT OR IGNORE INTO es_wallets(username,currency,balance) VALUES(?,?,0)",(username,currency))
 
 def post(reference, entries, memo):
-    """Post balanced signed lines atomically. Positive = credit, negative = debit."""
+    """Post balanced signed lines atomically; the double-entry ledger is authoritative."""
     totals={}
     for account,currency,delta in entries:
+        if currency not in ("SDG","URC") or not isinstance(delta,int):
+            raise ValueError("قيد مالي غير صالح")
         totals[currency]=totals.get(currency,0)+delta
     if any(v!=0 for v in totals.values()): raise ValueError("القيد المحاسبي غير متوازن")
     for line_no,(account,currency,delta) in enumerate(entries, start=1):
         if account.startswith("user:"):
             name=account[5:]
             ensure_wallet(name,currency)
-            row=db().execute("SELECT balance FROM es_wallets WHERE username=? AND currency=?",(name,currency)).fetchone()
-            new=row["balance"]+delta
+            row=db().execute(
+                "SELECT COALESCE(SUM(delta),0) balance FROM es_ledger WHERE account=? AND currency=?",
+                (account,currency)
+            ).fetchone()
+            new=int(row["balance"])+delta
             if new<0: raise ValueError("الرصيد غير كافٍ")
             db().execute("UPDATE es_wallets SET balance=? WHERE username=? AND currency=?",(new,name,currency))
         db().execute("INSERT INTO es_ledger(reference,line_no,account,currency,delta,memo,created_at) VALUES(?,?,?,?,?,?,?)",
                      (reference,line_no,account,currency,delta,memo,now()))
 
 def balance(username,currency):
-    row=db().execute("SELECT balance FROM es_wallets WHERE username=? AND currency=?",(username,currency)).fetchone()
-    return row["balance"] if row else 0
+    if currency not in ("SDG","URC"):
+        raise ValueError("عملة المحفظة غير مدعومة")
+    row=db().execute(
+        "SELECT COALESCE(SUM(delta),0) balance FROM es_ledger WHERE account=? AND currency=?",
+        ("user:"+username,currency)
+    ).fetchone()
+    return int(row["balance"])
+
+def reconcile_wallet_balances():
+    """Repair cached wallet totals from ledger history and preserve legacy-only balances once."""
+    d=db()
+    wallets=d.execute("SELECT username,currency,balance FROM es_wallets").fetchall()
+    if not wallets:
+        return
+    d.execute("BEGIN IMMEDIATE")
+    try:
+        for wallet in wallets:
+            account="user:"+wallet["username"]
+            history=d.execute(
+                "SELECT COUNT(*) count,COALESCE(SUM(delta),0) total FROM es_ledger WHERE account=? AND currency=?",
+                (account,wallet["currency"])
+            ).fetchone()
+            if int(history["count"])==0 and int(wallet["balance"])>0:
+                # Preserve a pre-ledger wallet exactly once; this is a migration, not new issuance.
+                legacy_ref="WALLET-OPENING-"+hashlib.sha256(
+                    (wallet["username"]+"|"+wallet["currency"]).encode("utf-8")
+                ).hexdigest()[:20].upper()
+                stamp=now(); amount=int(wallet["balance"]); currency=wallet["currency"]
+                d.execute("INSERT OR IGNORE INTO es_ledger(reference,line_no,account,currency,delta,memo,created_at) VALUES(?,1,?,?,?,?,?)",
+                          (legacy_ref,account,currency,amount,"ترحيل رصيد محفظة سابق إلى السجل المحاسبي",stamp))
+                d.execute("INSERT OR IGNORE INTO es_ledger(reference,line_no,account,currency,delta,memo,created_at) VALUES(?,2,'external:legacy_wallet_opening',?,?,?,?)",
+                          (legacy_ref,currency,-amount,"مقابل ترحيل رصيد محفظة سابق",stamp))
+                history=d.execute(
+                    "SELECT COALESCE(SUM(delta),0) total FROM es_ledger WHERE account=? AND currency=?",
+                    (account,currency)
+                ).fetchone()
+            d.execute("UPDATE es_wallets SET balance=? WHERE username=? AND currency=?",
+                      (int(history["total"]),wallet["username"],wallet["currency"]))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+
+def effective_fx_rate(direction):
+    """Read the current owner-approved rate for every quote and execution."""
+    if direction not in ("URC_TO_SDG","SDG_TO_URC"):
+        raise ValueError("اتجاه التحويل غير صالح")
+    mode=setting("fx_rate_mode","manual")
+    if mode not in ("manual","market"):
+        raise ValueError("طريقة التسعير غير صالحة")
+    base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
+    buy=int(setting("fx_buy_spread_bps","0"))
+    sell=int(setting("fx_sell_spread_bps","0"))
+    if base<=0 or not 0<=buy<=10000 or not 0<=sell<=10000:
+        raise ValueError("سعر الصرف أو هامش التسعير غير صالح")
+    rate=(base*(10000-sell))//10000 if direction=="URC_TO_SDG" else (base*(10000+buy)+9999)//10000
+    if rate<=0:
+        raise ValueError("سعر الصرف الفعلي يجب أن يكون أكبر من صفر")
+    return rate
 
 def fx_reserve_balance(currency):
     if currency not in ("SDG","URC"):
@@ -613,7 +676,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
 .admin-links a:focus-visible{outline:3px solid rgba(22,131,79,.28);outline-offset:3px}
 @media(max-width:420px){.trc-parties{grid-template-columns:1fr;gap:7px}.trc-arrow{transform:rotate(-90deg)}.trc-actions{grid-template-columns:1fr}.trc-actions>*{min-height:46px;font-size:13px}}
 @media print{.trc-actions{display:none!important}.transfer-receipt-clean{max-width:none;border:0;box-shadow:none}}
-</style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol><symbol id='i-pubg' viewBox='0 0 24 24'><path d='M4 5h16v14H4zM8 9h8M8 12h5M8 15h8'/><path d='M2 8V4h4M18 4h4v4M2 16v4h4M18 20h4v-4'/></symbol><symbol id='i-freefire' viewBox='0 0 24 24'><path d='M13 2c1 5-4 6-3 11 1-2 3-3 4-5 4 4 5 7 3 11a7 7 0 0 1-13-3c0-4 3-7 5-9 0 4 1 5 2 6 0-5 1-8 2-11z'/></symbol><symbol id='i-ml' viewBox='0 0 24 24'><path d='M3 18 8 6l4 7 4-7 5 12M6 18h12'/><path d='m8 6 4 2 4-2'/></symbol><symbol id='i-fortnite' viewBox='0 0 24 24'><path d='M5 3h14v18H5zM9 7h7M9 11h5M9 15h7'/><path d='M8 3v18'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/store/profile' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
+</style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol><symbol id='i-pubg' viewBox='0 0 24 24'><path d='M4 5h16v14H4zM8 9h8M8 12h5M8 15h8'/><path d='M2 8V4h4M18 4h4v4M2 16v4h4M18 20h4v-4'/></symbol><symbol id='i-freefire' viewBox='0 0 24 24'><path d='M13 2c1 5-4 6-3 11 1-2 3-3 4-5 4 4 5 7 3 11a7 7 0 0 1-13-3c0-4 3-7 5-9 0 4 1 5 2 6 0-5 1-8 2-11z'/></symbol><symbol id='i-ml' viewBox='0 0 24 24'><path d='M3 18 8 6l4 7 4-7 5 12M6 18h12'/><path d='m8 6 4 2 4-2'/></symbol><symbol id='i-fortnite' viewBox='0 0 24 24'><path d='M5 3h14v18H5zM9 7h7M9 11h5M9 15h7'/><path d='M8 3v18'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/store/profile' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>الجنيه السوداني · أصولك الرقمية: {{'{:,}'.format(wallet_urc)}} URC</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/history'><span class='ico'><svg><use href='#i-bell'/></svg></span>المعاملات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>محفظتي</a><a href='/store/profile'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
 (function(){
@@ -1738,12 +1801,9 @@ def exchange_quote():
         return jsonify({"ok":False,"message":"اختر اتجاه التحويل."}),400
     mode=setting("fx_rate_mode","manual")
     try:
-        base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
-        buy=int(setting("fx_buy_spread_bps","0")); sell=int(setting("fx_sell_spread_bps","0"))
-        if base<=0 or not 0<=buy<=10000 or not 0<=sell<=10000: raise ValueError
+        rate=effective_fx_rate(direction)
     except (TypeError,ValueError):
         return jsonify({"ok":False,"message":"السعر غير متاح حالياً."}),503
-    rate=(base*(10000-sell))//10000 if direction=="URC_TO_SDG" else (base*(10000+buy)+9999)//10000
     source="URC" if direction=="URC_TO_SDG" else "SDG"; target="SDG" if source=="URC" else "URC"
     reserve=fx_reserve_balance(target); wallet=max(0,int(balance(user()["username"],source)))
     minimum=1 if source=="URC" else max(1,rate)
@@ -1788,15 +1848,9 @@ def exchange_quote():
 @empire_bp.route("/exchange",methods=["GET","POST"])
 @login_required
 def exchange():
-    u=user(); mode=setting("fx_rate_mode","manual")
-    try:
-        base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
-        buy_spread=int(setting("fx_buy_spread_bps","0")); sell_spread=int(setting("fx_sell_spread_bps","0"))
-    except (TypeError,ValueError): base,buy_spread,sell_spread=0,0,0
+    u=user()
     def effective_rate(direction):
-        if direction=="URC_TO_SDG": return (base*(10000-sell_spread))//10000
-        if direction=="SDG_TO_URC": return (base*(10000+buy_spread)+9999)//10000
-        raise ValueError("اتجاه التحويل غير صالح")
+        return effective_fx_rate(direction)
     def fund_balance(currency): return fx_reserve_balance(currency)
     def affordable_limit(wallet_amount):
         lo,hi=0,max(0,int(wallet_amount))
@@ -1828,11 +1882,8 @@ def exchange():
             if (not quote or quote["username"]!=u["username"] or quote["direction"]!=direction
                 or int(quote["amount"])!=amount or quote["used_at"] is not None or int(quote["expires_at"])<epoch):
                 raise ValueError("انتهى عرض السعر. حدّث السعر وحاول مجدداً.")
-            mode=setting("fx_rate_mode","manual")
-            try:
-                base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
-                buy_spread=int(setting("fx_buy_spread_bps","0")); sell_spread=int(setting("fx_sell_spread_bps","0"))
-            except (TypeError,ValueError): raise ValueError("السعر غير متاح حالياً.")
+            # BEGIN IMMEDIATE serializes this read with owner price updates.
+            # The same live helper is used by quote generation and execution.
             limits=calculate_limit(direction)
             if amount<limits["minimum"] or amount>limits["maximum"]:
                 raise ValueError("تغيّر الرصيد أو السيولة المتاحة. حدّث السعر وحاول مجدداً.")
@@ -1981,10 +2032,19 @@ def admin_exchange():
         buy=request.form.get("fx_buy_spread_bps","0").strip()
         sell=request.form.get("fx_sell_spread_bps","0").strip()
         if mode not in ("market","manual") or not all(re.fullmatch(r"[0-9]{1,12}",v) for v in (market,manual,buy,sell)) or (mode=="market" and int(market)<=0) or (mode=="manual" and int(manual)<=0) or int(buy)>10000 or int(sell)>10000: abort(400)
-        for k,v in (("fx_rate_mode",mode),("fx_market_rate",market),("fx_manual_rate",manual),("fx_buy_spread_bps",buy),("fx_sell_spread_bps",sell)):
-            db().execute("INSERT INTO es_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(k,v))
-        audit(u["username"],"FX_RATES_UPDATED","settings",mode)
-        flash("تم حفظ إعدادات سعر الصرف.")
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            for k,v in (("fx_rate_mode",mode),("fx_market_rate",market),("fx_manual_rate",manual),("fx_buy_spread_bps",buy),("fx_sell_spread_bps",sell)):
+                d.execute("INSERT INTO es_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(k,v))
+            # A changed owner rate must never leave an old, still-confirmable quote.
+            d.execute("DELETE FROM es_fx_quotes WHERE used_at IS NULL")
+            audit(u["username"],"FX_RATES_UPDATED","settings",mode,
+                  "market="+market+";manual="+manual+";buy_bps="+buy+";sell_bps="+sell)
+            d.commit()
+        except Exception:
+            d.rollback()
+            raise
+        flash("تم حفظ سعر الصرف وإلغاء عروض الأسعار القديمة. السعر الجديد مطبق على العروض التالية.")
     is_founder=u["role"]=="founder"
     pools={c:fx_reserve_balance(c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
     owner_row=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
