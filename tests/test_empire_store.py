@@ -146,6 +146,80 @@ class EmpireLedgerTests(unittest.TestCase):
         ).fetchall()
         self.assertEqual(unbalanced, [])
 
+    def test_wallet_balance_uses_ledger_not_stale_cache(self):
+        d = db()
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-LEDGER-WALLET", [
+            ("user:founder", "URC", 500),
+            ("external:test_ledger_wallet", "URC", -500),
+        ], "test wallet funding")
+        d.commit()
+
+        # Simulate a stale cache row; owner balance must still follow ledger history.
+        d.execute("UPDATE es_wallets SET balance=0 WHERE username='founder' AND currency='URC'")
+        self.assertEqual(balance("founder", "URC"), 500)
+
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-LEDGER-WALLET-DEBIT", [
+            ("user:founder", "URC", -100),
+            ("external:test_ledger_wallet_debit", "URC", 100),
+        ], "test wallet debit")
+        d.commit()
+        self.assertEqual(balance("founder", "URC"), 400)
+        cached = d.execute("SELECT balance FROM es_wallets WHERE username='founder' AND currency='URC'").fetchone()
+        self.assertEqual(cached["balance"], 400)
+
+    def test_owner_configured_fx_rate_controls_quote_and_execution(self):
+        client = app_module.app.test_client()
+        login = client.post("/login", data={
+            "account_number": "5147234",
+            "password": "CI-only-password-123!",
+        }, follow_redirects=True)
+        self.assertEqual(login.status_code, 200)
+        with client.session_transaction() as session:
+            csrf_token = session["csrf"]
+
+        d = db()
+        d.execute("UPDATE es_settings SET value='manual' WHERE key='fx_rate_mode'")
+        d.execute("UPDATE es_settings SET value='6000' WHERE key='fx_manual_rate'")
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-FX-RATE-USER", [
+            ("user:founder", "URC", 100),
+            ("external:test_fx_rate_user", "URC", -100),
+        ], "test FX user funding")
+        post("TEST-FX-RATE-RESERVE", [
+            ("fx:reserve", "SDG", 1000000),
+            ("external:test_fx_rate_reserve", "SDG", -1000000),
+        ], "test FX reserve funding")
+        d.commit()
+
+        old_quote = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=10").get_json()
+        self.assertTrue(old_quote["valid"])
+        self.assertEqual(old_quote["rate"], 6000)
+        self.assertEqual(old_quote["converted"], 60000)
+
+        # A price change after quoting must invalidate that quote, never execute stale terms.
+        d.execute("UPDATE es_settings SET value='6200' WHERE key='fx_manual_rate'")
+        stale = client.post("/store/exchange", data={
+            "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
+            "quote_id": old_quote["quote_id"],
+        }, follow_redirects=True)
+        self.assertEqual(stale.status_code, 200)
+        self.assertEqual(balance("founder", "SDG"), 0)
+
+        fresh_quote = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=10").get_json()
+        self.assertTrue(fresh_quote["valid"])
+        self.assertEqual(fresh_quote["rate"], 6200)
+        self.assertEqual(fresh_quote["converted"], 62000)
+        executed = client.post("/store/exchange", data={
+            "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
+            "quote_id": fresh_quote["quote_id"],
+        }, follow_redirects=True)
+        self.assertEqual(executed.status_code, 200)
+        self.assertEqual(balance("founder", "SDG"), 62000)
+        self.assertEqual(fx_reserve_balance("SDG"), 938000)
+        self.assertEqual(balance("founder", "URC"), 89)
+
     def test_urc_supply_cap_counts_issued_units(self):
         d = db()
         d.execute("BEGIN IMMEDIATE")
