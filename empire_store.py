@@ -655,7 +655,11 @@ def store_notifications():
         item=dict(row)
         transfer=db().execute("SELECT 1 FROM es_transfer_details WHERE reference=? AND (sender=? OR recipient=?)",
                               (row["reference"],u["username"],u["username"])).fetchone() if row["reference"] else None
-        item["target"]="/store/transfer/receipt/"+row["reference"] if transfer else ("/store/history/"+row["reference"] if row["reference"] and db().execute("SELECT 1 FROM es_ledger WHERE reference=? AND account=?",(row["reference"],"user:"+u["username"])).fetchone() else "")
+        fund_entry=db().execute("SELECT 1 FROM es_ledger WHERE reference=? AND account='protection:fund' LIMIT 1",(row["reference"],)).fetchone() if row["reference"] else None
+        if u["role"]=="founder" and fund_entry:
+            item["target"]="/store/admin/protection-fund"
+        else:
+            item["target"]="/store/transfer/receipt/"+row["reference"] if transfer else ("/store/history/"+row["reference"] if row["reference"] and db().execute("SELECT 1 FROM es_ledger WHERE reference=? AND account=?",(row["reference"],"user:"+u["username"])).fetchone() else "")
         items.append(item)
     db().execute("UPDATE notifications SET is_read=1 WHERE username=?",(u["username"],))
     body=render_template_string("""<section class='panel notification-page'><span class='tag'>مركز التنبيهات</span><h1>إشعاراتك</h1>
@@ -818,17 +822,22 @@ def ice_empire():
             d.rollback()
             flash(str(exc))
         return redirect(url_for("empire.ice_empire"))
-    member=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
-    customers=db().execute("""SELECT u.full_name,m.points,m.joined_at,COALESCE(s.status,'UNVERIFIED') identity_status FROM es_loyalty_members m
-      JOIN users u ON u.username=m.username LEFT JOIN es_identity_status s ON s.username=u.username
-      ORDER BY m.joined_at DESC LIMIT 100""").fetchall()
-    body=render_template_string("""<section class='ice-hero'><span class='ice-brand'>آيس ستوري × الإمبراطورية إستوري</span><h1>مرحباً بك في إمبراطورية الثلج</h1><p>مساحة خاصة لعملاء آيس ستوري المميزين.</p><div class='empire-slogans'><article><b>إمبراطورية النار</b><strong>هنا تصنع مجدك</strong></article><article><b>إمبراطورية الثلج</b><strong>متجرك وأكثر</strong></article></div></section>
-      {% if member %}<section class='premium-banner'><span class='ice-badge'>❄ عميل مميز</span><h2>أهلاً بك في نادي العملاء المميزين</h2><p>نقاط الولاء</p><strong class='loyalty-points'>{{'{:,}'.format(member['points'])}}</strong><small>عضوية مفعلة منذ {{member['joined_at'][:10]}}</small></section>
-      {% else %}<section class='panel'><h2>فعّل شارتك الثلجية</h2><p>أدخل الكود الخاص الذي حصلت عليه من آيس ستوري على واتساب، ثم اضغط تحقق.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>كود عميل آيس ستوري</label><input name='code' maxlength='16' placeholder='ICE-XXXXXXXXXXXX' autocapitalize='characters' autocomplete='off' required><button>تحقق وتفعيل العضوية</button></form></section>{% endif %}
-      <section class='panel'><h2>عملاء آيس ستوري المميزون</h2><p>مجتمع العملاء الذين فعّلوا عضويتهم بكود صحيح.</p><div class='premium-list'>{% for x in customers %}<div class='premium-customer'><span class='ice-mini'>❄</span><b>{{x['full_name']}}</b><span class='tag'>عميل مميز</span>{% if x['identity_status']=='VERIFIED' %}<span class='tag'>✓ موثّق</span>{% endif %}</div>{% else %}<p>كن أول المنضمين إلى النادي.</p>{% endfor %}</div></section>
-      <section class='panel ice-footer-note'><h2>آيس ستوري × الإمبراطورية إستوري</h2><p>امبراطورية النار</p><strong>هنا تصنع مجدك</strong><p>امبراطورية الثلج</p><strong>متجرك وأكثر</strong></section>""",
-      member=member,customers=customers,csrf=session.get("csrf",""))
-    return page("آيس ستوري · إمبراطورية الثلج",body)
+    try:
+        member=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
+        customers=db().execute("""SELECT u.full_name,m.points,m.joined_at,COALESCE(s.status,'UNVERIFIED') identity_status FROM es_loyalty_members m
+          JOIN users u ON u.username=m.username LEFT JOIN es_identity_status s ON s.username=u.username
+          ORDER BY m.joined_at DESC LIMIT 100""").fetchall()
+        body=render_template_string("""<section class='ice-hero'><span class='ice-brand'>آيس ستوري × الإمبراطورية إستوري</span><h1>مرحباً بك في إمبراطورية الثلج</h1><p>مساحة خاصة لعملاء آيس ستوري المميزين.</p><div class='empire-slogans'><article><b>إمبراطورية النار</b><strong>هنا تصنع مجدك</strong></article><article><b>إمبراطورية الثلج</b><strong>متجرك وأكثر</strong></article></div></section>
+          {% if member %}<section class='premium-banner'><span class='ice-badge'>❄ عميل مميز</span><h2>أهلاً بك في نادي العملاء المميزين</h2><p>نقاط الولاء</p><strong class='loyalty-points'>{{'{:,}'.format(member['points'])}}</strong><small>عضوية مفعلة منذ {{member['joined_at'][:10]}}</small></section>
+          {% else %}<section class='panel'><h2>فعّل شارتك الثلجية</h2><p>أدخل الكود الخاص الذي حصلت عليه من آيس ستوري على واتساب، ثم اضغط تحقق.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>كود عميل آيس ستوري</label><input name='code' maxlength='16' placeholder='ICE-XXXXXXXXXXXX' autocapitalize='characters' autocomplete='off' required><button>تحقق وتفعيل العضوية</button></form></section>{% endif %}
+          <section class='panel'><h2>عملاء آيس ستوري المميزون</h2><p>مجتمع العملاء الذين فعّلوا عضويتهم بكود صحيح.</p><div class='premium-list'>{% for x in customers %}<div class='premium-customer'><span class='ice-mini'>❄</span><b>{{x['full_name']}}</b><span class='tag'>عميل مميز</span>{% if x['identity_status']=='VERIFIED' %}<span class='tag'>✓ موثّق</span>{% endif %}</div>{% else %}<p>كن أول المنضمين إلى النادي.</p>{% endfor %}</div></section>
+          <section class='panel ice-footer-note'><h2>آيس ستوري × الإمبراطورية إستوري</h2><p>امبراطورية النار</p><strong>هنا تصنع مجدك</strong><p>امبراطورية الثلج</p><strong>متجرك وأكثر</strong></section>""",
+          member=member,customers=customers,csrf=session.get("csrf",""))
+        return page("آيس ستوري · إمبراطورية الثلج",body)
+    except Exception:
+        from flask import current_app
+        current_app.logger.exception("Ice Story customer page failed for user %s",u["username"])
+        return render_template_string("""<!doctype html><html lang='ar' dir='rtl'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>آيس ستوري</title><body style='font-family:system-ui;background:#f3f7f3;padding:24px;line-height:1.8'><main style='max-width:520px;margin:30px auto;background:#fff;border:1px solid #dfeae2;border-radius:18px;padding:22px'><h2>تعذر فتح قسم آيس ستوري مؤقتاً</h2><p>لم يتم تنفيذ أي عملية أو تغيير في رصيدك. تم تسجيل الخطأ الفني لمراجعته. حاول لاحقاً.</p><a href='/store/'>العودة للرئيسية</a></main></body></html>"""),503
 
 @empire_bp.route("/admin/ice-codes",methods=["GET","POST"])
 @login_required
@@ -1759,6 +1768,12 @@ def exchange():
                                   ". رقم العملية: "+r)
             d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
                       (u["username"],notification_title,notification_message,r,now()))
+            founder=d.execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+            if founder and fee>0:
+                d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                          (founder["username"],"إيراد جديد لصندوق حماية المستخدمين",
+                           "تم تسجيل رسوم صرف بقيمة "+format(fee,",")+" "+source_currency+" في صندوق حماية المستخدمين. رقم العملية: "+r,
+                           r,now()))
             d.commit()
         except ValueError as exc:
             d.rollback()
