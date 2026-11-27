@@ -1,15 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
-    <path android:fillColor="#0B263D" android:pathData="M0,0h512v512h-512z" />
-    <path android:fillColor="#D9B45B" android:pathData="M256,54a202,202 0,1 0,0 404a202,202 0,1 0,0 -404z" />
-    <path android:fillColor="#0B263D" android:pathData="M256,72a184,184 0,1 0,0 368a184,184 0,1 0,0 -368z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M106,155h300v202h-300z" />
-    <path android:fillColor="#D92736" android:pathData="M106,155h300v67h-300z" />
-    <path android:fillColor="#111820" android:pathData="M106,290h300v67h-300z" />
-    <path android:fillColor="#168447" android:pathData="M106,155l135,101 -135,101z" />
-    <path android:fillColor="#D9B45B" android:pathData="M256,203l15,24 29,-8 -4,30 25,16 -25,16 4,30 -29,-8 -15,24 -15,-24 -29,8 4,-30 -25,-16 25,-16 -4,-30 29,8z" />
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/empire_estory_icon"
+    android:gravity="center" />
