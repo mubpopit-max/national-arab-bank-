@@ -67,11 +67,11 @@ def init_db():
       created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_topup_orders(
       id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, buyer TEXT NOT NULL,
-      product_id INTEGER NOT NULL REFERENCES es_products(id), player_id TEXT NOT NULL,
+      product_id INTEGER NOT NULL REFERENCES es_products(id), player_id TEXT NOT NULL DEFAULT '',
       amount_sdg INTEGER NOT NULL CHECK(amount_sdg>0),
       status TEXT NOT NULL DEFAULT 'PENDING_PAYMENT'
         CHECK(status IN ('PENDING_PAYMENT','PAID','ASSIGNED','PROCESSING','COMPLETED','REJECTED','REFUNDED')),
-      agent TEXT, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      agent TEXT, note TEXT NOT NULL DEFAULT '', delivery_cipher TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 
     CREATE TABLE IF NOT EXISTS es_wallets(
       username TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),
@@ -134,6 +134,12 @@ def init_db():
     product_cols={r["name"] for r in db().execute("PRAGMA table_info(es_products)").fetchall()}
     if "cost_sdg" not in product_cols:
         db().execute("ALTER TABLE es_products ADD COLUMN cost_sdg INTEGER NOT NULL DEFAULT 0")
+    topup_cols={r["name"] for r in db().execute("PRAGMA table_info(es_topup_orders)").fetchall()}
+    if "delivery_cipher" not in topup_cols:
+        db().execute("ALTER TABLE es_topup_orders ADD COLUMN delivery_cipher TEXT NOT NULL DEFAULT ''")
+    # Game orders deliver redeem codes; no player ID is collected or retained.
+    db().execute("UPDATE es_topup_orders SET player_id='' WHERE player_id IS NOT NULL AND player_id!=''")
+    db().execute("UPDATE es_products SET instructions='سيتم تسليم كود الباقة داخل التطبيق بعد تأكيد الدفع.'")
     defaults = {
       "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"15000000",
       "fx_rate_mode":"manual", "fx_market_rate":"0", "fx_manual_rate":"0", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
@@ -511,13 +517,12 @@ def topups():
         products=db().execute("SELECT * FROM es_products WHERE game=? ORDER BY id",(selected,)).fetchall()
     else:
         products=db().execute("SELECT * FROM es_products ORDER BY CASE game WHEN 'PUBG Mobile' THEN 1 WHEN 'Free Fire' THEN 2 WHEN 'Mobile Legends' THEN 3 ELSE 4 END,id").fetchall()
-    body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>اختر اللعبة لعرض باقات الشحن المتاحة. الأسعار يحددها المالك من لوحة التحكم.</p>
+    body=render_template_string("""<section class='panel game-intro'><span class='tag'>أكواد رقمية</span><h1>باقات الألعاب</h1><p>اختر اللعبة والباقة المناسبة. لا نطلب آيدي اللاعب ولا ندخل إلى حسابك؛ بعد تأكيد الدفع نسلّمك كود الباقة داخل التطبيق.</p>
     <div class='game-catalog-grid'>{% for g in games %}<a class='game-catalog-card {{g[4]}}' href='{{g[3]}}'><span class='game-catalog-icon'><svg><use href='#{{g[2]}}'/></svg></span><b>{{g[1]}}</b><small>{{g[0]}}</small></a>{% endfor %}</div>
     {% if selected %}<h2>باقات {{selected}}</h2>{% endif %}<a class='btn secondary' href='/store/topups'>كل الألعاب</a></section>
-    <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p>
-    {% if p['active'] and p['price_sdg'] > 1 %}<b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
-    <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'>
-    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form>
+    <div class='grid game-products'>{% for p in products %}<article class='panel game-product'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p>
+    {% if p['active'] and p['price_sdg'] > 1 %}<b class='game-price'>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
+    <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'><button class='game-buy'>شراء الكود</button></form>
     {% else %}<p class='muted'>الباقة مسجلة — غير متاحة للطلب حالياً.</p>{% endif %}
     </article>{% else %}<div class='empty-state'>لا توجد باقات مسجلة لهذه اللعبة حالياً.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
     return page("شحن الألعاب",body)
@@ -529,11 +534,9 @@ def new_topup():
     if setting("topups_enabled","0")!="1": abort(503,"طلبات الشحن متوقفة حالياً")
     p=db().execute("SELECT * FROM es_products WHERE id=? AND active=1 AND price_sdg>1",(request.form.get("product_id"),)).fetchone()
     if not p: abort(404)
-    player=request.form.get("player_id","").strip()
-    if not player or len(player)>100: abort(400)
     r=ref()
-    db().execute("INSERT INTO es_topup_orders(reference,buyer,product_id,player_id,amount_sdg,status,created_at,updated_at) VALUES(?,?,?,?,?,'PENDING_PAYMENT',?,?)",
-                 (r,u["username"],p["id"],player,p["price_sdg"],now(),now()))
+    db().execute("INSERT INTO es_topup_orders(reference,buyer,product_id,player_id,amount_sdg,status,created_at,updated_at) VALUES(?,?,?,'',?,'PENDING_PAYMENT',?,?)",
+                 (r,u["username"],p["id"],p["price_sdg"],now(),now()))
     audit(u["username"],"TOPUP_ORDER_CREATED","topup",r)
     flash("تم إنشاء طلب الشحن. سيظهر كطلب غير مدفوع حتى اعتماد وسيلة الدفع.")
     return redirect(url_for("empire.orders"))
