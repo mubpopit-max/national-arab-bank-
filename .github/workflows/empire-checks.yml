@@ -2,7 +2,7 @@ name: Empire E-Story checks
 
 on:
   push:
-    branches: [empire-estory-development]
+    branches: [main, empire-estory-development]
   pull_request:
     branches: [main]
 
