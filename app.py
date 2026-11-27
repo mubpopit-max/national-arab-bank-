@@ -372,16 +372,21 @@ def init_db():
     )
 
 
-    # Provision the dedicated general-manager account once. The password is
-    # stored only as a bcrypt hash; the plaintext is never written to the database.
+    # Optional one-time manager bootstrap. Never ship a fixed or unknown password hash.
+    # If no secret is configured, the founder provisions the manager from /store/admin/managers.
     manager_account = "9274618"
     manager_username = "manager_" + manager_account
-    manager_password_hash = "$2y$12$nM5tXwbdkiF6CCE7XmBeYu2CY7FZHjrkdJoFs7CgFOe6qKmuWWlKe"
+    manager_password = os.getenv("GENERAL_MANAGER_PASSWORD", "")
     manager_exists = database.execute(
         "SELECT 1 FROM users WHERE account_number=? OR username=?",
         (manager_account, manager_username),
     ).fetchone()
-    if not manager_exists:
+    if not manager_exists and manager_password:
+        if len(manager_password) < 10 or len(manager_password.encode("utf-8")) > 72:
+            raise RuntimeError("GENERAL_MANAGER_PASSWORD must be 10-72 bytes")
+        manager_password_hash = bcrypt.hashpw(
+            manager_password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
         manager_pin_hash = bcrypt.hashpw(
             secrets.token_hex(16).encode("utf-8"), bcrypt.gensalt()
         ).decode("utf-8")
@@ -389,8 +394,8 @@ def init_db():
             """INSERT INTO users
                (username,full_name,account_number,password_hash,pin_hash,balance,currency,role,active,created_at)
                VALUES(?,?,?,?,?,0,'SDG','manager',1,?)""",
-            (manager_username,"المدير العام للإمبراطورية",manager_account,
-             manager_password_hash,manager_pin_hash,now()),
+            (manager_username, "المدير العام للإمبراطورية", manager_account,
+             manager_password_hash, manager_pin_hash, now()),
         )
 
     funding_columns = {row["name"] for row in database.execute("PRAGMA table_info(funding_requests)").fetchall()}
