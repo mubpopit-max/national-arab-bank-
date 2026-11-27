@@ -1106,6 +1106,8 @@ def pay_topup():
         if not row: raise ValueError("طلب الشحن غير متاح للدفع")
         post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب من محفظة SDG")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
+        row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
+                         WHERE t.reference=? AND t.status='PAID'""",(r,)).fetchone()
         stock=d.execute("SELECT * FROM es_game_code_inventory WHERE product_id=? AND status='AVAILABLE' ORDER BY id LIMIT 1",(row["product_id"],)).fetchone()
         if stock and 0<=int(row["cost_sdg"])<=int(row["amount_sdg"]):
             fulfill_topup_from_inventory(d,row,stock,u["username"])
