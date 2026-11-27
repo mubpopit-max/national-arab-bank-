@@ -1363,6 +1363,8 @@ def exchange():
             source="SDG"
         else: abort(400)
         if result<=0: abort(400,"المبلغ أقل من الحد الأدنى للتحويل")
+        if result>9_000_000_000_000_000_000:
+            abort(400,"قيمة التحويل تتجاوز الحد المحاسبي المسموح.")
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
             if direction=="URC_TO_SDG":
@@ -1382,13 +1384,18 @@ def exchange():
         return redirect(url_for("empire.wallet"))
     mode=setting("fx_rate_mode","manual")
     base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","0"))
+    user_sdg=balance(u["username"],"SDG")
+    user_urc=balance(u["username"],"URC")
+    pool_sdg=int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='SDG'").fetchone()["n"])
+    pool_urc=int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='URC'").fetchone()["n"])
     return page("تحويل العملات",render_template_string("""<section class='panel'><span class='tag'>تحويل العملات</span><h1>URC ↔ SDG</h1>
-      <p>السعر المعتمد حالياً: {{rate}} SDG لكل URC · المصدر: {{mode}}</p>
-      <p class='muted'>تُنفّذ العملية فقط عند توفر سيولة كافية لدى المنصة بالعملة المقابلة. راجع الناتج قبل التأكيد.</p>
+      <p>{% if rate>0 %}السعر المعتمد حالياً: {{'{:,}'.format(rate)}} SDG لكل URC · المصدر: {{mode}}{% else %}الصرف متوقف مؤقتاً: لم يحدد المالك سعر التحويل بعد.{% endif %}</p>
+      <div class='grid'><article class='panel'><small>رصيدك SDG</small><b>{{'{:,}'.format(user_sdg)}}</b></article><article class='panel'><small>رصيدك URC</small><b>{{'{:,}'.format(user_urc)}}</b></article><article class='panel'><small>سيولة المنصة SDG</small><b>{{'{:,}'.format(pool_sdg)}}</b></article><article class='panel'><small>سيولة المنصة URC</small><b>{{'{:,}'.format(pool_urc)}}</b></article></div>
+      <p class='muted'>تُنفّذ العملية فقط عند توفر سيولة كافية لدى المنصة بالعملة المقابلة. إذا كان احتياطي العملة صفراً فلن يتم التحويل حتى يموّله المالك فعلياً.</p>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>اتجاه التحويل</label><select name='direction'><option value='URC_TO_SDG'>بيع URC واستلام SDG</option><option value='SDG_TO_URC'>شراء URC باستخدام SDG</option></select>
-      <label>المبلغ</label><input name='amount' type='number' min='1' required><button>تنفيذ التحويل</button></form>
-      <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>""",rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",csrf=session.get("csrf","")))
+      <label>المبلغ</label><input name='amount' type='number' min='1' required><button {% if rate<=0 %}disabled{% endif %}>تنفيذ التحويل</button></form>
+      <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>""",rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",user_sdg=user_sdg,user_urc=user_urc,pool_sdg=pool_sdg,pool_urc=pool_urc,csrf=session.get("csrf","")))
     
 @empire_bp.route("/admin/exchange",methods=["GET","POST"])
 @login_required
