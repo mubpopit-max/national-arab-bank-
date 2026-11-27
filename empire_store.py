@@ -103,6 +103,8 @@ def init_db():
       buyer TEXT NOT NULL, seller TEXT NOT NULL, price_sdg INTEGER NOT NULL CHECK(price_sdg>0),
       status TEXT NOT NULL CHECK(status IN ('ESCROWED','DELIVERED','RELEASED','REFUNDED','DISPUTED')),
       delivery_cipher TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_ice_code_reveals(
+      token_hash TEXT PRIMARY KEY, codes_json TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_ice_codes(
       id INTEGER PRIMARY KEY, code_hash TEXT UNIQUE NOT NULL, code_tail TEXT NOT NULL,
       points INTEGER NOT NULL CHECK(points>=0), status TEXT NOT NULL DEFAULT 'AVAILABLE'
@@ -709,10 +711,21 @@ def admin_ice_codes():
                          (digest,plain[-4:],points,user()["username"],now()))
             created.append(plain)
         audit(user()["username"],"ICE_CODES_CREATED","loyalty",str(count),"points_each="+str(points))
-        session["new_ice_codes"]=created
+        reveal_token=secrets.token_urlsafe(24)
+        token_hash=hashlib.sha256(reveal_token.encode("utf-8")).hexdigest()
+        db().execute("INSERT INTO es_ice_code_reveals(token_hash,codes_json,created_at) VALUES(?,?,?)",
+                     (token_hash,json.dumps(created),now()))
+        session["ice_codes_reveal_token"]=reveal_token
         flash("تم إنشاء الأكواد. انسخها ووزعها على العملاء؛ لن تُعرض مرة أخرى.")
         return redirect(url_for("empire.admin_ice_codes"))
-    generated=session.pop("new_ice_codes",[])
+    generated=[]
+    reveal_token=session.pop("ice_codes_reveal_token",None)
+    if reveal_token:
+        token_hash=hashlib.sha256(reveal_token.encode("utf-8")).hexdigest()
+        reveal=db().execute("SELECT codes_json FROM es_ice_code_reveals WHERE token_hash=?",(token_hash,)).fetchone()
+        if reveal:
+            generated=json.loads(reveal["codes_json"])
+            db().execute("DELETE FROM es_ice_code_reveals WHERE token_hash=?",(token_hash,))
     rows=db().execute("SELECT code_tail,points,status,created_at,used_by,used_at FROM es_ice_codes ORDER BY id DESC LIMIT 200").fetchall()
     body=render_template_string("""<section class='panel'><span class='tag'>آيس ستوري × الإمبراطورية إستوري</span><h1>أكواد العملاء المميزين</h1>
       <p>كل كود فريد ويستخدم مرة واحدة فقط. تحفظ المنصة بصمة الكود ولا تحتفظ بنصه الصريح بعد إنشائه.</p>
@@ -1186,7 +1199,7 @@ def transfer_lookup():
     return jsonify({"ok":True,"name":target["full_name"],"account_number":target["account_number"],
                     "verification":"موثق" if verified else "غير موثق","verified":verified,
                     "premium":bool(premium),"premium_badge":"❄ عميل آيس ستوري مميز" if premium else "",
-                    "loyalty_points":int(premium["points"]) if premium else 0})
+                    })
 
 @empire_bp.route("/transfer-epc",methods=["GET","POST"])
 @login_required
