@@ -6454,16 +6454,28 @@ register_empire_store(app)
 @app.before_request
 def hide_legacy_bank_surface():
     endpoint = request.endpoint or ""
-    if endpoint in {
-        "login", "register", "logout", "static",
-        "account_funding", "founder_panel", "founder_receipt_image"
-    } or endpoint.startswith("empire."):
+    # Authentication pages and static/PWA installation resources are public.
+    public_paths = {
+        "/store/manifest.webmanifest",
+        "/store/service-worker.js",
+        "/store/icon.svg",
+        "/store/offline"
+    }
+    if endpoint in {"login", "register", "logout", "static"}:
         return None
-    if request.path.startswith("/static/") or request.path.startswith("/store/"):
+    if request.path.startswith("/static/") or request.path in public_paths:
         return None
-    if current_user():
-        return redirect(url_for("empire.home"))
-    return redirect(url_for("login"))
+
+    # No application screen, legacy bank page, or store route is accessible
+    # until the user has a valid active session.
+    if not current_user():
+        return redirect(url_for("login"))
+
+    if endpoint in {"account_funding", "founder_panel", "founder_receipt_image"} or endpoint.startswith("empire."):
+        return None
+    if request.path.startswith("/store/"):
+        return None
+    return redirect(url_for("empire.home"))
 
 with app.app_context():
     init_db()
