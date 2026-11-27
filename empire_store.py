@@ -524,7 +524,7 @@ def topups():
 def new_topup():
     csrf(); u=user()
     if setting("topups_enabled","0")!="1": abort(503,"طلبات الشحن متوقفة حالياً")
-    p=db().execute("SELECT * FROM es_products WHERE id=? AND active=1",(request.form.get("product_id"),)).fetchone()
+    p=db().execute("SELECT * FROM es_products WHERE id=? AND active=1 AND price_sdg>1",(request.form.get("product_id"),)).fetchone()
     if not p: abort(404)
     player=request.form.get("player_id","").strip()
     if not player or len(player)>100: abort(400)
@@ -1090,7 +1090,10 @@ def admin_products():
             row=db().execute("SELECT * FROM es_products WHERE id=?",(pid,)).fetchone()
             if not row: abort(404)
             if row["price_sdg"]<=1: flash("حدد سعر البيع أولاً قبل تفعيل الباقة.")
-            else: db().execute("UPDATE es_products SET active=? WHERE id=?",(0 if row["active"] else 1,pid))
+            else:
+                db().execute("UPDATE es_products SET active=? WHERE id=?",(0 if row["active"] else 1,pid))
+                if not row["active"]:
+                    db().execute("INSERT INTO es_settings(key,value) VALUES('topups_enabled','1') ON CONFLICT(key) DO UPDATE SET value='1'")
             audit(user()["username"],"PRODUCT_TOGGLED","product",pid)
         elif action=="update":
             pid=request.form.get("product_id","")
