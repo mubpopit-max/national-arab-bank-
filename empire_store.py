@@ -1426,32 +1426,32 @@ def admin():
     }
     body=render_template_string("""{% if is_founder %}<section class='hero'><div><span class='hero-kicker'>SUDAN DIGITAL FINANCE · OWNER</span><h1>مركز قيادة الإمبراطورية</h1><p>إدارة الأصول والخدمات والعمليات المالية.</p><span class='tag'>رقم حساب المالك: {{owner_account}}</span></div><div class='hero-character'><div class='metric'><small>الأصول الرقمية للمالك</small><strong>{{'{:,}'.format(owner_urc)}} URC</strong><small>الأصول النقدية: {{'{:,}'.format(owner_sdg)}} SDG</small></div></div></section>{% else %}<section class='hero'><div><span class='hero-kicker'>AUTHORIZED MANAGEMENT</span><h1>مركز إدارة الإمبراطورية</h1><p>تظهر هنا الوحدات التي منحك المالك صلاحية الوصول إليها فقط.</p></div></section>{% endif %}
     <section class='panel'><h2>مؤشرات المنصة</h2><div class='grid'>
-    <article class='panel'><small>الإعلانات النشطة</small><h2>{{stats['listings']}}</h2></article>
-    <article class='panel'><small>أموال صفقات السوق المحتجزة (SDG)</small><h2>{{'{:,}'.format(stats['escrow'])}}</h2></article>
-    <article class='panel'><small>صافي إيراد المتجر المسجل (SDG)</small><h2>{{'{:,}'.format(stats['revenue'])}}</h2></article>
-    <article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>
-    <article class='panel'><small>طلبات السحب المعلقة</small><h2>{{stats['withdrawals']}}</h2></article>
-    <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
-    <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div></section>
-    <section class='admin-section'><div class='admin-section-head'><span>01 · العمليات المالية</span><h2>إدارة الأموال والمدفوعات</h2></div><div class='grid admin-links'>
-    <a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a>
+    {% if is_founder or 'catalog' in manager_permissions %}<article class='panel'><small>الإعلانات النشطة</small><h2>{{stats['listings']}}</h2></article>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<article class='panel'><small>أموال صفقات السوق المحتجزة (SDG)</small><h2>{{'{:,}'.format(stats['escrow'])}}</h2></article><article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article>{% endif %}
+    {% if is_founder or 'payments' in manager_permissions %}<article class='panel'><small>صافي إيراد المتجر المسجل (SDG)</small><h2>{{'{:,}'.format(stats['revenue'])}}</h2></article><article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>{% endif %}
+    {% if is_founder or 'withdrawals' in manager_permissions %}<article class='panel'><small>طلبات السحب المعلقة</small><h2>{{stats['withdrawals']}}</h2></article>{% endif %}
+    {% if is_founder or 'agents' in manager_permissions %}<article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>{% endif %}
+    </div></section>
+    {% if is_founder or 'payments' in manager_permissions or 'withdrawals' in manager_permissions or 'exchange' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>01 · العمليات المالية</span><h2>إدارة الأموال والمدفوعات</h2></div><div class='grid admin-links'>
+    {% if is_founder %}<a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a>{% endif %}
     {% if is_founder or 'payments' in manager_permissions %}<a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>{% endif %}
     {% if is_founder or 'withdrawals' in manager_permissions %}<a href='/store/admin/withdrawals'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small></a>{% endif %}
-    {% if is_founder or 'exchange' in manager_permissions %}<a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a>{% endif %}</div></section>
-    <section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
+    {% if is_founder or 'exchange' in manager_permissions %}<a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
     {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/topups'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/market-orders'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small></a>{% endif %}
-    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/disputes'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small></a>{% endif %}</div></section>
-    <section class='admin-section'><div class='admin-section-head'><span>03 · المنتجات والشركاء</span><h2>إدارة الكتالوج والوكلاء</h2></div><div class='grid admin-links'>
+    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/disputes'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder or 'products' in manager_permissions or 'catalog' in manager_permissions or 'agents' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>03 · المنتجات والشركاء</span><h2>إدارة الكتالوج والوكلاء</h2></div><div class='grid admin-links'>
     {% if is_founder or 'products' in manager_permissions %}<a href='/store/admin/products'><b>باقات الألعاب والأسعار</b><small>أسعار البيع وتكلفة المورد</small></a>{% endif %}
     {% if is_founder or 'catalog' in manager_permissions %}<a href='/store/admin/listings'><b>السوق والإعلانات</b><small>المنتجات والحسابات المعروضة</small></a>{% endif %}
-    {% if is_founder or 'agents' in manager_permissions %}<a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a>{% endif %}</div></section>
-    <section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
+    {% if is_founder or 'agents' in manager_permissions %}<a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a>{% endif %}</div></section>{% endif %}
+    {% if is_founder or 'settings' in manager_permissions or 'audit' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
     {% if is_founder or 'settings' in manager_permissions %}<a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>{% endif %}
     {% if is_founder or 'audit' in manager_permissions %}<a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>{% endif %}
-    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
+    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
     manager_permissions=[x["permission"] for x in db().execute("SELECT permission FROM es_manager_permissions WHERE username=?",(user()["username"],)).fetchall()] if user()["role"]=="manager" else []
-    return page("لوحة المالك",body,manager_permissions=manager_permissions)
+    dashboard_title="لوحة المدير العام" if user()["role"]=="manager" else "لوحة المالك"
+    return page(dashboard_title,body,manager_permissions=manager_permissions)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
 @login_required
