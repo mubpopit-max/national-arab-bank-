@@ -318,6 +318,18 @@ def init_db():
         );
 
 
+        CREATE TABLE IF NOT EXISTS receiving_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL CHECK(provider IN ('FAWRY','BANKAK','BRAVO','BANK_TRANSFER')),
+            label TEXT NOT NULL,
+            account_number TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(provider,account_number)
+        );
+
+
         CREATE INDEX IF NOT EXISTS idx_transactions_sender
         ON transactions(sender_account);
 
@@ -359,6 +371,22 @@ def init_db():
         """
     )
 
+
+    funding_columns = {row["name"] for row in database.execute("PRAGMA table_info(funding_requests)").fetchall()}
+    for column, definition in (
+        ("receiving_account_id", "INTEGER"),
+        ("receiving_account_label", "TEXT NOT NULL DEFAULT ''"),
+        ("receiving_account_number", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if column not in funding_columns:
+            database.execute(f"ALTER TABLE funding_requests ADD COLUMN {column} {definition}")
+
+    database.execute(
+        """INSERT OR IGNORE INTO receiving_accounts
+           (id,provider,label,account_number,active,created_at,updated_at)
+           VALUES(1,'BANK_TRANSFER','الحساب المعتمد السابق','8147243',1,?,?)""",
+        (now(), now()),
+    )
 
     founder = database.execute(
         """
@@ -1400,12 +1428,16 @@ def account_funding():
                 request.form.get("amount", "")
             )
 
-            method = request.form.get(
-                "method", "BANKAK"
-            ).strip()
-
-            if method not in {"BANKAK", "MY_CASHI", "BANK_TRANSFER"}:
-                raise ValueError("وسيلة التحويل غير معتمدة.")
+            receiving_account_id = request.form.get("receiving_account_id", "").strip()
+            if not receiving_account_id.isdigit():
+                raise ValueError("اختر حساب الاستقبال الذي حوّلت إليه.")
+            receiving_account = database.execute(
+                "SELECT * FROM receiving_accounts WHERE id=? AND active=1",
+                (int(receiving_account_id),),
+            ).fetchone()
+            if not receiving_account:
+                raise ValueError("حساب الاستقبال المحدد غير متاح حالياً.")
+            method = receiving_account["provider"]
 
             operation_number = request.form.get(
                 "operation_number", ""
@@ -1478,13 +1510,15 @@ def account_funding():
                     """
                     INSERT INTO funding_requests (
                         reference, username, account_number, amount, method,
-                        operation_number, receipt_image_path, note, status, created_at
+                        operation_number, receipt_image_path, note, status, created_at,
+                        receiving_account_id, receiving_account_label, receiving_account_number
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
                     """,
                     (
                         reference, user["username"], user["account_number"], amount,
                         method, operation_number, secure_filename_str, note[:500], now(),
+                        receiving_account["id"], receiving_account["label"], receiving_account["account_number"],
                     ),
                 )
             except Exception:
@@ -1535,13 +1569,85 @@ def account_funding():
         ),
     ).fetchall()
 
+    receive_accounts = database.execute(
+        "SELECT * FROM receiving_accounts WHERE active=1 ORDER BY id",
+    ).fetchall()
     return render_template_string(
         FUNDING_HTML,
         user=user,
-        receive_account=FUNDING_RECEIVE_ACCOUNT,
+        receive_accounts=receive_accounts,
         user_requests=user_requests,
     )
 
+
+
+@app.route("/founder/receiving-accounts",methods=["GET","POST"])
+@login_required
+@founder_required
+def founder_receiving_accounts():
+    database=get_db()
+    providers={"FAWRY":"فوري","BANKAK":"بنكك","BRAVO":"برافو","BANK_TRANSFER":"تحويل بنكي"}
+    if request.method=="POST":
+        try:
+            verify_csrf()
+            action=(request.form.get("action") or "").strip()
+            account_id=(request.form.get("account_id") or "").strip()
+            if action=="add":
+                provider=(request.form.get("provider") or "").strip()
+                label=(request.form.get("label") or "").strip()
+                number=(request.form.get("account_number") or "").strip()
+                if provider not in providers or not 2<=len(label)<=80 or not re.fullmatch(r"[A-Za-z0-9\u0600-\u06FF +()._-]{4,50}",number):
+                    raise ValueError("راجع نوع الحساب واسمه ورقمه.")
+                database.execute("INSERT INTO receiving_accounts(provider,label,account_number,active,created_at,updated_at) VALUES(?,?,?,1,?,?)",
+                                 (provider,label,number,now(),now()))
+                database.commit()
+                flash("تمت إضافة حساب الاستقبال.")
+            elif action=="toggle":
+                row=database.execute("SELECT * FROM receiving_accounts WHERE id=?",(account_id,)).fetchone()
+                if not row: raise ValueError("الحساب غير موجود.")
+                database.execute("UPDATE receiving_accounts SET active=?,updated_at=? WHERE id=?",(0 if row["active"] else 1,now(),account_id))
+                database.commit()
+                flash("تم تحديث حالة الحساب.")
+            elif action=="delete":
+                row=database.execute("SELECT * FROM receiving_accounts WHERE id=?",(account_id,)).fetchone()
+                if not row: raise ValueError("الحساب غير موجود.")
+                used=database.execute("SELECT 1 FROM funding_requests WHERE receiving_account_id=? LIMIT 1",(account_id,)).fetchone()
+                if used:
+                    database.execute("UPDATE receiving_accounts SET active=0,updated_at=? WHERE id=?",(now(),account_id))
+                    flash("الحساب مرتبط بطلبات سابقة؛ تم إيقافه وإخفاؤه مع حفظ السجلات.")
+                else:
+                    database.execute("DELETE FROM receiving_accounts WHERE id=?",(account_id,))
+                    flash("تم حذف الحساب.")
+                database.commit()
+            elif action=="update":
+                provider=(request.form.get("provider") or "").strip()
+                label=(request.form.get("label") or "").strip()
+                number=(request.form.get("account_number") or "").strip()
+                if provider not in providers or not 2<=len(label)<=80 or not re.fullmatch(r"[A-Za-z0-9\u0600-\u06FF +()._-]{4,50}",number):
+                    raise ValueError("راجع نوع الحساب واسمه ورقمه.")
+                database.execute("UPDATE receiving_accounts SET provider=?,label=?,account_number=?,updated_at=? WHERE id=?",
+                                 (provider,label,number,now(),account_id))
+                database.commit()
+                flash("تم تحديث بيانات الحساب.")
+            else:
+                raise ValueError("إجراء غير معروف.")
+        except sqlite3.IntegrityError:
+            database.rollback()
+            flash("هذا الحساب مسجل بالفعل ضمن الوسيلة نفسها.")
+        except Exception as exc:
+            database.rollback()
+            flash(str(exc))
+        return redirect(url_for("founder_receiving_accounts"))
+    rows=database.execute("SELECT * FROM receiving_accounts ORDER BY id DESC").fetchall()
+    return render_template_string("""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#0b5638'><title>حسابات الاستقبال</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f2f7f2;color:#193d2b;font:14px/1.6 system-ui,Arial;padding-bottom:24px}header{position:sticky;top:0;padding:14px;background:#fff;border-bottom:1px solid #dce8df;display:flex;justify-content:space-between;gap:8px;align-items:center}header b{font-size:16px}main{width:min(100% - 20px,760px);margin:16px auto}.card{padding:17px;margin:12px 0;background:#fff;border:1px solid #dce8df;border-radius:18px;box-shadow:0 5px 16px #183c2510}h1,h2{margin-top:0;color:#16442e}label{display:block;margin:10px 0 5px;font-weight:800}input,select{width:100%;min-height:46px;padding:11px;border:1px solid #d8e5da;border-radius:12px;background:#fbfdfb;font:inherit}button,.btn{min-height:44px;padding:10px 14px;border:0;border-radius:12px;background:#08764b;color:white;font:inherit;font-weight:850;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn.secondary{background:#edf5ef;color:#175b3c}.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.account{padding:14px;margin:12px 0;border:1px solid #e2ece4;border-radius:14px;background:#fbfdfb}.account form{margin-top:10px}.account strong{overflow-wrap:anywhere}.flash{padding:10px;background:#fff5e5;border-radius:10px;margin:8px 0}@media(max-width:420px){.row{grid-template-columns:1fr}button,.btn{width:100%}header{flex-wrap:wrap}}</style></head><body>
+<header><b>إدارة حسابات استقبال التحويلات</b><a class='btn secondary' href='/store/admin'>لوحة المالك</a></header><main>
+{% with messages=get_flashed_messages() %}{% for m in messages %}<div class='flash'>{{m}}</div>{% endfor %}{% endwith %}
+<section class='card'><h1>إضافة حساب استقبال</h1><p>أضف أكثر من حساب، واختر فوري أو بنكك أو برافو أو تحويلاً بنكياً. الحساب الموقوف لا يظهر للعملاء.</p>
+<form method='post'><input type='hidden' name='csrf' value='{{csrf_token()}}'><input type='hidden' name='action' value='add'><label>وسيلة الدفع</label><select name='provider'><option value='FAWRY'>فوري</option><option value='BANKAK'>بنكك</option><option value='BRAVO'>برافو</option><option value='BANK_TRANSFER'>تحويل بنكي</option></select><label>اسم الحساب / صاحب الحساب</label><input name='label' maxlength='80' required><label>رقم الحساب أو الهاتف</label><input name='account_number' maxlength='50' required><button>إضافة الحساب</button></form></section>
+<section class='card'><h2>الحسابات المسجلة</h2>{% for x in rows %}<article class='account'><b>{{providers[x['provider']]}}</b> · <span class='tag'>{{'نشط' if x['active'] else 'موقوف'}}</span><p>{{x['label']}} · <strong dir='ltr'>{{x['account_number']}}</strong></p>
+<form method='post'><input type='hidden' name='csrf' value='{{csrf_token()}}'><input type='hidden' name='action' value='update'><input type='hidden' name='account_id' value='{{x['id']}}'><div class='row'><div><label>الوسيلة</label><select name='provider'>{% for k,v in providers.items() %}<option value='{{k}}' {% if x['provider']==k %}selected{% endif %}>{{v}}</option>{% endfor %}</select></div><div><label>الاسم</label><input name='label' value='{{x['label']}}' required></div></div><label>رقم الحساب</label><input name='account_number' value='{{x['account_number']}}' required><button>حفظ التعديلات</button></form>
+<div class='row'><form method='post'><input type='hidden' name='csrf' value='{{csrf_token()}}'><input type='hidden' name='action' value='toggle'><input type='hidden' name='account_id' value='{{x['id']}}'><button class='btn secondary'>{{'إيقاف الحساب' if x['active'] else 'تفعيل الحساب'}}</button></form><form method='post' onsubmit='return confirm("تأكيد حذف أو إيقاف الحساب؟")'><input type='hidden' name='csrf' value='{{csrf_token()}}'><input type='hidden' name='action' value='delete'><input type='hidden' name='account_id' value='{{x['id']}}'><button style='background:#a43b36'>حذف الحساب</button></form></div></article>{% else %}<p>لا توجد حسابات استقبال.</p>{% endfor %}</section></main></body></html>""",rows=rows,providers=providers)
 
 # ============================================================
 # FOUNDER PANEL
@@ -4099,6 +4205,21 @@ input:focus{border-color:#7955b8;box-shadow:0 0 0 4px rgba(111,75,170,.12);backg
 @media(max-width:360px){body{padding-right:12px;padding-left:12px}.brand{margin-bottom:16px}.brand-mark{width:62px;height:62px;border-radius:20px}.auth-card{padding:21px 17px;border-radius:22px}.card-heading{font-size:21px}input{height:51px}}
 @media(max-height:690px){body{place-items:start center;padding-top:18px}.brand-mark{width:56px;height:56px;margin-bottom:8px}.brand{margin-bottom:13px}.brand-mark svg{width:34px;height:34px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* National digital finance identity: Sudan green, gold and clear mobile hierarchy */
+html{background:#0d3c2a!important}body{background:radial-gradient(ellipse at 8% 5%,rgba(194,163,91,.22),transparent 34%),radial-gradient(ellipse at 92% 90%,rgba(28,130,79,.34),transparent 35%),linear-gradient(145deg,#082b20,#10553a 56%,#082b20)!important;overflow-x:hidden;overflow-y:auto;min-height:100svh}
+.auth-wrap{width:min(100%,460px)!important;margin:auto!important;padding:8px 0}
+.brand-mark{border-color:rgba(222,194,126,.82)!important;background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.04))!important;box-shadow:0 12px 34px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.18)!important}
+.brand-mark svg{stroke:#e6cb83!important}.brand h1{color:#fff!important;letter-spacing:0}.brand p{color:#d7eadc!important}
+.auth-card{width:100%;max-width:100%;border:1px solid rgba(219,197,145,.55)!important;border-radius:24px!important;background:linear-gradient(150deg,#fff 0%,#fbfdf9 100%)!important;box-shadow:0 24px 70px rgba(0,0,0,.28)!important}
+.card-heading{color:#17442f!important}.card-subtitle{color:#718477!important}.field label{color:#315b43!important}
+input{width:100%;min-width:0;max-width:100%;border:1px solid #d9e5da!important;background:#f8fbf7!important;border-radius:13px!important;color:#183b2c!important}
+input:focus{border-color:#16834f!important;box-shadow:0 0 0 4px rgba(22,131,79,.12)!important}
+.primary-btn{background:linear-gradient(110deg,#08764b,#14583c)!important;box-shadow:0 9px 20px rgba(14,91,55,.2)!important}
+.auth-links a{color:#126b43!important}.secure-note{color:#78897c!important}
+.note{border-color:#e8dfc5!important;background:linear-gradient(110deg,#f3f8f2,#fff9eb)!important;color:#5b6e5e!important}.note strong{color:#856b31!important}
+@media(max-width:420px){body{display:block;padding:16px 12px calc(18px + env(safe-area-inset-bottom))!important}.auth-wrap{max-width:430px!important}.brand{margin-bottom:15px!important}.brand-mark{width:58px!important;height:58px!important;border-radius:18px!important}.brand h1{font-size:clamp(21px,6vw,26px)!important}.auth-card{padding:clamp(17px,5vw,23px)!important;border-radius:20px!important}.card-heading{font-size:21px!important}input{height:50px!important}.primary-btn{min-height:50px!important}}
+@media(max-height:690px){body{display:block!important;padding-top:12px!important}.brand-mark{width:48px!important;height:48px!important;margin-bottom:5px!important}.brand-mark svg{width:30px!important;height:30px!important}.brand{margin-bottom:10px!important}}
 </style>
 </head>
 <body>
@@ -4174,6 +4295,21 @@ input:focus{border-color:#7955b8;box-shadow:0 0 0 4px rgba(111,75,170,.12);backg
 @media(max-width:360px){body{padding-right:11px;padding-left:11px}.auth-card{padding:19px 15px;border-radius:21px}.brand{margin-bottom:13px}.brand-mark{width:55px;height:55px}input{height:47px}.field{margin-bottom:10px}}
 @media(max-height:760px){body{place-items:start center;padding-top:13px}.brand{margin-bottom:10px}.brand-mark{width:49px;height:49px;margin-bottom:5px}.brand-mark svg{width:30px;height:30px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* National digital finance identity: Sudan green, gold and clear mobile hierarchy */
+html{background:#0d3c2a!important}body{background:radial-gradient(ellipse at 8% 5%,rgba(194,163,91,.22),transparent 34%),radial-gradient(ellipse at 92% 90%,rgba(28,130,79,.34),transparent 35%),linear-gradient(145deg,#082b20,#10553a 56%,#082b20)!important;overflow-x:hidden;overflow-y:auto;min-height:100svh}
+.auth-wrap{width:min(100%,460px)!important;margin:auto!important;padding:8px 0}
+.brand-mark{border-color:rgba(222,194,126,.82)!important;background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.04))!important;box-shadow:0 12px 34px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.18)!important}
+.brand-mark svg{stroke:#e6cb83!important}.brand h1{color:#fff!important;letter-spacing:0}.brand p{color:#d7eadc!important}
+.auth-card{width:100%;max-width:100%;border:1px solid rgba(219,197,145,.55)!important;border-radius:24px!important;background:linear-gradient(150deg,#fff 0%,#fbfdf9 100%)!important;box-shadow:0 24px 70px rgba(0,0,0,.28)!important}
+.card-heading{color:#17442f!important}.card-subtitle{color:#718477!important}.field label{color:#315b43!important}
+input{width:100%;min-width:0;max-width:100%;border:1px solid #d9e5da!important;background:#f8fbf7!important;border-radius:13px!important;color:#183b2c!important}
+input:focus{border-color:#16834f!important;box-shadow:0 0 0 4px rgba(22,131,79,.12)!important}
+.primary-btn{background:linear-gradient(110deg,#08764b,#14583c)!important;box-shadow:0 9px 20px rgba(14,91,55,.2)!important}
+.auth-links a{color:#126b43!important}.secure-note{color:#78897c!important}
+.note{border-color:#e8dfc5!important;background:linear-gradient(110deg,#f3f8f2,#fff9eb)!important;color:#5b6e5e!important}.note strong{color:#856b31!important}
+@media(max-width:420px){body{display:block;padding:16px 12px calc(18px + env(safe-area-inset-bottom))!important}.auth-wrap{max-width:430px!important}.brand{margin-bottom:15px!important}.brand-mark{width:58px!important;height:58px!important;border-radius:18px!important}.brand h1{font-size:clamp(21px,6vw,26px)!important}.auth-card{padding:clamp(17px,5vw,23px)!important;border-radius:20px!important}.card-heading{font-size:21px!important}input{height:50px!important}.primary-btn{min-height:50px!important}}
+@media(max-height:690px){body{display:block!important;padding-top:12px!important}.brand-mark{width:48px!important;height:48px!important;margin-bottom:5px!important}.brand-mark svg{width:30px!important;height:30px!important}.brand{margin-bottom:10px!important}}
 </style>
 </head>
 <body>
@@ -4767,16 +4903,31 @@ input:focus,select:focus,textarea:focus{outline:3px solid rgba(8,118,185,.13);bo
 .status{display:inline-flex;padding:4px 10px;border-radius:30px;background:#fff5df;color:#946313;font-size:11px;font-weight:900}.status.APPROVED{background:#eaf6ef;color:#137344}.status.REJECTED{background:#fff0ef;color:#b43c38}
 .request p{margin:6px 0;color:#526b7d;font-size:12px}.empty{text-align:center;padding:20px;color:var(--muted);font-size:13px}
 @media(max-width:380px){.page{width:calc(100% - 18px)}.card{padding:14px}.hero{padding:18px}}
+
+:root{--ink:#183b2c;--muted:#718477;--blue:#08764b;--green:#16834f;--line:#dfeae2}
+html,body{max-width:100%;overflow-x:hidden;background:#f3f7f3!important;color:#183b2c}
+.top-header{background:rgba(255,255,255,.97)!important;border-bottom-color:#dce8df}.top-header h2{color:#17432f!important}
+.page{width:min(100% - 20px,650px)!important;margin:14px auto 28px!important}
+.hero{background:linear-gradient(125deg,#073d2b,#08764b 60%,#b18c46)!important;box-shadow:0 12px 26px rgba(8,79,47,.13)!important}
+.card{border-color:#dfe9e1!important;box-shadow:0 5px 16px rgba(25,66,43,.04)!important}
+.account-card{border-color:#c9dfce!important;background:linear-gradient(145deg,#f0f8f1,#fffaf0)!important}.account-card .bank{color:#176b43!important}
+.account-number strong{color:#17432f!important;letter-spacing:1px!important;overflow-wrap:anywhere}.copy-btn{border-color:#d4e3d6!important;color:#176b43!important}
+.submit-btn{background:linear-gradient(110deg,#08764b,#b38e4a)!important}
+input,select,textarea{min-width:0;max-width:100%;border-color:#d7e4d8!important;background:#fbfdfb!important}
+@media(max-width:420px){.page{width:calc(100% - 18px)!important;margin:10px auto 22px!important}.top-header{padding:10px 12px!important;flex-wrap:wrap}.hero,.card{padding:15px!important;border-radius:17px!important}.account-number{align-items:flex-start;flex-wrap:wrap}.account-number strong{font-size:clamp(21px,6vw,28px)!important}.copy-btn{min-height:40px}.submit-btn{min-height:48px}}
 </style></head><body>
 <header class="top-header"><h2>تغذية حسابي</h2><a href="/store/" class="back-btn">العودة للرئيسية</a></header>
 <main class="page">
 {% with messages = get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
 <section class="hero"><small>EMPIRE E-STORY · ACCOUNT FUNDING</small><h1>أضف رصيداً إلى حسابك</h1><p>حوّل إلى حساب الاستقبال المعتمد، ثم أرسل بيانات العملية والإيصال للمراجعة.</p></section>
-<section class="card"><h2>حساب التحويل المعتمد</h2><div class="account-card"><div class="bank">NATIONAL ARAB BANK</div><div class="account-number"><strong id="receiveAccount">{{ receive_account }}</strong><button class="copy-btn" type="button" id="copyAccount">نسخ الرقم</button></div><small>حساب الاستقبال المعتمد لتغذية الحسابات.</small></div>
+<section class="card"><h2>اختر حساب الاستقبال</h2>
+{% if receive_accounts %}<label for="receiving_account_id">وسيلة الدفع والحساب</label><select id="receiving_account_id" required>{% for item in receive_accounts %}<option value="{{item['id']}}" data-label="{{item['label']}}" data-number="{{item['account_number']}}" data-provider="{{item['provider']}}">{{ {'FAWRY':'فوري','BANKAK':'بنكك','BRAVO':'برافو','BANK_TRANSFER':'تحويل بنكي'}[item['provider']] }} · {{item['label']}}</option>{% endfor %}</select>
+<div class="account-card"><div class="bank" id="receiveLabel">{{receive_accounts[0]['label']}}</div><div class="account-number"><strong id="receiveAccount" dir="ltr">{{receive_accounts[0]['account_number']}}</strong><button class="copy-btn" type="button" id="copyAccount">نسخ الرقم</button></div><small>حوّل إلى هذا الحساب فقط، ثم أرسل إثبات العملية.</small></div>
+{% else %}<div class="notice">لا توجد حسابات استقبال متاحة حالياً. يرجى التواصل مع الدعم.</div>{% endif %}
 <div class="notice">أتمم التحويل أولاً. لا تتم إضافة الرصيد تلقائياً؛ تتم الإضافة بعد مراجعة الإيصال ورقم العملية واعتماد الطلب من المالك.</div></section>
 <section class="card"><h2>إرسال طلب التغذية</h2><form method="post" enctype="multipart/form-data" id="fundingForm">
 <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-<label for="method">وسيلة التحويل</label><select name="method" id="method" required><option value="BANKAK">بنكك (BANKAK)</option><option value="MY_CASHI">ماي كاشي (MY_CASHI)</option><option value="BANK_TRANSFER">تحويل بنكي مباشر</option></select>
+<input type="hidden" name="receiving_account_id" id="receivingAccountHidden" value="{% if receive_accounts %}{{receive_accounts[0]['id']}}{% endif %}">
 <label for="amount">المبلغ المحوّل (SDG)</label><input type="number" name="amount" id="amount" min="1" step="1" inputmode="numeric" placeholder="أدخل المبلغ" required>
 <label for="operation_number">رقم العملية البنكية</label><input type="text" name="operation_number" id="operation_number" maxlength="100" autocomplete="off" placeholder="أدخل رقم العملية كما يظهر في الإشعار" required>
 <label for="receipt_image">صورة إشعار التحويل</label><input type="file" name="receipt_image" id="receipt_image" accept="image/png,image/jpeg,image/webp" required><img class="preview" id="receiptPreview" alt="معاينة إيصال التحويل">
@@ -4786,7 +4937,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid rgba(8,118,185,.13);bo
 <div class="request"><div class="request-top"><b>{{ req["reference"] }}</b><span class="status {{ req['status'] }}">{{ "معتمد" if req["status"]=="APPROVED" else ("مرفوض" if req["status"]=="REJECTED" else "قيد المراجعة") }}</span></div>
 <p>المبلغ: <b>{{ money(req["amount"]) }} SDG</b> · رقم العملية: {{ req["operation_number"] }}</p><p>{{ req["created_at"][:19] }}</p>{% if req["founder_note"] %}<p>ملاحظة الإدارة: {{ req["founder_note"] }}</p>{% endif %}</div>
 {% else %}<div class="empty">لا توجد طلبات تغذية سابقة.</div>{% endfor %}</section></main>
-<script>(function(){const copy=document.getElementById('copyAccount'),account=document.getElementById('receiveAccount');if(copy&&account){copy.addEventListener('click',async function(){const value=account.textContent.trim();try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value);copy.textContent='تم النسخ';return;}}catch(e){}const field=document.createElement('textarea');field.value=value;field.setAttribute('readonly','');field.style.position='fixed';field.style.opacity='0';document.body.appendChild(field);field.select();let copied=false;try{copied=document.execCommand('copy');}catch(e){}field.remove();copy.textContent=copied?'تم النسخ':'حدد الرقم للنسخ';});}const input=document.getElementById('receipt_image'),preview=document.getElementById('receiptPreview');if(input&&preview){input.addEventListener('change',function(){const f=input.files&&input.files[0];if(!f){preview.removeAttribute('src');preview.style.display='none';return;}if(!/^image\\/(png|jpeg|webp)$/.test(f.type)){input.value='';preview.style.display='none';return;}preview.src=URL.createObjectURL(f);preview.style.display='block';});}const form=document.getElementById('fundingForm');if(form){form.addEventListener('submit',function(){const b=form.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='جارٍ إرسال الطلب…';}});}})();</script>
+<script>(function(){const select=document.getElementById('receiving_account_id'),hidden=document.getElementById('receivingAccountHidden'),label=document.getElementById('receiveLabel'),copy=document.getElementById('copyAccount'),account=document.getElementById('receiveAccount');if(select&&hidden&&account){select.addEventListener('change',function(){const o=select.options[select.selectedIndex];hidden.value=o.value;account.textContent=o.dataset.number||'';if(label)label.textContent=o.dataset.label||'';});}if(copy&&account){copy.addEventListener('click',async function(){const value=account.textContent.trim();try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value);copy.textContent='تم النسخ';return;}}catch(e){}const field=document.createElement('textarea');field.value=value;field.setAttribute('readonly','');field.style.position='fixed';field.style.opacity='0';document.body.appendChild(field);field.select();let copied=false;try{copied=document.execCommand('copy');}catch(e){}field.remove();copy.textContent=copied?'تم النسخ':'حدد الرقم للنسخ';});}const input=document.getElementById('receipt_image'),preview=document.getElementById('receiptPreview');if(input&&preview){input.addEventListener('change',function(){const f=input.files&&input.files[0];if(!f){preview.removeAttribute('src');preview.style.display='none';return;}if(!/^image\\/(png|jpeg|webp)$/.test(f.type)){input.value='';preview.style.display='none';return;}preview.src=URL.createObjectURL(f);preview.style.display='block';});}const form=document.getElementById('fundingForm');if(form){form.addEventListener('submit',function(){const b=form.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='جارٍ إرسال الطلب…';}});}})();</script>
 </body></html>
 """
 
@@ -4804,12 +4955,20 @@ FOUNDER_PANEL_HTML = """
 input{width:100%;min-height:43px;padding:10px 12px;border:1px solid #d8e4ec;border-radius:11px;background:#f8fbfd;font:inherit}button{min-height:44px;padding:9px 12px;border:0;border-radius:11px;color:#fff;font-weight:850;font:inherit;cursor:pointer}.approve{background:#16834f}.reject{background:#c74440}
 .flash{padding:12px;border-radius:11px;background:#fff1f0;color:#a92f2b;font-weight:750}.status{display:inline-flex;padding:4px 10px;border-radius:30px;background:#fff5df;color:#946313;font-size:11px;font-weight:900}.status.APPROVED{background:#eaf6ef;color:#137344}.status.REJECTED{background:#fff0ef;color:#b43c38}.empty{padding:22px;text-align:center;color:var(--muted)}
 @media(max-width:560px){.stats{grid-template-columns:1fr 1fr}.details{grid-template-columns:1fr}.content{width:calc(100% - 18px)}}
-</style></head><body><header class="top-header"><h2>مركز المالك · طلبات التغذية</h2><a href="/store/admin" class="back-btn">لوحة المنصة</a></header>
+
+:root{--ink:#183b2c;--muted:#718477;--blue:#08764b;--green:#16834f;--line:#dfeae2}
+html,body{max-width:100%;overflow-x:hidden;background:#f3f7f3!important;color:#183b2c}
+.top-header{background:rgba(255,255,255,.97)!important;border-bottom-color:#dce8df;flex-wrap:wrap}.top-header h2{color:#17432f!important}
+.content{width:min(100% - 20px,920px)!important;margin:14px auto 30px!important}.hero{background:linear-gradient(125deg,#073d2b,#08764b 60%,#b18c46)!important}
+.stat,.card{border-color:#dfe9e1!important;box-shadow:0 5px 16px rgba(25,66,43,.04)!important}.stat strong{color:#08764b!important}
+.detail{background:#f5f9f5!important;min-width:0;overflow-wrap:anywhere}button{background:#08764b!important}
+@media(max-width:420px){.content{width:calc(100% - 18px)!important}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.details{grid-template-columns:1fr}.actions{grid-template-columns:1fr}.actions input{grid-column:1}.top-header{padding:10px 12px!important}.hero,.card{padding:14px!important;border-radius:17px!important}.actions button{width:100%}}
+</style></head><body><header class="top-header"><h2>مركز المالك · طلبات التغذية</h2><a href="/founder/receiving-accounts" class="back-btn">حسابات الاستقبال</a><a href="/store/admin" class="back-btn">لوحة المنصة</a></header>
 <main class="content">{% with messages = get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
 <section class="hero"><h1>مراجعة طلبات تغذية الحسابات</h1><p>افحص صورة الإيصال ورقم العملية قبل اعتماد أي مبلغ.</p></section>
 <section class="stats"><div class="stat"><small>رصيد حساب المالك</small><strong>{{ money(founder_user["balance"]) }} SDG</strong></div><div class="stat"><small>طلبات معلقة</small><strong>{{ pending_requests|length }}</strong></div><div class="stat"><small>إجمالي الطلبات المعروضة</small><strong>{{ all_requests|length }}</strong></div></section>
 <section class="card"><h2>الطلبات بانتظار المراجعة</h2>{% for req in pending_requests %}
-<article class="request"><div class="details"><div class="detail"><small>مرجع الطلب</small><b>{{ req["reference"] }}</b></div><div class="detail"><small>العميل</small><b>{{ req["username"] }}</b></div><div class="detail"><small>رقم حساب العميل</small><b dir="ltr">{{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ المطلوب</small><b>{{ money(req["amount"]) }} SDG</b></div><div class="detail"><small>وسيلة التحويل</small><b>{{ req["method"] }}</b></div><div class="detail"><small>رقم العملية البنكية</small><b dir="ltr">{{ req["operation_number"] }}</b></div><div class="detail"><small>تاريخ الطلب</small><b>{{ req["created_at"][:19] }}</b></div><div class="detail"><small>ملاحظة العميل</small><b>{{ req["note"] or "لا توجد" }}</b></div></div>
+<article class="request"><div class="details"><div class="detail"><small>مرجع الطلب</small><b>{{ req["reference"] }}</b></div><div class="detail"><small>العميل</small><b>{{ req["username"] }}</b></div><div class="detail"><small>رقم حساب العميل</small><b dir="ltr">{{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ المطلوب</small><b>{{ money(req["amount"]) }} SDG</b></div><div class="detail"><small>وسيلة التحويل</small><b>{{ req["method"] }}</b></div><div class="detail"><small>حساب الاستقبال الذي حُوّل إليه</small><b>{{ req["receiving_account_label"] or "الحساب السابق" }} · {{ req["receiving_account_number"] or "—" }}</b></div><div class="detail"><small>رقم العملية البنكية</small><b dir="ltr">{{ req["operation_number"] }}</b></div><div class="detail"><small>تاريخ الطلب</small><b>{{ req["created_at"][:19] }}</b></div><div class="detail"><small>ملاحظة العميل</small><b>{{ req["note"] or "لا توجد" }}</b></div></div>
 <a class="receipt" href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" rel="noopener">عرض صورة إيصال التحويل</a>
 <form method="post" class="actions"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="funding_id" value="{{ req['id'] }}"><input type="text" name="founder_note" maxlength="500" placeholder="ملاحظة للعميل (اختياري)"><button type="submit" name="action" value="approve" class="approve">اعتماد وإضافة الرصيد</button><button type="submit" name="action" value="reject" class="reject">رفض الطلب</button></form></article>
 {% else %}<div class="empty">لا توجد طلبات تغذية معلقة حالياً.</div>{% endfor %}</section>
