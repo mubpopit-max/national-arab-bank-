@@ -1983,9 +1983,20 @@ def founder_panel():
         ),
     ).fetchone()
 
+    # Store assets are separate from the legacy bank-account balance.
+    # Read them from the double-entry ledger so every owner screen agrees.
+    store_wallets = {}
+    for currency in ("SDG", "URC"):
+        wallet_row = database.execute(
+            "SELECT COALESCE(SUM(delta),0) AS balance FROM es_ledger WHERE account=? AND currency=?",
+            ("user:" + FOUNDER_USERNAME, currency),
+        ).fetchone()
+        store_wallets[currency] = int(wallet_row["balance"])
+
     return render_template_string(
         FOUNDER_PANEL_HTML,
         founder_user=founder_user,
+        store_wallets=store_wallets,
         pending_requests=pending_requests,
         all_requests=all_requests,
     )
@@ -4941,7 +4952,7 @@ FOUNDER_PANEL_HTML = """
 :root{--ink:#18364b;--muted:#718496;--blue:#0876b9;--green:#16834f;--line:#e3ebf1}*{box-sizing:border-box}body{margin:0;background:#f4f8fb;color:var(--ink);font:14px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
 .top-header{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 16px;background:#fff;border-bottom:1px solid var(--line)}.top-header h2{margin:0;font-size:16px;color:#153d5b}.back-btn{padding:8px 12px;border-radius:11px;background:#edf5fa;color:#075b91;text-decoration:none;font-weight:800;font-size:12px}
 .content{width:min(100% - 24px,900px);margin:18px auto 40px}.hero{padding:20px;border-radius:22px;background:linear-gradient(125deg,#073b69,#086da5 58%,#16834f);color:#fff}.hero h1{margin:0;color:#fff;font-size:23px}.hero p{margin:5px 0 0;color:#e1f1f8}
-.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.stat,.card{padding:16px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:0 4px 14px rgba(24,60,85,.04)}.stat small{color:var(--muted)}.stat strong{display:block;margin-top:5px;font-size:23px;color:#0876b9}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:14px 0}.stat,.card{padding:16px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:0 4px 14px rgba(24,60,85,.04)}.stat small{color:var(--muted)}.stat strong{display:block;margin-top:5px;font-size:23px;color:#0876b9}
 .card{margin:13px 0}.card h2{margin:0 0 10px;font-size:17px;color:#183d56}.request{padding:16px 0;border-bottom:1px solid #edf1f4}.request:last-child{border-bottom:0}
 .details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.detail{padding:10px;border-radius:11px;background:#f7fafc;min-width:0}.detail small{display:block;color:var(--muted);font-size:11px}.detail b{overflow-wrap:anywhere}
 .receipt{display:inline-flex;align-items:center;gap:7px;margin:10px 0;padding:9px 12px;border-radius:11px;background:#eaf4fb;color:#075b91;text-decoration:none;font-weight:850}
@@ -4960,7 +4971,7 @@ html,body{max-width:100%;overflow-x:hidden;background:#f3f7f3!important;color:#1
 </style></head><body><header class="top-header"><h2>مركز المالك · طلبات التغذية</h2><a href="/founder/receiving-accounts" class="back-btn">حسابات الاستقبال</a><a href="/store/admin" class="back-btn">لوحة المنصة</a></header>
 <main class="content">{% with messages = get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
 <section class="hero"><h1>مراجعة طلبات تغذية الحسابات</h1><p>افحص صورة الإيصال ورقم العملية قبل اعتماد أي مبلغ.</p></section>
-<section class="stats"><div class="stat"><small>رصيد حساب المالك</small><strong>{{ money(founder_user["balance"]) }} SDG</strong></div><div class="stat"><small>طلبات معلقة</small><strong>{{ pending_requests|length }}</strong></div><div class="stat"><small>إجمالي الطلبات المعروضة</small><strong>{{ all_requests|length }}</strong></div></section>
+<section class="stats"><div class="stat"><small>رصيد الحساب البنكي الأساسي</small><strong>{{ money(founder_user["balance"]) }} SDG</strong></div><div class="stat"><small>محفظة المنصة · SDG</small><strong>{{ money(store_wallets["SDG"]) }} SDG</strong></div><div class="stat"><small>الأصول الرقمية · URC</small><strong>{{ money(store_wallets["URC"]) }} URC</strong></div><div class="stat"><small>طلبات معلقة</small><strong>{{ pending_requests|length }}</strong></div><div class="stat"><small>إجمالي الطلبات المعروضة</small><strong>{{ all_requests|length }}</strong></div></section>
 <section class="card"><h2>الطلبات بانتظار المراجعة</h2>{% for req in pending_requests %}
 <article class="request"><div class="details"><div class="detail"><small>مرجع الطلب</small><b>{{ req["reference"] }}</b></div><div class="detail"><small>العميل</small><b>{{ req["username"] }}</b></div><div class="detail"><small>رقم حساب العميل</small><b dir="ltr">{{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ المطلوب</small><b>{{ money(req["amount"]) }} SDG</b></div><div class="detail"><small>وسيلة التحويل</small><b>{{ req["method"] }}</b></div><div class="detail"><small>حساب الاستقبال الذي حُوّل إليه</small><b>{{ req["receiving_account_label"] or "الحساب السابق" }} · {{ req["receiving_account_number"] or "—" }}</b></div><div class="detail"><small>رقم العملية البنكية</small><b dir="ltr">{{ req["operation_number"] }}</b></div><div class="detail"><small>تاريخ الطلب</small><b>{{ req["created_at"][:19] }}</b></div><div class="detail"><small>ملاحظة العميل</small><b>{{ req["note"] or "لا توجد" }}</b></div></div>
 <a class="receipt" href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" rel="noopener">عرض صورة إيصال التحويل</a>
