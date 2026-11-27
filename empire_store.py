@@ -1417,7 +1417,7 @@ def complete_topup():
         post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),
                     ("user:"+u["username"],"SDG",commission),("protection:fund","SDG",platform_profit)],
              "تسوية شحن لعبة وتسجيل عمولة الوكيل")
-             notify_protection_income(r+"T","SDG",platform_profit,"حصة المنصة من ربح شحن الألعاب")
+        notify_protection_income(r+"T","SDG",platform_profit,"حصة المنصة من ربح شحن الألعاب")
         delivery_code=request.form.get("delivery_code","").strip()
         if len(delivery_code)<4 or len(delivery_code)>300:
             raise ValueError("أدخل كود الباقة الصحيح (4 إلى 300 حرف).")
