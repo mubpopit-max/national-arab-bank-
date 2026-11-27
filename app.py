@@ -6675,6 +6675,13 @@ def hide_legacy_bank_surface():
 
 with app.app_context():
     init_db()
+    database = get_db()
+    user_columns = {row["name"] for row in database.execute("PRAGMA table_info(users)").fetchall()}
+    if "email" not in user_columns:
+        database.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+    if "phone" not in user_columns:
+        database.execute("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+    database.commit()
 
     
 
