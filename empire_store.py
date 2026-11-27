@@ -465,6 +465,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
 .premium-list{display:grid;gap:8px}.premium-customer{display:flex;align-items:center;gap:9px;min-width:0;padding:10px;border:1px solid #e3eee6;border-radius:13px;background:#fbfdfb}
 .premium-customer b{flex:1;min-width:0;overflow-wrap:anywhere}.ice-mini{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:11px;background:#e6f7fb;color:#2484a3}
 .loyalty-service .service-icon{background:linear-gradient(145deg,#e5f8ff,#f7fdff)!important;color:#2a8aa9!important;border:1px solid #b9e0eb}
+.ice-code-record{display:grid;gap:10px}.ice-code-copy{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:10px;border:1px solid #e2eee5;border-radius:13px;background:#f8fcf9}.ice-code-copy code{min-width:0;overflow-wrap:anywhere;font-size:12px;font-weight:900;color:#17432f}.ice-code-copy button{width:auto;min-height:38px;padding:7px 11px}.ice-code-copy small{grid-column:1/-1;color:#16834f;font-weight:800}
 .history-strip{display:flex;align-items:center;gap:10px;margin:9px 0;padding:12px;border:1px solid #e0eae2;border-radius:14px;background:#fbfdfb;color:var(--ink)!important}.history-mark{display:grid;place-items:center;flex:0 0 36px;height:36px;border-radius:12px;background:#e8f5ec;color:#16834f;font-size:19px;font-weight:900}.history-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.history-main b{font-size:12px;overflow-wrap:anywhere}.history-main small{font-size:9px;overflow-wrap:anywhere}.history-strip>strong{font-size:11px;white-space:nowrap;color:#176b45}.history-detail-hero{display:grid;gap:6px;margin:14px 0;padding:15px;border-radius:15px;background:#f0f7f2}.history-detail-hero b{overflow-wrap:anywhere;font-size:13px}
 .permission-choice{display:flex;align-items:center;gap:9px;margin:8px 0;padding:9px;border:1px solid #e3ece5;border-radius:11px;background:#fbfdfb}
 .permission-choice input{width:18px;min-height:18px;height:18px;margin:0;flex:0 0 18px;accent-color:#16834f}
@@ -792,8 +793,9 @@ def admin_ice_codes():
         for _ in range(200-existing_codes):
             plain="ICE-"+secrets.token_hex(6).upper()
             digest=hashlib.sha256(plain.encode("utf-8")).hexdigest()
-            db().execute("INSERT INTO es_ice_codes(code_hash,code_tail,points,status,created_by,created_at) VALUES(?,?,100,'AVAILABLE',?,?)",
-                         (digest,plain[-4:],user()["username"],stamp))
+            cipher=encryption().encrypt(plain.encode("utf-8")).decode("utf-8")
+            db().execute("INSERT INTO es_ice_codes(code_hash,code_tail,code_cipher,points,status,created_by,created_at) VALUES(?,?,?,100,'AVAILABLE',?,?)",
+                         (digest,plain[-4:],cipher,user()["username"],stamp))
             created.append(plain)
         audit(user()["username"],"ICE_CODES_INITIAL_BATCH_CREATED","loyalty",str(200-existing_codes),"points_each=100")
         reveal_token=secrets.token_urlsafe(24)
@@ -815,8 +817,9 @@ def admin_ice_codes():
         for _ in range(count):
             plain="ICE-"+secrets.token_hex(6).upper()
             digest=hashlib.sha256(plain.encode("utf-8")).hexdigest()
-            db().execute("INSERT INTO es_ice_codes(code_hash,code_tail,points,status,created_by,created_at) VALUES(?,?,?,'AVAILABLE',?,?)",
-                         (digest,plain[-4:],points,user()["username"],now()))
+            cipher=encryption().encrypt(plain.encode("utf-8")).decode("utf-8")
+            db().execute("INSERT INTO es_ice_codes(code_hash,code_tail,code_cipher,points,status,created_by,created_at) VALUES(?,?,?,?,'AVAILABLE',?,?)",
+                         (digest,plain[-4:],cipher,points,user()["username"],now()))
             created.append(plain)
         audit(user()["username"],"ICE_CODES_CREATED","loyalty",str(count),"points_each="+str(points))
         reveal_token=secrets.token_urlsafe(24)
@@ -834,12 +837,24 @@ def admin_ice_codes():
         if reveal:
             generated=json.loads(reveal["codes_json"])
             db().execute("DELETE FROM es_ice_code_reveals WHERE token_hash=?",(token_hash,))
-    rows=db().execute("SELECT code_tail,points,status,created_at,used_by,used_at FROM es_ice_codes ORDER BY id DESC LIMIT 200").fetchall()
+    raw_rows=db().execute("SELECT id,code_tail,code_cipher,copied_at,points,status,created_at,used_by,used_at FROM es_ice_codes ORDER BY id DESC LIMIT 200").fetchall()
+    rows=[]
+    for raw in raw_rows:
+        item=dict(raw); item["plain_code"]=""
+        if item["status"]=="AVAILABLE" and item["code_cipher"]:
+            try: item["plain_code"]=encryption().decrypt(item["code_cipher"].encode("utf-8")).decode("utf-8")
+            except Exception: item["plain_code"]=""
+        rows.append(item)
     body=render_template_string("""<section class='panel'><span class='tag'>آيس ستوري × الإمبراطورية إستوري</span><h1>أكواد العملاء المميزين</h1>
       <p>كل كود فريد ويستخدم مرة واحدة فقط. تحفظ المنصة بصمة الكود ولا تحتفظ بنصه الصريح بعد إنشائه.</p>
       {% if generated %}<div class='premium-banner'><h2>الأكواد الجديدة — انسخها الآن</h2>{% for code in generated %}<p class='code-line' dir='ltr'>{{code}}</p>{% endfor %}<button type='button' onclick='navigator.clipboard.writeText({{generated|tojson}}.join("\\n"))'>نسخ جميع الأكواد</button></div>{% endif %}
       <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><label>عدد الأكواد (1–100)</label><input type='number' name='count' min='1' max='100' value='1' required><label>نقاط الولاء لكل كود</label><input type='number' name='points' min='0' max='9999999' value='100' required><button>إنشاء أكواد جديدة</button></form>
-      <h2>سجل الأكواد</h2>{% for x in rows %}<article class='panel'><b dir='ltr'>••••{{x['code_tail']}}</b> · {{x['points']}} نقطة · {{'متاح' if x['status']=='AVAILABLE' else ('مستخدم' if x['status']=='REDEEMED' else 'ملغي')}}{% if x['used_by'] %}<p>استُخدم بواسطة: {{x['used_by']}}</p>{% endif %}<small>{{x['created_at'][:16]}}</small></article>{% else %}<p>لم تُنشأ أكواد بعد.</p>{% endfor %}</section>""",
+      <h2>سجل الأكواد</h2><p class='muted'>الأكواد المتاحة مشفرة ويمكن نسخ كل كود مرة أخرى. عند الاسترداد يُقفل نهائياً ولا يعود قابلاً للنسخ.</p>
+      {% for x in rows %}<article class='panel ice-code-record'><div><b dir='ltr'>••••{{x['code_tail']}}</b> · {{x['points']}} نقطة · <span class='tag'>{{'متاح' if x['status']=='AVAILABLE' else ('تم الاسترداد — غير صالح' if x['status']=='REDEEMED' else 'ملغي')}}</span></div>
+      {% if x['status']=='AVAILABLE' and x['plain_code'] %}<div class='ice-code-copy'><code dir='ltr'>{{x['plain_code']}}</code><button type='button' class='ice-copy-button' data-code='{{x['plain_code']}}' data-code-id='{{x['id']}}' data-csrf='{{csrf}}'>{{'نسخ مرة أخرى' if x['copied_at'] else 'نسخ الكود'}}</button><small class='copy-status'>{{'تم النسخ سابقاً' if x['copied_at'] else 'لم يُنسخ بعد'}}</small></div>
+      {% elif x['status']=='AVAILABLE' %}<p class='muted'>الكود قديم ولم تُحفظ نسخة مشفرة قابلة للاستعادة. يمكن استخدامه إن كان العميل يحتفظ به، لكن لا يمكن إعادة نسخه من اللوحة.</p>{% endif %}
+      {% if x['used_by'] %}<p>استُرد بواسطة: {{x['used_by']}} · {{x['used_at'][:16] if x['used_at'] else ''}}</p>{% endif %}<small>{{x['created_at'][:16]}}</small></article>{% else %}<p>لم تُنشأ أكواد بعد.</p>{% endfor %}
+      <script>(function(){document.querySelectorAll('.ice-copy-button').forEach(function(btn){btn.addEventListener('click',async function(){var code=btn.dataset.code;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(code)}else{var area=document.createElement('textarea');area.value=code;document.body.appendChild(area);area.select();if(!document.execCommand('copy'))throw new Error('copy failed');area.remove()}var response=await fetch('/store/admin/ice-codes/copied/'+btn.dataset.codeId,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'csrf='+encodeURIComponent(btn.dataset.csrf)});if(!response.ok)throw new Error('save failed');btn.textContent='نسخ مرة أخرى';btn.parentElement.querySelector('.copy-status').textContent='تم النسخ ✓';}catch(e){alert('تعذر النسخ أو حفظ حالته. حاول مرة أخرى.')}})})})();</script></section>""",
       generated=generated,rows=rows,csrf=session.get("csrf",""))
     return page("أكواد آيس ستوري",body)
 
@@ -882,6 +897,17 @@ def transaction_history_detail(reference):
       <p class='muted'>هذه التفاصيل تعرض حركات حسابك فقط، ولا تعرض رصيد الطرف الآخر.</p><a class='btn secondary' href='/store/history'>العودة إلى المعاملات السابقة</a></section>""",
       memo=row["memo"],reference=reference,created_at=row["created_at"],movements=movements,counterparty=counterparty,note=transfer["note"] if transfer else "")
     return page("إشعار المعاملة",body)
+
+@empire_bp.post("/admin/ice-codes/copied/<int:code_id>")
+@login_required
+@founder_required
+def mark_ice_code_copied(code_id):
+    csrf()
+    changed=db().execute("UPDATE es_ice_codes SET copied_at=? WHERE id=? AND status='AVAILABLE' AND code_cipher<>''",(now(),code_id)).rowcount
+    if changed!=1:
+        return jsonify({"ok":False,"message":"الكود غير متاح للنسخ أو تم استرداده."}),409
+    audit(user()["username"],"ICE_CODE_COPIED","loyalty_code",str(code_id))
+    return jsonify({"ok":True,"copied":True})
 
 @empire_bp.get("/healthz")
 def healthz():
