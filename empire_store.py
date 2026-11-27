@@ -508,15 +508,18 @@ def topups():
     allowed={x[0] for x in games}
     if selected and selected not in allowed: abort(404)
     if selected:
-        products=db().execute("SELECT * FROM es_products WHERE active=1 AND price_sdg>1 AND game=? ORDER BY id",(selected,)).fetchall()
+        products=db().execute("SELECT * FROM es_products WHERE game=? ORDER BY id",(selected,)).fetchall()
     else:
-        products=db().execute("SELECT * FROM es_products WHERE active=1 AND price_sdg>1 ORDER BY game,id").fetchall()
+        products=db().execute("SELECT * FROM es_products ORDER BY CASE game WHEN 'PUBG Mobile' THEN 1 WHEN 'Free Fire' THEN 2 WHEN 'Mobile Legends' THEN 3 ELSE 4 END,id").fetchall()
     body=render_template_string("""<section class='panel'><h1>شحن الألعاب</h1><p>اختر اللعبة لعرض باقات الشحن المتاحة. الأسعار يحددها المالك من لوحة التحكم.</p>
     <div class='game-catalog-grid'>{% for g in games %}<a class='game-catalog-card {{g[4]}}' href='{{g[3]}}'><span class='game-catalog-icon'><svg><use href='#{{g[2]}}'/></svg></span><b>{{g[1]}}</b><small>{{g[0]}}</small></a>{% endfor %}</div>
     {% if selected %}<h2>باقات {{selected}}</h2>{% endif %}<a class='btn secondary' href='/store/topups'>كل الألعاب</a></section>
-    <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p><b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
+    <div class='grid'>{% for p in products %}<article class='panel'><span class='tag'>{{p['game']}}</span><h3>{{p['title']}}</h3><p>{{p['instructions']}}</p>
+    {% if p['active'] and p['price_sdg'] > 1 %}<b>{{'{:,}'.format(p['price_sdg'])}} SDG</b>
     <form method='post' action='/store/topups/new'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{p['id']}}'>
-    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form></article>{% else %}<div class='empty-state'>لا توجد باقات مفعّلة حالياً لهذه اللعبة. سيضيف المالك الأسعار ثم يفعّلها.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
+    <label>معرف اللاعب</label><input name='player_id' maxlength='100' required><button>طلب الشحن</button></form>
+    {% else %}<p class='muted'>الباقة مسجلة — غير متاحة للطلب حالياً.</p>{% endif %}
+    </article>{% else %}<div class='empty-state'>لا توجد باقات مسجلة لهذه اللعبة حالياً.</div>{% endfor %}</div>""",products=products,csrf=session.get("csrf",""),games=games,selected=selected)
     return page("شحن الألعاب",body)
 
 @empire_bp.post("/topups/new")
