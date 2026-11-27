@@ -62,7 +62,7 @@ def init_db():
 
     CREATE TABLE IF NOT EXISTS es_products(
       id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, game TEXT NOT NULL,
-      title TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT 'أدخل معرف اللاعب بدقة.',
+      title TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT 'سيتم تسليم كود الباقة بعد تأكيد الدفع.',
       price_sdg INTEGER NOT NULL CHECK(price_sdg>0), cost_sdg INTEGER NOT NULL DEFAULT 0 CHECK(cost_sdg>=0), active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_topup_orders(
@@ -272,7 +272,7 @@ def seed_game_products():
             code="CAT-"+secrets.token_hex(8).upper()
             db().execute("""INSERT INTO es_products
               (code,game,title,instructions,price_sdg,cost_sdg,active,created_at)
-              VALUES(?,?,?,'أدخل معرف اللاعب بدقة.',1,0,0,?)""",
+              VALUES(?,?,?,'سيتم تسليم كود الباقة بعد تأكيد الدفع.',1,0,0,?)""",
               (code,game,title,now()))
 
 def assert_epc_capacity(quantity):
