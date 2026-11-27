@@ -1094,6 +1094,9 @@ def admin_listings():
 @login_required
 @founder_required
 def admin_products():
+    # Create the session CSRF token before rendering any form on this page.
+    # page() initializes it later, which was too late for this route's pre-rendered HTML.
+    session.setdefault("csrf", secrets.token_urlsafe(32))
     if request.method == "POST":
         csrf()
         action = (request.form.get("action") or "").strip()
