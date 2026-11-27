@@ -700,22 +700,22 @@ def admin_ice_codes():
     # First-time owner visit provisions the requested exclusive batch exactly once.
     # Plain codes are revealed only in this authenticated owner session, then erased.
     existing_codes=db().execute("SELECT COUNT(*) n FROM es_ice_codes").fetchone()["n"]
-    if existing_codes == 0 and request.method == "GET":
+    if existing_codes < 200 and request.method == "GET":
         created=[]
         stamp=now()
-        for _ in range(200):
+        for _ in range(200-existing_codes):
             plain="ICE-"+secrets.token_hex(6).upper()
             digest=hashlib.sha256(plain.encode("utf-8")).hexdigest()
             db().execute("INSERT INTO es_ice_codes(code_hash,code_tail,points,status,created_by,created_at) VALUES(?,?,100,'AVAILABLE',?,?)",
                          (digest,plain[-4:],user()["username"],stamp))
             created.append(plain)
-        audit(user()["username"],"ICE_CODES_INITIAL_BATCH_CREATED","loyalty","200","points_each=100")
+        audit(user()["username"],"ICE_CODES_INITIAL_BATCH_CREATED","loyalty",str(200-existing_codes),"points_each=100")
         reveal_token=secrets.token_urlsafe(24)
         token_hash=hashlib.sha256(reveal_token.encode("utf-8")).hexdigest()
         db().execute("INSERT INTO es_ice_code_reveals(token_hash,codes_json,created_at) VALUES(?,?,?)",
                      (token_hash,json.dumps(created),stamp))
         session["ice_codes_reveal_token"]=reveal_token
-        flash("تم إنشاء الدفعة الحصرية الأولى: 200 كود، 100 نقطة لكل كود.")
+        flash("تم استكمال الدفعة الحصرية إلى 200 كود، 100 نقطة لكل كود.")
     if request.method=="POST":
         csrf()
         count_raw=(request.form.get("count") or "1").strip()
