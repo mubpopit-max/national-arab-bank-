@@ -960,6 +960,7 @@ def transaction_history_detail(reference):
         abort(404)
     transfer=db().execute("SELECT sender,recipient,recipient_account,note FROM es_transfer_details WHERE reference=? AND (sender=? OR recipient=?)",
                           (reference,u["username"],u["username"])).fetchone()
+    fx_audit=db().execute("SELECT details FROM es_audit WHERE object_ref=? AND action='CURRENCY_EXCHANGE' LIMIT 1",(reference,)).fetchone()
     movements=[]
     counterparty=""
     memo=own[0]["memo"]
@@ -975,7 +976,7 @@ def transaction_history_detail(reference):
         main=max(principal,key=lambda x:abs(int(x["delta"])))
         movements=[{"currency":main["currency"],"delta":int(main["delta"]),"label":"قيمة التحويل"}]
         memo="تحويل صادر" if is_sender else "تحويل وارد"
-    elif len({x["currency"] for x in own})>1:
+    elif fx_audit:
         debits=[x for x in own if int(x["delta"])<0]
         credits=[x for x in own if int(x["delta"])>0]
         if not debits or not credits:
