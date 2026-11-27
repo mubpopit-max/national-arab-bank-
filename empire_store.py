@@ -197,11 +197,28 @@ def init_db():
     for k,v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
     # Keep exchange liquidity separate from platform revenue/protected funds.
-    # Legacy exchange-pool entries are migrated only when they still have their
-    # original account name. Older deployments may already have merged them;
-    # those historical amounts are deliberately not guessed or reclassified.
     conn.execute("UPDATE es_ledger SET account='protection:fund' WHERE account='platform:revenue'")
     conn.execute("UPDATE es_ledger SET account='fx:reserve' WHERE account='platform:fx_pool'")
+    # Recover legacy FX reserve movements that an earlier migration placed in
+    # protection:fund. Exchange posting line 2 is source-currency liquidity in,
+    # line 4 is target-currency liquidity out; line 6 is the separate fee and
+    # intentionally remains in protection:fund. Audit references identify the
+    # exact exchange transactions, so no balances are estimated.
+    conn.execute("""
+        UPDATE es_ledger SET account='fx:reserve'
+        WHERE account='protection:fund' AND line_no IN (2,4)
+          AND reference IN (
+            SELECT object_ref FROM es_audit WHERE action='CURRENCY_EXCHANGE'
+          )
+    """)
+    conn.execute("""
+        UPDATE es_ledger SET account='fx:reserve'
+        WHERE account='protection:fund' AND line_no=2
+          AND memo IN (
+            'تمويل احتياطي الصرف من محفظة المالك',
+            'إيداع احتياطي SDG خارجي مؤكد من المالك'
+          )
+    """)
     # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
     for key in ("fx_manual_rate","fx_market_rate"):
         current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
