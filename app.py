@@ -6409,7 +6409,10 @@ register_empire_store(app)
 @app.before_request
 def hide_legacy_bank_surface():
     endpoint = request.endpoint or ""
-    if endpoint in {"login", "register", "logout", "static"} or endpoint.startswith("empire."):
+    if endpoint in {
+        "login", "register", "logout", "static",
+        "account_funding", "founder_panel", "founder_receipt_image"
+    } or endpoint.startswith("empire."):
         return None
     if request.path.startswith("/static/") or request.path.startswith("/store/"):
         return None
