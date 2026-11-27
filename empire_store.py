@@ -196,6 +196,8 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS es_ledger_account ON es_ledger(account,currency,id)")
     for k,v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO es_settings(key,value) VALUES(?,?)",(k,v))
+    # Consolidate historical revenue and exchange reserves into the protected fund.
+    conn.execute("UPDATE es_ledger SET account='protection:fund' WHERE account IN ('platform:revenue','platform:fx_pool')")
     # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
     for key in ("fx_manual_rate","fx_market_rate"):
         current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
@@ -1018,7 +1020,7 @@ def withdrawal():
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
             fee=platform_fee(amount)
-            post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("platform:revenue","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
+            post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("protection:fund","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
             d.execute("INSERT INTO es_withdrawals(reference,username,amount_sdg,payout_method,payout_details_cipher,created_at) VALUES(?,?,?,?,?,?)",
                       (r,u["username"],amount,method,encrypted,now()))
             audit(u["username"],"WITHDRAWAL_REQUESTED","withdrawal",r)
@@ -1125,7 +1127,7 @@ def listing_new():
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
             if listing_type=="ACCOUNT":
-                post(r+"F",[("user:"+u["username"],"SDG",-1000),("platform:revenue","SDG",1000)],"رسوم نشر حساب للبيع")
+                post(r+"F",[("user:"+u["username"],"SDG",-1000),("protection:fund","SDG",1000)],"رسوم نشر حساب للبيع")
             d.execute("INSERT INTO es_listings(public_id,seller,game,title,description,price_sdg,image_path,status,created_at,listing_type,category) VALUES(?,?,?,?,?,?,?,'PUBLISHED',?,?,?)",
                       (r,u["username"],category,title,desc,price,image_path,now(),listing_type,category))
             audit(u["username"],"LISTING_CREATED","listing",r,"type="+listing_type)
@@ -1160,7 +1162,7 @@ def buy_listing():
         listing=d.execute("SELECT * FROM es_listings WHERE id=? AND status='PUBLISHED'",(listing["id"],)).fetchone()
         if not listing: raise ValueError("الإعلان لم يعد متاحاً")
         fee=platform_fee(listing["price_sdg"])
-        post(r,[("user:"+u["username"],"SDG",-(listing["price_sdg"]+fee)),("escrow:market","SDG",listing["price_sdg"]),("platform:revenue","SDG",fee)],"حجز قيمة صفقة سوق · عمولة التطبيق 3%")
+        post(r,[("user:"+u["username"],"SDG",-(listing["price_sdg"]+fee)),("escrow:market","SDG",listing["price_sdg"]),("protection:fund","SDG",fee)],"حجز قيمة صفقة سوق · عمولة التطبيق 3%")
         d.execute("INSERT INTO es_market_orders(reference,listing_id,buyer,seller,price_sdg,status,created_at,updated_at) VALUES(?,?,?,?,?,'ESCROWED',?,?)",
                   (r,listing["id"],u["username"],listing["seller"],listing["price_sdg"],now(),now()))
         d.execute("UPDATE es_listings SET status='SOLD' WHERE id=?",(listing["id"],))
@@ -1223,7 +1225,7 @@ def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic invento
     entries=[("clearing:topups","SDG",-int(order["amount_sdg"]))]
     if cost:
         entries.append(("supplier:topup_cost","SDG",cost))
-    entries.append(("platform:revenue","SDG",margin))
+    entries.append(("protection:fund","SDG",margin))
     post(order["reference"]+"T",entries,"تسوية وتسليم تلقائي لكود لعبة")
     changed=d.execute(
         "UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
@@ -1249,7 +1251,7 @@ def pay_topup():
         if not row: raise ValueError("طلب الشحن غير متاح للدفع")
         fee=platform_fee(row["amount_sdg"])
         post(r,[("user:"+u["username"],"SDG",-(row["amount_sdg"]+fee)),("clearing:topups","SDG",row["amount_sdg"]),
-                ("platform:revenue","SDG",fee)],"دفع طلب شحن ألعاب من المحفظة · عمولة التطبيق 3%")
+                ("protection:fund","SDG",fee)],"دفع طلب شحن ألعاب من المحفظة · عمولة التطبيق 3%")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
         row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
                          WHERE t.reference=? AND t.status='PAID'""",(r,)).fetchone()
@@ -1301,7 +1303,7 @@ def complete_topup():
         commission=(margin*agent_row["commission_bps"])//10000
         platform_profit=margin-commission
         post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),
-                    ("user:"+u["username"],"SDG",commission),("platform:revenue","SDG",platform_profit)],
+                    ("user:"+u["username"],"SDG",commission),("protection:fund","SDG",platform_profit)],
              "تسوية شحن لعبة وتسجيل عمولة الوكيل")
         delivery_code=request.form.get("delivery_code","").strip()
         if len(delivery_code)<4 or len(delivery_code)>300:
@@ -1484,7 +1486,7 @@ def transfer_epc():
                 raise ValueError("حساب المستلم لم يعد صالحاً.")
             fee=platform_fee(qty)
             post(r,[("user:"+u["username"],currency,-qty),("user:"+current_target["username"],currency,qty),
-                    ("user:"+u["username"],currency,-fee),("platform:revenue",currency,fee)],
+                    ("user:"+u["username"],currency,-fee),("protection:fund",currency,fee)],
                  "تحويل "+currency+" إلى "+current_target["full_name"]+" · عمولة التطبيق 3%")
             d.execute("INSERT INTO es_transfer_details(reference,sender,recipient,recipient_account,currency,note,created_at) VALUES(?,?,?,?,?,?,?)",
                       (r,u["username"],current_target["username"],account,currency,note,now()))
@@ -1588,15 +1590,15 @@ def exchange():
         try:
             fee=platform_fee(amount)
             if direction=="URC_TO_SDG":
-                pool=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='SDG'").fetchone()["n"])
-                if pool<result: raise ValueError("سيولة SDG المتاحة لدى المنصة لا تكفي لإتمام التحويل")
-                post(r,[("user:"+u["username"],"URC",-amount),("platform:fx_pool","URC",amount),("platform:fx_pool","SDG",-result),("user:"+u["username"],"SDG",result),
-                        ("user:"+u["username"],"URC",-fee),("platform:revenue","URC",fee)],"تحويل URC إلى SDG · عمولة التطبيق 3%")
+                available=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='SDG'").fetchone()["n"])
+                if available<result: raise ValueError("تعذر إتمام التحويل بهذا المبلغ حالياً. حاول لاحقاً أو اختر مبلغاً آخر.")
+                post(r,[("user:"+u["username"],"URC",-amount),("protection:fund","URC",amount),("protection:fund","SDG",-result),("user:"+u["username"],"SDG",result),
+                        ("user:"+u["username"],"URC",-fee),("protection:fund","URC",fee)],"تحويل URC إلى SDG · عمولة التطبيق 3%")
             else:
-                pool=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='URC'").fetchone()["n"])
-                if pool<result: raise ValueError("سيولة URC المتاحة لدى المنصة لا تكفي لإتمام التحويل")
-                post(r,[("user:"+u["username"],"SDG",-amount),("platform:fx_pool","SDG",amount),("platform:fx_pool","URC",-result),("user:"+u["username"],"URC",result),
-                        ("user:"+u["username"],"SDG",-fee),("platform:revenue","SDG",fee)],"تحويل SDG إلى URC · عمولة التطبيق 3%")
+                available=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='URC'").fetchone()["n"])
+                if available<result: raise ValueError("تعذر إتمام التحويل بهذا المبلغ حالياً. حاول لاحقاً أو اختر مبلغاً آخر.")
+                post(r,[("user:"+u["username"],"SDG",-amount),("protection:fund","SDG",amount),("protection:fund","URC",-result),("user:"+u["username"],"URC",result),
+                        ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],"تحويل SDG إلى URC · عمولة التطبيق 3%")
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate))
             d.commit()
         except ValueError as exc:
@@ -1615,16 +1617,12 @@ def exchange():
     base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","0"))
     user_sdg=balance(u["username"],"SDG")
     user_urc=balance(u["username"],"URC")
-    pool_sdg=int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='SDG'").fetchone()["n"])
-    pool_urc=int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='URC'").fetchone()["n"])
     return page("تحويل العملات",render_template_string("""<section class='panel'><span class='tag'>تحويل العملات</span><h1>URC ↔ SDG</h1>
-      <p>{% if rate>0 %}السعر المعتمد حالياً: {{'{:,}'.format(rate)}} SDG لكل URC · المصدر: {{mode}}{% else %}الصرف متوقف مؤقتاً: لم يحدد المالك سعر التحويل بعد.{% endif %}</p>
-      <div class='grid'><article class='panel'><small>رصيدك SDG</small><b>{{'{:,}'.format(user_sdg)}}</b></article><article class='panel'><small>رصيدك URC</small><b>{{'{:,}'.format(user_urc)}}</b></article><article class='panel'><small>سيولة المنصة SDG</small><b>{{'{:,}'.format(pool_sdg)}}</b></article><article class='panel'><small>سيولة المنصة URC</small><b>{{'{:,}'.format(pool_urc)}}</b></article></div>
-      <p class='muted'>تُنفّذ العملية فقط عند توفر سيولة كافية لدى المنصة بالعملة المقابلة. إذا كان احتياطي العملة صفراً فلن يتم التحويل حتى يموّله المالك فعلياً.</p>
-      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
-      <label>اتجاه التحويل</label><select name='direction'><option value='URC_TO_SDG'>بيع URC واستلام SDG</option><option value='SDG_TO_URC'>شراء URC باستخدام SDG</option></select>
-      <label>المبلغ</label><input name='amount' type='number' min='1' required><p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد.</p><button {% if rate<=0 %}disabled{% endif %}>تنفيذ التحويل</button></form>
-      <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>""",rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",user_sdg=user_sdg,user_urc=user_urc,pool_sdg=pool_sdg,pool_urc=pool_urc,csrf=session.get("csrf","")))
+      <p>{% if rate>0 %}السعر المعتمد حالياً: {{'{:,}'.format(rate)}} SDG لكل URC · المصدر: {{mode}}{% else %}الصرف متوقف مؤقتاً؛ يرجى مراجعة إدارة المنصة.{% endif %}</p>
+      <div class='grid'><article class='panel'><small>رصيدك SDG</small><b>{{'{:,}'.format(user_sdg)}}</b></article><article class='panel'><small>رصيدك URC</small><b>{{'{:,}'.format(user_urc)}}</b></article></div>
+      <p class='muted'>تُنفّذ عمليات الصرف وفق السعر المعتمد، وتُخصم عمولة التطبيق 3% بصورة منفصلة من محفظتك بالعملة التي تدفعها.</p>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>اتجاه التحويل</label><select name='direction'><option value='URC_TO_SDG'>تحويل URC إلى SDG</option><option value='SDG_TO_URC'>تحويل SDG إلى URC</option></select>
+      <label>المبلغ</label><input name='amount' type='number' min='1' required><p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد.</p><button {% if rate<=0 %}disabled{% endif %}>تنفيذ التحويل</button></form><a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>""",rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",user_sdg=user_sdg,user_urc=user_urc,csrf=session.get("csrf","")))
     
 @empire_bp.route("/admin/exchange",methods=["GET","POST"])
 @login_required
@@ -1643,7 +1641,7 @@ def admin_exchange():
             if currency not in ("URC","SDG"): abort(400)
             d=db(); d.execute("BEGIN IMMEDIATE")
             try:
-                post(ref(),[("user:"+u["username"],currency,-amount),("platform:fx_pool",currency,amount)],"تمويل احتياطي الصرف من محفظة المالك")
+                post(ref(),[("user:"+u["username"],currency,-amount),("protection:fund",currency,amount)],"تمويل احتياطي الصرف من محفظة المالك")
                 audit(u["username"],"FX_LIQUIDITY_ADDED","fx_pool",currency+" "+str(amount))
                 d.commit()
             except Exception:
@@ -1660,7 +1658,7 @@ def admin_exchange():
             d=db(); d.execute("BEGIN IMMEDIATE")
             try:
                 ledger_ref="FXEXT"+hashlib.sha256(external_ref.encode("utf-8")).hexdigest()[:24].upper()
-                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("platform:fx_pool","SDG",amount)],
+                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("protection:fund","SDG",amount)],
                      "إيداع احتياطي SDG خارجي مؤكد من المالك")
                 audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",
                       str(amount)+" SDG; external_reference="+external_ref)
@@ -1680,12 +1678,12 @@ def admin_exchange():
             db().execute("INSERT INTO es_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(k,v))
         audit(u["username"],"FX_RATES_UPDATED","settings",mode)
         flash("تم حفظ إعدادات سعر الصرف.")
-    pools={c:int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency=?",(c,)).fetchone()["n"]) for c in ("URC","SDG")}
+    pools={c:int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(c,)).fetchone()["n"]) for c in ("URC","SDG")}
     owner_row=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
     owner_username=owner_row["username"] if owner_row else u["username"]
     owner={c:balance(owner_username,c) for c in ("URC","SDG")}
     is_founder=u["role"]=="founder"
-    return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف والسيولة</h1>
+    return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف</h1>
       <div class='grid'><article class='panel'><small>أصول المالك URC</small><h2>{{'{:,}'.format(owner['URC'])}}</h2></article><article class='panel'><small>أصول المالك SDG</small><h2>{{'{:,}'.format(owner['SDG'])}}</h2></article>
       <article class='panel'><small>احتياطي URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article></div>
       <h2>مصدر سعر الصرف</h2>{% if is_founder %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
@@ -1700,6 +1698,50 @@ def admin_exchange():
       <h2>تسجيل احتياطي SDG نقدي مستلم فعلياً</h2><p class='muted'>استخدم هذا الخيار فقط بعد استلام النقد فعلياً والتحقق منه خارج المنصة. يسجل النظام مرجع العملية في سجل التدقيق ولا ينشئ رصيداً للعميل.</p>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form>{% endif %}</section>""",
       owner=owner,pools=pools,is_founder=is_founder,active_rate=int(setting("fx_market_rate" if setting("fx_rate_mode","manual")=="market" else "fx_manual_rate","5600")),values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","5600"),("fx_manual_rate","5600"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
+
+@empire_bp.route("/admin/protection-fund",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_protection_fund():
+    u=user()
+    if request.method=="POST":
+        csrf()
+        currency=(request.form.get("currency") or "").strip()
+        amount=money_int(request.form.get("amount"))
+        destination=(request.form.get("destination") or "").strip()
+        note=(request.form.get("note") or "").strip()
+        if currency not in ("SDG","URC") or len(note)<4 or len(note)>250:
+            flash("راجع العملة والمبلغ وسبب التحويل.")
+            return redirect(url_for("empire.admin_protection_fund"))
+        target=db().execute("SELECT username,full_name,active FROM users WHERE account_number=?",(destination,)).fetchone()
+        if not target or not target["active"]:
+            flash("رقم الحساب المستلم غير صالح.")
+            return redirect(url_for("empire.admin_protection_fund"))
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            fund=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(currency,)).fetchone()["n"])
+            if fund<amount: raise ValueError("المبلغ المطلوب أكبر من الرصيد المتاح في الصندوق.")
+            r=ref()
+            post(r,[("protection:fund",currency,-amount),("user:"+target["username"],currency,amount)],"تحويل معتمد من صندوق حماية المستخدمين إلى "+target["full_name"]+" · "+note)
+            audit(u["username"],"PROTECTION_FUND_TRANSFER","protection_fund",r,"to="+target["username"]+";currency="+currency+";amount="+str(amount)+";reason="+note)
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",(target["username"],"إضافة رصيد من إدارة المنصة","تمت إضافة "+format(amount,",")+" "+currency+" إلى محفظتك. رقم العملية "+r,r,now()))
+            d.commit()
+            flash("تم تنفيذ التحويل وتسجيله في سجل التدقيق.")
+        except ValueError as exc:
+            d.rollback(); flash(str(exc))
+        except Exception:
+            d.rollback()
+            from flask import current_app
+            current_app.logger.exception("Protection fund transfer failed")
+            flash("تعذر تنفيذ التحويل. لم يتم اعتماد العملية.")
+        return redirect(url_for("empire.admin_protection_fund"))
+    balances={c:int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(c,)).fetchone()["n"]) for c in ("SDG","URC")}
+    rows=db().execute("SELECT reference,currency,delta,memo,created_at FROM es_ledger WHERE account='protection:fund' ORDER BY id DESC LIMIT 300").fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>خاص بالمالك فقط</span><h1>صندوق حماية المستخدمين</h1><p>تُسجل هنا عمولات التطبيق وإيراداته، إضافة إلى حركات الصرف المقابلة. هذه الصفحة لا تظهر إلا لحساب المالك.</p>
+      <div class='grid'><article class='panel'><small>الرصيد المحاسبي SDG</small><h2>{{'{:,}'.format(balances['SDG'])}}</h2></article><article class='panel'><small>الرصيد المحاسبي URC</small><h2>{{'{:,}'.format(balances['URC'])}}</h2></article></div>
+      <h2>تحويل من الصندوق</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>رقم حساب المستلم</label><input name='destination' inputmode='numeric' pattern='[0-9]{7}' maxlength='7' required><label>العملة</label><select name='currency'><option>SDG</option><option>URC</option></select><label>المبلغ</label><input name='amount' type='number' min='1' required><label>سبب التحويل</label><textarea name='note' minlength='4' maxlength='250' required></textarea><button>تأكيد التحويل من الصندوق</button></form>
+      <h2>سجل الصندوق</h2>{% for x in rows %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small dir='ltr'>{{x['reference']}}</small><small>{{x['created_at']}}</small></div><strong>{{'+' if x['delta']>0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</strong></article>{% else %}<p class='empty-state'>لا توجد حركات بعد.</p>{% endfor %}</section>""",balances=balances,rows=rows,csrf=session.get("csrf",""))
+    return page("صندوق حماية المستخدمين",body)
 
 @empire_bp.get("/admin")
 @login_required
@@ -1717,9 +1759,11 @@ def admin():
         (user()["username"],)
     ).fetchall()] if user()["role"] == "manager" else []
     stats={
+      "protection_sdg":int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='SDG'").fetchone()["n"]),
+      "protection_urc":int(db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='URC'").fetchone()["n"]),
       "listings":db().execute("SELECT COUNT(*) n FROM es_listings WHERE status='PUBLISHED'").fetchone()["n"],
       "escrow":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='escrow:market'").fetchone()["n"],
-      "revenue":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:revenue'").fetchone()["n"],
+      "revenue":db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency='SDG'").fetchone()["n"],
       "pending":db().execute("SELECT COUNT(*) n FROM es_payments WHERE status='PENDING'").fetchone()["n"],
       "withdrawals":db().execute("SELECT COUNT(*) n FROM es_withdrawals WHERE status='PENDING'").fetchone()["n"],
       "agents":db().execute("SELECT COUNT(*) n FROM es_agents WHERE status='APPROVED'").fetchone()["n"],
@@ -1731,12 +1775,12 @@ def admin():
     <section class='panel'><h2>مؤشرات المنصة</h2><div class='grid'>
     {% if is_founder or 'catalog' in manager_permissions %}<article class='panel'><small>الإعلانات النشطة</small><h2>{{stats['listings']}}</h2></article>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<article class='panel'><small>أموال صفقات السوق المحتجزة (SDG)</small><h2>{{'{:,}'.format(stats['escrow'])}}</h2></article><article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article>{% endif %}
-    {% if is_founder or 'payments' in manager_permissions %}<article class='panel'><small>صافي إيراد المتجر المسجل (SDG)</small><h2>{{'{:,}'.format(stats['revenue'])}}</h2></article><article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>{% endif %}
+    {% if is_founder %}<article class='panel'><small>صندوق حماية المستخدمين (SDG)</small><h2>{{'{:,}'.format(stats['revenue'])}}</h2></article>{% endif %}{% if is_founder or 'payments' in manager_permissions %}<article class='panel'><small>طلبات الدفع المعلقة</small><h2>{{stats['pending']}}</h2></article>{% endif %}
     {% if is_founder or 'withdrawals' in manager_permissions %}<article class='panel'><small>طلبات السحب المعلقة</small><h2>{{stats['withdrawals']}}</h2></article>{% endif %}
     {% if is_founder or 'agents' in manager_permissions %}<article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>{% endif %}
     </div></section>
     {% if is_founder or 'payments' in manager_permissions or 'withdrawals' in manager_permissions or 'exchange' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>01 · العمليات المالية</span><h2>إدارة الأموال والمدفوعات</h2></div><div class='grid admin-links'>
-    {% if is_founder %}<a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a>{% endif %}
+    {% if is_founder %}<a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a><a href='/store/admin/protection-fund'><b>صندوق حماية المستخدمين</b><small>إيرادات وعمولات التطبيق — المالك فقط</small></a>{% endif %}
     {% if is_founder or 'payments' in manager_permissions %}<a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>{% endif %}
     {% if is_founder or 'withdrawals' in manager_permissions %}<a href='/store/admin/withdrawals'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small></a>{% endif %}
     {% if is_founder or 'exchange' in manager_permissions %}<a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a>{% endif %}</div></section>{% endif %}
@@ -1932,7 +1976,7 @@ def buy_epc():
             try:
                 assert_epc_capacity(qty)
                 fee=platform_fee(cost)
-                post(r,[("user:"+u["username"],"SDG",-(cost+fee)),("platform:epc_sales","SDG",cost),("platform:revenue","SDG",fee),("user:"+u["username"],"URC",qty),("issuer:urc","URC",-qty)],"شراء URC من محفظة SDG · عمولة التطبيق 3%")
+                post(r,[("user:"+u["username"],"SDG",-(cost+fee)),("platform:epc_sales","SDG",cost),("protection:fund","SDG",fee),("user:"+u["username"],"URC",qty),("issuer:urc","URC",-qty)],"شراء URC من محفظة SDG · عمولة التطبيق 3%")
                 audit(u["username"],"EPC_PURCHASE","wallet",r); d.commit()
             except Exception: d.rollback(); raise
             flash("تم شراء URC وإضافتها إلى محفظتك.")
@@ -2149,7 +2193,7 @@ def admin_topups():
                     raise ValueError("تم استهلاك الكود في طلب آخر؛ اختر كوداً جديداً.")
                 source_note="inventory_code_id="+str(stock["id"])
             cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
-            post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("platform:revenue","SDG",margin)],
+            post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("protection:fund","SDG",margin)],
                  "تسوية كود لعبة وتسليم العميل")
             changed=d.execute("UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
                               (cipher,note,now(),r)).rowcount
