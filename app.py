@@ -390,7 +390,7 @@ def init_db():
                (username,full_name,account_number,password_hash,pin_hash,balance,currency,role,active,created_at)
                VALUES(?,?,?,?,?,0,'SDG','manager',1,?)""",
             (manager_username,"المدير العام للإمبراطورية",manager_account,
-             manager_password_hash,manager_pin_hash,0,now()),
+             manager_password_hash,manager_pin_hash,now()),
         )
 
     funding_columns = {row["name"] for row in database.execute("PRAGMA table_info(funding_requests)").fetchall()}
