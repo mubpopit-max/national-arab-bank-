@@ -1444,7 +1444,7 @@ def exchange():
       <p class='muted'>تُنفّذ العملية فقط عند توفر سيولة كافية لدى المنصة بالعملة المقابلة. إذا كان احتياطي العملة صفراً فلن يتم التحويل حتى يموّله المالك فعلياً.</p>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>اتجاه التحويل</label><select name='direction'><option value='URC_TO_SDG'>بيع URC واستلام SDG</option><option value='SDG_TO_URC'>شراء URC باستخدام SDG</option></select>
-      <label>المبلغ</label><input name='amount' type='number' min='1' required><button {% if rate<=0 %}disabled{% endif %}>تنفيذ التحويل</button></form>
+      <label>المبلغ</label><input name='amount' type='number' min='1' required><p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد.</p><button {% if rate<=0 %}disabled{% endif %}>تنفيذ التحويل</button></form>
       <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>""",rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",user_sdg=user_sdg,user_urc=user_urc,pool_sdg=pool_sdg,pool_urc=pool_urc,csrf=session.get("csrf","")))
     
 @empire_bp.route("/admin/exchange",methods=["GET","POST"])
@@ -1515,12 +1515,12 @@ def admin_exchange():
       <label>السعر اليدوي (SDG لكل URC)</label><input name='fx_manual_rate' type='number' min='1' value='{{values["fx_manual_rate"]}}'>
       <label>هامش شراء URC بالنقاط الأساسية</label><input name='fx_buy_spread_bps' type='number' min='0' max='10000' value='{{values["fx_buy_spread_bps"]}}'>
       <label>هامش بيع URC بالنقاط الأساسية</label><input name='fx_sell_spread_bps' type='number' min='0' max='10000' value='{{values["fx_sell_spread_bps"]}}'><button>حفظ الأسعار</button></form>
-      <p class='muted'>سعر السوق هنا سعر مرجعي يدخله المالك أو يحدّثه؛ لا يوجد حالياً اتصال تلقائي بمزوّد أسعار خارجي.</p>{% else %}<p class='muted'>عرض فقط: لا تملك صلاحية تعديل سعر الصرف أو احتياطي المنصة.</p>{% endif %}
+      <p class='muted'>عند اختيار «سعر السوق» أدخل السعر المرجعي الحالي بنفسك وحدّثه وفق الطلب. لا يوجد ربط تلقائي بمزوّد أسعار خارجي حتى الآن.</p><div class='panel'><b>السعر الفعلي المستخدم الآن</b><h2>{{'{:,}'.format(active_rate)}} SDG لكل 1 URC</h2><small>يمكن التبديل بين السعر اليدوي والسوق المرجعي في أي وقت.</small></div>{% else %}<p class='muted'>عرض فقط: لا تملك صلاحية تعديل سعر الصرف أو احتياطي المنصة.</p>{% endif %}
       {% if is_founder %}<h2>تمويل احتياطي الصرف</h2><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='liquidity'>
       <label>العملة</label><select name='currency'><option>URC</option><option>SDG</option></select><label>المبلغ من محفظة المالك</label><input name='amount' type='number' min='1' required><button>إضافة إلى احتياطي الصرف</button></form>
       <h2>تسجيل احتياطي SDG نقدي مستلم فعلياً</h2><p class='muted'>استخدم هذا الخيار فقط بعد استلام النقد فعلياً والتحقق منه خارج المنصة. يسجل النظام مرجع العملية في سجل التدقيق ولا ينشئ رصيداً للعميل.</p>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form>{% endif %}</section>""",
-      owner=owner,pools=pools,is_founder=is_founder,values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","0"),("fx_manual_rate","0"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
+      owner=owner,pools=pools,is_founder=is_founder,active_rate=int(setting("fx_market_rate" if setting("fx_rate_mode","manual")=="market" else "fx_manual_rate","5600")),values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","5600"),("fx_manual_rate","5600"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
 
 @empire_bp.get("/admin")
 @login_required
