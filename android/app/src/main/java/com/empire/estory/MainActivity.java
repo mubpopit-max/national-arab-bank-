@@ -123,7 +123,7 @@ public final class MainActivity extends Activity {
                 int latestCode = data.getInt("latestVersionCode");
                 String latestName = data.getString("latestVersionName");
                 String apkUrl = data.getString("apkUrl");
-                boolean mandatory = data.optBoolean("mandatory", true);
+                boolean mandatory = data.optBoolean("mandatory", false);
                 Uri parsed = Uri.parse(apkUrl);
                 if (!"https".equalsIgnoreCase(parsed.getScheme())
                     || !"github.com".equalsIgnoreCase(parsed.getHost())
@@ -132,20 +132,30 @@ public final class MainActivity extends Activity {
                 }
 
                 runOnUiThread(() -> {
-                    if (latestCode > BuildConfig.VERSION_CODE && mandatory) {
-                        showMandatoryUpdate(latestName, apkUrl);
+                    if (latestCode > BuildConfig.VERSION_CODE) {
+                        if (mandatory) showMandatoryUpdate(latestName, apkUrl);
+                        else showOptionalUpdate(latestName, apkUrl);
                     } else {
                         openStore();
                     }
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showBlockingError(
-                    "تعذر التحقق من إصدار التطبيق. يلزم الاتصال بالإنترنت للتحقق قبل المتابعة."
-                ));
+                runOnUiThread(this::openStore);
             } finally {
                 if (connection != null) connection.disconnect();
             }
         });
+    }
+
+    private void showOptionalUpdate(String versionName, String apkUrl) {
+        new AlertDialog.Builder(this)
+            .setTitle("تحديث جديد متوفر")
+            .setMessage("يتوفر إصدار أحدث (" + versionName + "). يمكنك متابعة استخدام التطبيق الآن أو تنزيل التحديث.")
+            .setCancelable(true)
+            .setPositiveButton("تنزيل التحديث", (dialog, which) -> beginUpdate(apkUrl))
+            .setNegativeButton("لاحقاً", (dialog, which) -> openStore())
+            .setOnCancelListener(dialog -> openStore())
+            .show();
     }
 
     private void showMandatoryUpdate(String versionName, String apkUrl) {
