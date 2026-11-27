@@ -25,35 +25,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Validate and decode release signing key
-        shell: bash
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          test -n "$KEYSTORE_B64" || { echo "Missing ANDROID_KEYSTORE_BASE64"; exit 1; }
-          test -n "$STORE_PASSWORD" || { echo "Missing ANDROID_KEYSTORE_PASSWORD"; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "Missing ANDROID_KEY_ALIAS"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "Missing ANDROID_KEY_PASSWORD"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/signing"
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing/empire-estory-release.jks"
-          test -s "$RUNNER_TEMP/signing/empire-estory-release.jks"
-          if ! keytool -list -keystore "$RUNNER_TEMP/signing/empire-estory-release.jks" -storepass "$STORE_PASSWORD" > "$RUNNER_TEMP/signing/keystore-check.txt" 2>&1; then
-            echo "Keystore could not be opened. Check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
-            cat "$RUNNER_TEMP/signing/keystore-check.txt"
-            exit 1
-          fi
-          if ! grep -Fq "$KEY_ALIAS" "$RUNNER_TEMP/signing/keystore-check.txt"; then
-            echo "The configured ANDROID_KEY_ALIAS was not found. Available aliases:"
-            cat "$RUNNER_TEMP/signing/keystore-check.txt"
-            exit 1
-          fi
-          echo "Release keystore and alias validated."
-          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/empire-estory-release.jks" >> "$GITHUB_ENV"
-
       - name: Accept Android SDK licences and install platform
         shell: bash
         run: |
@@ -72,12 +43,8 @@ jobs:
       - name: Validate Python application syntax
         run: python -m py_compile app.py empire_store.py wsgi.py
 
-      - name: Build signed release APK
+      - name: Build automatically signed release APK
         working-directory: android
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace assembleRelease
 
       - name: Verify APK signature and checksum
@@ -87,7 +54,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
 
-      - name: Upload signed APK artifact
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: empire-estory-android-release-apk
@@ -95,7 +62,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Publish mandatory update release
+      - name: Publish Android release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-release-v4
@@ -107,5 +74,5 @@ jobs:
           files: android/app/build/outputs/apk/release/app-release.apk
           body: |
             Empire E-Story Android release 1.2.0.
-            Signed with the project's persistent release keystore.
-            This release is the mandatory in-app update target.
+            Automatically signed using the Android Gradle debug signing key.
+            This build may require uninstalling a differently signed previous app before installation.
