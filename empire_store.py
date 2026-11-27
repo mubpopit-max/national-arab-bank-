@@ -1369,28 +1369,61 @@ def admin_disputes():
     <button name='action' value='BUYER'>استرداد المبلغ للمشتري</button><button name='action' value='SELLER'>تحرير مستحقات البائع</button></form></article>{% else %}<p>لا توجد نزاعات مفتوحة.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("النزاعات",body)
 
-@empire_bp.get("/admin/topups")
+@empire_bp.route("/admin/topups",methods=["GET","POST"])
 @login_required
 @founder_required
 def admin_topups():
-    allowed = {"ALL","PENDING_PAYMENT","PAID","ASSIGNED","PROCESSING","COMPLETED","REJECTED","REFUNDED"}
-    status = request.args.get("status","ALL").upper()
-    if status not in allowed:
-        abort(400)
-    query = """SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id"""
-    params = ()
-    if status != "ALL":
-        query += " WHERE t.status=?"
-        params = (status,)
-    query += " ORDER BY t.id DESC LIMIT 300"
-    rows = db().execute(query,params).fetchall()
-    labels = {"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — بانتظار التنفيذ","ASSIGNED":"استلمه وكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"مكتمل","REJECTED":"مرفوض","REFUNDED":"مسترد"}
-    body = render_template_string("""<section class='panel'><h1>طلبات شحن الألعاب</h1><p>قسم مستقل لطلبات PUBG وFree Fire وMobile Legends وغيرها. لا يعتبر الطلب مكتملاً إلا بعد توثيق التنفيذ.</p>
+    if request.method=="POST":
+        csrf()
+        action=request.form.get("action","")
+        r=request.form.get("reference","").strip()
+        if action!="fulfill":
+            abort(400,"إجراء غير معروف")
+        code=request.form.get("delivery_code","").strip()
+        note=request.form.get("note","").strip()[:300]
+        if len(code)<4 or len(code)>300:
+            flash("كود الباقة يجب أن يكون بين 4 و300 حرف.")
+            return redirect(url_for("empire.admin_topups"))
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            order=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
+                               WHERE t.reference=? AND t.status='PAID' AND t.agent IS NULL""",(r,)).fetchone()
+            if not order: raise ValueError("الطلب لم يعد متاحاً للتسليم اليدوي.")
+            if order["cost_sdg"]<=0 or order["cost_sdg"]>order["amount_sdg"]:
+                raise ValueError("راجع تكلفة المورد وسعر البيع قبل تسليم الكود.")
+            margin=order["amount_sdg"]-order["cost_sdg"]
+            cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
+            post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("platform:revenue","SDG",margin)],
+                 "تسوية كود لعبة وتسليم العميل")
+            changed=d.execute("UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
+                              (cipher,note,now(),r)).rowcount
+            if changed!=1: raise ValueError("تغيرت حالة الطلب أثناء المعالجة.")
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (order["buyer"],"كود لعبتك جاهز","تم تجهيز كود باقتك. افتح طلباتي لعرض الكود بأمان.",r,now()))
+            audit(user()["username"],"TOPUP_CODE_DELIVERED","topup",r,"manual owner fulfillment")
+            d.commit()
+            flash("تم تسليم الكود للعميل وإغلاق الطلب بنجاح.")
+        except Exception as exc:
+            d.rollback()
+            flash(str(exc))
+        return redirect(url_for("empire.admin_topups"))
+    allowed={"ALL","PENDING_PAYMENT","PAID","ASSIGNED","PROCESSING","COMPLETED","REJECTED","REFUNDED"}
+    status=request.args.get("status","ALL").upper()
+    if status not in allowed: abort(400)
+    query="SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id"
+    params=()
+    if status!="ALL": query+=" WHERE t.status=?"; params=(status,)
+    query+=" ORDER BY t.id DESC LIMIT 300"
+    rows=db().execute(query,params).fetchall()
+    labels={"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — جاهز لتسليم الكود","ASSIGNED":"استلمه وكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"تم تسليم الكود","REJECTED":"مرفوض","REFUNDED":"مسترد"}
+    body=render_template_string("""<section class='panel'><span class='tag'>مركز تنفيذ الأكواد</span><h1>طلبات أكواد الألعاب</h1><p>لا يُطلب آيدي لاعب. بعد التحقق من الدفع، أدخل كود الباقة ليظهر للعميل داخل «طلباتي» بشكل آمن.</p>
       <div class='admin-filters'><a href='/store/admin/topups'>الكل</a>{% for k,v in labels.items() %}<a href='/store/admin/topups?status={{k}}'>{{v}}</a>{% endfor %}</div>
-      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
-      <div class='order-grid'><div><small>العميل</small><b>{{x['buyer']}}</b></div><div><small>اللعبة / الباقة</small><b>{{x['game']}} · {{x['title']}}</b></div><div><small>معرف اللاعب</small><b dir='ltr'>{{x['player_id']}}</b></div><div><small>القيمة</small><b>{{'{:,}'.format(x['amount_sdg'])}} SDG</b></div><div><small>الوكيل</small><b>{{x['agent'] or 'لم يعيّن بعد'}}</b></div><div><small>آخر تحديث</small><b>{{x['updated_at']}}</b></div></div>{% if x['note'] %}<p>{{x['note']}}</p>{% endif %}</article>
-      {% else %}<div class='empty-state'>لا توجد طلبات في هذا القسم.</div>{% endfor %}</section>""",rows=rows,labels=labels)
-    return page("طلبات شحن الألعاب",body)
+      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b dir='ltr'>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
+      <div class='order-grid'><div><small>العميل</small><b>{{x['buyer']}}</b></div><div><small>اللعبة / الباقة</small><b>{{x['game']}} · {{x['title']}}</b></div><div><small>المبلغ</small><b>{{'{:,}'.format(x['amount_sdg'])}} SDG</b></div><div><small>الوكيل</small><b>{{x['agent'] or 'تنفيذ المالك'}}</b></div><div><small>تاريخ الطلب</small><b>{{x['created_at']}}</b></div><div><small>آخر تحديث</small><b>{{x['updated_at']}}</b></div></div>
+      {% if x['status']=='PAID' and not x['agent'] %}<form method='post' class='fulfill-code-form'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='fulfill'><input type='hidden' name='reference' value='{{x['reference']}}'><label>كود الباقة</label><input name='delivery_code' maxlength='300' autocomplete='off' required placeholder='أدخل كود الشحن كما استلمته من المورد'><label>ملاحظة داخلية (اختياري)</label><input name='note' maxlength='300' placeholder='مرجع المورد أو ملاحظة تنفيذ'><button>تسليم الكود للعميل</button></form>{% endif %}
+      {% if x['note'] %}<p class='muted'>{{x['note']}}</p>{% endif %}</article>
+      {% else %}<div class='empty-state'>لا توجد طلبات في هذا القسم.</div>{% endfor %}</section>""",rows=rows,labels=labels,csrf=session.get("csrf",""))
+    return page("طلبات أكواد الألعاب",body)
 
 @empire_bp.get("/admin/market-orders")
 @login_required
