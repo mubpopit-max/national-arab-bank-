@@ -2454,7 +2454,7 @@ def admin_topups():
             cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
             post(r+"T",[("clearing:topups","SDG",-order["amount_sdg"]),("supplier:topup_cost","SDG",order["cost_sdg"]),("protection:fund","SDG",margin)],
                  "تسوية كود لعبة وتسليم العميل")
-                 notify_protection_income(r+"T","SDG",margin,"هامش ربح تسليم كود لعبة")
+            notify_protection_income(r+"T","SDG",margin,"هامش ربح تسليم كود لعبة")
             changed=d.execute("UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
                               (cipher,note,now(),r)).rowcount
             if changed!=1: raise ValueError("تغيرت حالة الطلب أثناء المعالجة.")
