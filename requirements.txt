@@ -1,0 +1,7 @@
+Flask
+bcrypt
+python-dotenv
+waitress
+gunicorn
+cryptography>=44,<47
+Pillow>=11,<13
