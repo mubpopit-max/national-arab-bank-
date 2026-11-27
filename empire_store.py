@@ -1066,8 +1066,8 @@ def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic invento
     if order["status"]!="PAID" or order["agent"] is not None:
         raise ValueError("الطلب ليس مؤهلاً للتسليم التلقائي.")
     cost=int(order["cost_sdg"])
-    if cost<=0 or cost>int(order["amount_sdg"]):
-        raise ValueError("يجب ضبط تكلفة المورد الصحيحة قبل التسليم.")
+    if cost<0 or cost>int(order["amount_sdg"]):
+        raise ValueError("تكلفة المورد لا يمكن أن تكون سالبة أو أعلى من سعر البيع.")
     code=encryption().decrypt(stock["code_cipher"].encode("utf-8")).decode("utf-8")
     consumed=d.execute(
         "UPDATE es_game_code_inventory SET status='USED',used_order_ref=?,used_at=? WHERE id=? AND product_id=? AND status='AVAILABLE'",
@@ -1077,11 +1077,11 @@ def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic invento
         raise ValueError("كود المخزون لم يعد متاحاً.")
     cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
     margin=int(order["amount_sdg"])-cost
-    post(order["reference"]+"T",[
-        ("clearing:topups","SDG",-int(order["amount_sdg"])),
-        ("supplier:topup_cost","SDG",cost),
-        ("platform:revenue","SDG",margin)
-    ],"تسوية وتسليم تلقائي لكود لعبة")
+    entries=[("clearing:topups","SDG",-int(order["amount_sdg"]))]
+    if cost:
+        entries.append(("supplier:topup_cost","SDG",cost))
+    entries.append(("platform:revenue","SDG",margin))
+    post(order["reference"]+"T",entries,"تسوية وتسليم تلقائي لكود لعبة")
     changed=d.execute(
         "UPDATE es_topup_orders SET status='COMPLETED',delivery_cipher=?,note=?,updated_at=? WHERE reference=? AND status='PAID' AND agent IS NULL",
         (cipher,note,now(),order["reference"])
@@ -1092,7 +1092,7 @@ def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic invento
         "INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
         (order["buyer"],"تم تسليم كود لعبتك تلقائياً","تم التحقق من الدفع وتسليم كود الباقة. افتح طلباتي لعرضه بأمان.",order["reference"],now())
     )
-    audit(actor,"TOPUP_AUTO_DELIVERED","topup",order["reference"],"inventory_code_id="+str(stock["id"]))
+    audit(actor,"TOPUP_AUTO_DELIVERED","topup",order["reference"],"inventory_code_id="+str(stock["id"])+(";supplier_cost_unset" if cost==0 else ";supplier_cost="+str(cost)))
     return code
 
 @empire_bp.post("/topups/pay")
@@ -1107,7 +1107,7 @@ def pay_topup():
         post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب من محفظة SDG")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
         stock=d.execute("SELECT * FROM es_game_code_inventory WHERE product_id=? AND status='AVAILABLE' ORDER BY id LIMIT 1",(row["product_id"],)).fetchone()
-        if stock and int(row["cost_sdg"])>0 and int(row["cost_sdg"])<=int(row["amount_sdg"]):
+        if stock and 0<=int(row["cost_sdg"])<=int(row["amount_sdg"]):
             fulfill_topup_from_inventory(d,row,stock,u["username"])
             d.commit()
             delivered=True
@@ -1901,7 +1901,7 @@ def admin_code_inventory():
                                   WHERE t.product_id=? AND t.status='PAID' AND t.agent IS NULL ORDER BY t.id""",(int(product_id),)).fetchall()
             auto_delivered=0
             for paid_order in pending:
-                if int(paid_order["cost_sdg"])<=0 or int(paid_order["cost_sdg"])>int(paid_order["amount_sdg"]):
+                if int(paid_order["cost_sdg"])<0 or int(paid_order["cost_sdg"])>int(paid_order["amount_sdg"]):
                     continue
                 stock=d.execute("SELECT * FROM es_game_code_inventory WHERE product_id=? AND status='AVAILABLE' ORDER BY id LIMIT 1",(int(product_id),)).fetchone()
                 if not stock: break
