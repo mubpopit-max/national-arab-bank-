@@ -505,6 +505,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
 def profile():
     u=user()
     row=db().execute("SELECT username,full_name,account_number,role,active,email,phone FROM users WHERE username=?",(u["username"],)).fetchone()
+    loyalty=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
     if request.method=="POST":
         csrf()
         email=(request.form.get("email") or "").strip().lower()
@@ -517,10 +518,11 @@ def profile():
         flash("تم حفظ معلومات الاتصال.")
         return redirect(url_for("empire.profile"))
     body=render_template_string("""<section class='panel profile-hero'><span class='profile-mark'>🇸🇩</span><div><h1>الملف الشخصي</h1><p>إدارة معلومات حسابك وإعداداتك.</p></div></section>
+    {% if loyalty %}<section class='premium-banner'><span class='ice-badge'>❄ عميل آيس ستوري مميز</span><h2>عضوية مميزة</h2><b class='loyalty-points'>{{'{:,}'.format(loyalty['points'])}}</b><small>نقاط الولاء</small></section>{% endif %}
     <section class='panel'><h2>الضبط</h2><a class='profile-setting' href='/store/notifications'><span>🔔</span><b>الإشعارات</b><small>عرض تنبيهات حسابك</small><strong>‹</strong></a></section>
     <section class='panel'><h2>معلومات الحساب</h2><div class='profile-info'><span>الاسم</span><b>{{row['full_name']}}</b></div><div class='profile-info'><span>رقم الحساب</span><b dir='ltr'>{{row['account_number']}}</b></div><div class='profile-info'><span>الحالة</span><b><span class='tag'>{{'نشط' if row['active'] else 'موقوف'}}</span></b></div>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>البريد الإلكتروني المرتبط</label><input type='email' name='email' maxlength='254' value='{{row['email']}}' placeholder='name@example.com'><label>رقم الهاتف</label><input type='tel' name='phone' maxlength='30' value='{{row['phone']}}' placeholder='+249...'><button>حفظ معلومات الحساب</button></form></section>""",row=row,csrf=session.get("csrf",""))
-    return page("الملف الشخصي",body)
+    return page("الملف الشخصي",body,loyalty=loyalty)
 
 @empire_bp.route("/notifications")
 @login_required
@@ -1182,8 +1184,11 @@ def transfer_lookup():
         return jsonify({"ok":False,"message":"لم يتم العثور على حساب مستلم صالح"})
     status=db().execute("SELECT status FROM es_identity_status WHERE username=?",(target["username"],)).fetchone()
     verified=bool(status and status["status"]=="VERIFIED")
+    premium=db().execute("SELECT points FROM es_loyalty_members WHERE username=?",(target["username"],)).fetchone()
     return jsonify({"ok":True,"name":target["full_name"],"account_number":target["account_number"],
-                    "verification":"موثق" if verified else "غير موثق","verified":verified})
+                    "verification":"موثق" if verified else "غير موثق","verified":verified,
+                    "premium":bool(premium),"premium_badge":"❄ عميل آيس ستوري مميز" if premium else "",
+                    "loyalty_points":int(premium["points"]) if premium else 0})
 
 @empire_bp.route("/transfer-epc",methods=["GET","POST"])
 @login_required
@@ -1200,17 +1205,19 @@ def transfer_epc():
                 return redirect(url_for("empire.transfer_epc"))
             status=db().execute("SELECT status FROM es_identity_status WHERE username=?",(target["username"],)).fetchone()
             verified=bool(status and status["status"]=="VERIFIED")
+            premium=db().execute("SELECT points FROM es_loyalty_members WHERE username=?",(target["username"],)).fetchone()
             # Bind the confirmation step to this authenticated session; a forged execute POST is rejected.
             session["transfer_verified_account"]=target["account_number"]
             body=render_template_string("""<section class='panel transfer-step'><span class='tag'>الخطوة 2 من 2 · تم التحقق</span><h1>تأكيد بيانات المستلم</h1>
-              <div class='recipient-confirm'><small>سيتم التحويل إلى</small><strong>{{target['full_name']}}</strong><span dir='ltr'>{{target['account_number']}}</span><em class='{{"verified" if verified else "unverified"}}'>{{"حساب موثق" if verified else "حساب غير موثق"}}</em></div>
+              <div class='recipient-confirm'><small>سيتم التحويل إلى</small><strong>{{target['full_name']}}</strong><span dir='ltr'>{{target['account_number']}}</span><em class='{{"verified" if verified else "unverified"}}'>{{"حساب موثق" if verified else "حساب غير موثق"}}</em>
+              {% if premium %}<strong class='ice-badge'>❄ عميل آيس ستوري مميز</strong>{% endif %}</div>
               <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='execute'><input type='hidden' name='recipient_account' value='{{target['account_number']}}'>
               <label>عملة التحويل</label><select name='currency'><option value='SDG'>الجنيه السوداني · SDG</option><option value='URC'>URC</option></select>
               <label>المبلغ</label><input name='quantity' type='number' min='1' step='1' inputmode='numeric' placeholder='أدخل المبلغ' required>
               <label>ملاحظات للمستلم <span class='muted'>(اختياري)</span></label><textarea name='note' maxlength='250' placeholder='اكتب ملاحظة مختصرة'></textarea>
               <button class='transfer-submit'>تأكيد وإرسال التحويل</button></form>
               <a class='btn secondary' href='/store/transfer-epc'>تغيير رقم الحساب</a></section>""",target=target,verified=verified,csrf=session.get("csrf",""))
-            return page("تأكيد المستلم",body)
+            return page("تأكيد المستلم",body,premium=premium)
         if action!="execute":
             abort(400,"طلب تحويل غير صالح")
         verified_account=session.pop("transfer_verified_account",None)
