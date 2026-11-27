@@ -1816,7 +1816,8 @@ def exchange_quote():
         else: hi=mid-1
     maximum=min(reserve_limit,lo,999_999_999_999)
     data={"ok":True,"direction":direction,"source_currency":source,"target_currency":target,
-          "rate":rate,"minimum":minimum,"maximum":maximum,"available":maximum>=minimum,
+          "rate":rate,"minimum":minimum,"maximum":maximum,"max_convertible":maximum,
+          "wallet_balance":wallet,"available":maximum>=minimum,
           "mode":"market" if mode=="market" else "manual"}
     raw=(request.args.get("amount") or "").strip()
     if raw:
@@ -1824,22 +1825,27 @@ def exchange_quote():
             data.update({"valid":False,"message":"أدخل مبلغاً صحيحاً."})
         else:
             amount=int(raw)
-            if amount<minimum or amount>maximum or rate<=0:
-                data.update({"valid":False,"message":"المبلغ يتجاوز رصيدك أو السيولة المتاحة."})
+            if rate<=0:
+                data.update({"valid":False,"message":"سعر التحويل غير متاح حالياً."})
             else:
                 converted=amount*rate if source=="URC" else amount//rate
                 fee=platform_fee(amount)
-                if converted<=0 or converted>9_000_000_000_000_000_000:
+                if converted<0 or converted>9_000_000_000_000_000_000:
                     data.update({"valid":False,"message":"قيمة التحويل غير صالحة."})
+                elif amount<minimum or amount>maximum:
+                    # Always return a live preview; availability controls confirmation, not calculation.
+                    data.update({"valid":False,"amount":amount,"converted":converted,"fee":fee,
+                                 "total_debit":amount+fee,
+                                 "message":"تم حساب المقابل، لكن المبلغ يتجاوز رصيدك أو السيولة المتاحة."})
                 else:
                     quote_id=secrets.token_urlsafe(24); issued=int(datetime.now(timezone.utc).timestamp()); d=db()
                     d.execute("DELETE FROM es_fx_quotes WHERE expires_at<?",(issued-86400,))
                     d.execute("""INSERT INTO es_fx_quotes
                       (quote_id,username,direction,amount,rate,fee,result,expires_at,created_at)
                       VALUES(?,?,?,?,?,?,?,?,?)""",
-                      (quote_id,user()["username"],direction,amount,rate,fee,converted,issued+20,now()))
+                      (quote_id,user()["username"],direction,amount,rate,fee,converted,issued+60,now()))
                     data.update({"valid":True,"amount":amount,"converted":converted,"fee":fee,
-                                 "total_debit":amount+fee,"quote_id":quote_id,"expires_in":20})
+                                 "total_debit":amount+fee,"quote_id":quote_id,"expires_in":60})
     response=jsonify(data); response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"]="no-cache"
     return response
@@ -1950,7 +1956,8 @@ def exchange():
       <form method="post" id="fxForm" class="fx-card"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="quote_id" id="fxQuoteId" value="">
       <label class="fx-label" for="fxDirection">التحويل من</label><select class="fx-select" name="direction" id="fxDirection">
       <option value="URC_TO_SDG">URC · العملة الرقمية</option><option value="SDG_TO_URC">SDG · الجنيه السوداني</option></select>
-      <div class="fx-balance"><span>رصيدك المتاح</span><b id="fxAvailable">{{'{:,}'.format(user_urc)}} URC</b></div><div style="height:15px"></div>
+      <div class="fx-balance"><span>رصيد محفظتك</span><b id="fxAvailable">{{'{:,}'.format(user_urc)}} URC</b></div>
+      <div class="fx-balance"><span>أقصى مبلغ متاح للتحويل حالياً</span><b id="fxMaximum">{{'{:,}'.format(urc_limits['maximum'])}} URC</b></div><div style="height:15px"></div>
       <label class="fx-label" for="fxAmount">المبلغ</label><input class="fx-input" name="amount" id="fxAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" autocomplete="off" required>
       <div class="fx-balance"><span>سيتم التحويل إلى</span><b id="fxTarget">SDG · الجنيه السوداني</b></div>
       <div class="fx-quote" aria-live="polite"><div class="fx-quote-main"><small>ستحصل على</small><strong id="fxResult">—</strong></div>
@@ -1961,21 +1968,26 @@ def exchange():
       const direction=document.getElementById('fxDirection'),amount=document.getElementById('fxAmount'),submit=document.getElementById('fxSubmit');
       const result=document.getElementById('fxResult'),rateOut=document.getElementById('fxRate'),feeOut=document.getElementById('fxFee'),totalOut=document.getElementById('fxTotal');
       const quoteId=document.getElementById('fxQuoteId'),timer=document.getElementById('fxTimer'),available=document.getElementById('fxAvailable');
-      const target=document.getElementById('fxTarget'),hint=document.getElementById('fxHint'),fmt=n=>Number(n).toLocaleString('en-US');
+      const maxAvailable=document.getElementById('fxMaximum'),target=document.getElementById('fxTarget'),hint=document.getElementById('fxHint');
+      const fmt=n=>{const value=String(n??'0');try{return /^-?\d+$/.test(value)?BigInt(value).toLocaleString('en-US'):Number(n).toLocaleString('en-US');}catch(_){return '—';}};
       let requestNo=0,expiresAt=0,debounce=null;
       function reset(){quoteId.value='';submit.disabled=true;result.textContent='—';rateOut.textContent='—';feeOut.textContent='—';totalOut.textContent='—';}
       async function update(){const id=++requestNo,dir=direction.value,raw=amount.value.trim();reset();if(!raw){timer.textContent='أدخل المبلغ لعرض السعر';return;}
       timer.textContent='جارٍ تحديث السعر…';hint.textContent='';
       try{const query=new URLSearchParams({direction:dir,amount:raw});const response=await fetch('/store/exchange/quote?'+query.toString(),{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
       const data=await response.json();if(id!==requestNo)return;if(!response.ok||!data.ok)throw new Error(data.message||'تعذر جلب السعر.');
-      available.textContent=fmt(data.maximum)+' '+data.source_currency;target.textContent=data.target_currency+' · '+(data.target_currency==='URC'?'العملة الرقمية':'الجنيه السوداني');
+      available.textContent=fmt(data.wallet_balance)+' '+data.source_currency;
+      maxAvailable.textContent=fmt(data.max_convertible??data.maximum)+' '+data.source_currency;
+      target.textContent=data.target_currency+' · '+(data.target_currency==='URC'?'العملة الرقمية':'الجنيه السوداني');
+      if(data.converted!==undefined){result.textContent=fmt(data.converted)+' '+data.target_currency;rateOut.textContent=fmt(data.rate)+' SDG / URC';
+        feeOut.textContent=fmt(data.fee)+' '+data.source_currency;totalOut.textContent=fmt(data.total_debit)+' '+data.source_currency;}
       if(!data.valid){timer.textContent=data.message||'المبلغ غير متاح';hint.textContent=data.message||'';return;}
-      result.textContent=fmt(data.converted)+' '+data.target_currency;rateOut.textContent=fmt(data.rate)+' SDG / URC';
-      feeOut.textContent=fmt(data.fee)+' '+data.source_currency;totalOut.textContent=fmt(data.total_debit)+' '+data.source_currency;
       quoteId.value=data.quote_id;expiresAt=Date.now()+data.expires_in*1000;submit.disabled=false;hint.textContent='السعر مثبت لهذا العرض.';tick();
       }catch(error){if(id!==requestNo)return;timer.textContent='تعذر تحديث السعر';hint.textContent=error.message;reset();}}
       function tick(){if(!quoteId.value)return;const left=Math.max(0,Math.ceil((expiresAt-Date.now())/1000));timer.textContent=left?'ينتهي عرض السعر خلال '+left+' ثانية':'انتهى عرض السعر · جارٍ تحديثه';if(!left){reset();if(amount.value.trim())update();}}
-      direction.addEventListener('change',()=>{clearTimeout(debounce);amount.value='';reset();available.textContent=direction.value==='URC_TO_SDG'?'{{'{:,}'.format(user_urc)}} URC':'{{'{:,}'.format(user_sdg)}} SDG';target.textContent=direction.value==='URC_TO_SDG'?'SDG · الجنيه السوداني':'URC · العملة الرقمية';update();});
+      direction.addEventListener('change',()=>{clearTimeout(debounce);amount.value='';reset();available.textContent=direction.value==='URC_TO_SDG'?'{{'{:,}'.format(user_urc)}} URC':'{{'{:,}'.format(user_sdg)}} SDG';
+        maxAvailable.textContent=direction.value==='URC_TO_SDG'?'{{'{:,}'.format(urc_limits['maximum'])}} URC':'{{'{:,}'.format(sdg_limits['maximum'])}} SDG';
+        target.textContent=direction.value==='URC_TO_SDG'?'SDG · الجنيه السوداني':'URC · العملة الرقمية';update();});
       amount.addEventListener('input',()=>{clearTimeout(debounce);reset();debounce=setTimeout(update,250);});
       document.getElementById('fxForm').addEventListener('submit',e=>{if(!quoteId.value||submit.disabled){e.preventDefault();return;}submit.disabled=true;submit.textContent='جارٍ تنفيذ التحويل…';});
       setInterval(tick,500);

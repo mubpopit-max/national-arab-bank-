@@ -108,6 +108,17 @@ class EmpireLedgerTests(unittest.TestCase):
         self.assertEqual(first_quote.status_code, 200)
         first_quote_data = first_quote.get_json()
         self.assertTrue(first_quote_data["valid"])
+        self.assertEqual(first_quote_data["wallet_balance"], 100)
+        self.assertEqual(first_quote_data["max_convertible"], 97)
+
+        # An amount above the available limit still gets a conversion preview,
+        # while confirmation remains disabled because the wallet/reserve is insufficient.
+        oversized = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=200").get_json()
+        self.assertFalse(oversized["valid"])
+        self.assertEqual(oversized["converted"], 1120000)
+        self.assertEqual(oversized["wallet_balance"], 100)
+        self.assertEqual(oversized["max_convertible"], 97)
+
         first = client.post("/store/exchange", data={
             "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
             "quote_id": first_quote_data["quote_id"],
