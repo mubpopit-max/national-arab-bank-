@@ -951,6 +951,23 @@ def transaction_history_detail(reference):
         main=max(principal,key=lambda x:abs(int(x["delta"])))
         movements=[{"currency":main["currency"],"delta":int(main["delta"]),"label":"قيمة التحويل"}]
         memo="تحويل صادر" if is_sender else "تحويل وارد"
+    elif len({x["currency"] for x in own})>1:
+        debits=[x for x in own if int(x["delta"])<0]
+        credits=[x for x in own if int(x["delta"])>0]
+        if not debits or not credits:
+            abort(404)
+        principal=max(debits,key=lambda x:abs(int(x["delta"])))
+        target=next((x for x in credits if x["currency"]!=principal["currency"]),None)
+        if not target:
+            abort(404)
+        fee_rows=[x for x in debits if x["currency"]==principal["currency"] and x is not principal]
+        movements=[
+            {"currency":principal["currency"],"delta":abs(int(principal["delta"])),"label":"المبلغ المحوّل من محفظتك"},
+            {"currency":target["currency"],"delta":int(target["delta"]),"label":"المبلغ الذي أُضيف إلى محفظتك"},
+        ]
+        if fee_rows:
+            movements.append({"currency":principal["currency"],"delta":sum(abs(int(x["delta"])) for x in fee_rows),"label":"رسوم العملية (3%)"})
+        memo="إشعار تحويل العملات"
     else:
         movements=[{"currency":x["currency"],"delta":int(x["delta"]),"label":"إضافة إلى المحفظة" if int(x["delta"])>0 else "خصم من المحفظة"} for x in own]
     body=render_template_string("""<section class='panel notification-detail'><span class='tag'>إشعار معاملة</span><h1>{{memo}}</h1>
@@ -1729,7 +1746,15 @@ def exchange():
                         ("protection:fund","URC",-result),("user:"+u["username"],"URC",result),
                         ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],
                      "تحويل SDG إلى URC · عمولة التطبيق 3%")
-            audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate))
+            audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate)+";source_amount="+str(amount)+";target_amount="+str(result)+";fee="+str(fee))
+            notification_title="تم تحويل العملات بنجاح"
+            source_currency="URC" if direction=="URC_TO_SDG" else "SDG"
+            target_currency="SDG" if direction=="URC_TO_SDG" else "URC"
+            notification_message=("اكتمل تحويل "+format(amount,",")+" "+source_currency+" إلى "+format(result,",")+" "+target_currency+
+                                  ". رسوم العملية: "+format(fee,",")+" "+source_currency+
+                                  ". رقم العملية: "+r)
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (u["username"],notification_title,notification_message,r,now()))
             d.commit()
         except ValueError as exc:
             d.rollback()
@@ -1741,8 +1766,8 @@ def exchange():
             current_app.logger.exception("Currency exchange failed for user %s",u["username"])
             flash("تعذر تنفيذ التحويل بسبب خطأ داخلي. لم يتم اعتماد العملية؛ حاول لاحقاً أو تواصل مع الدعم.")
             return redirect(url_for("empire.exchange"))
-        flash("تم تنفيذ تحويل العملات بنجاح.")
-        return redirect(url_for("empire.wallet"))
+        flash("تم تنفيذ تحويل العملات بنجاح. افتح إشعار العملية للاطلاع على تفاصيل التحويل.")
+        return redirect(url_for("empire.transaction_history_detail",reference=r))
 
     user_sdg=balance(u["username"],"SDG")
     user_urc=balance(u["username"],"URC")
@@ -1757,13 +1782,20 @@ def exchange():
         <option value='URC_TO_SDG' data-min='{{urc_limits["minimum"]}}' data-max='{{urc_limits["maximum"]}}' data-currency='URC'>تحويل URC إلى SDG</option>
         <option value='SDG_TO_URC' data-min='{{sdg_limits["minimum"]}}' data-max='{{sdg_limits["maximum"]}}' data-currency='SDG'>تحويل SDG إلى URC</option>
       </select>
-      <label>المبلغ</label><input name='amount' id='fxAmount' type='number' min='{{urc_limits["minimum"]}}' max='{{urc_limits["maximum"]}}' step='1' inputmode='numeric' required>
+      <label>المبلغ المراد تحويله</label><input name='amount' id='fxAmount' type='number' min='{{urc_limits["minimum"]}}' max='{{urc_limits["maximum"]}}' step='1' inputmode='numeric' placeholder='أدخل المبلغ' required>
       <div class='panel' id='fxLimits' aria-live='polite' style='background:#f5faf6!important'>
         <p id='fxMinText'>الحد الأدنى: {{'{:,}'.format(urc_limits["minimum"])}} URC قبل العمولة.</p>
         <p id='fxMaxText'>{% if urc_limits["maximum"]>=urc_limits["minimum"] %}الحد الأعلى الممكن الآن: {{'{:,}'.format(urc_limits["maximum"])}} URC.{% else %}الصرف بهذا الاتجاه غير متاح حالياً.{% endif %}</p>
       </div>
-      <p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد.</p>
-      <button id='fxSubmit' {% if rate<=0 or urc_limits["maximum"]<urc_limits["minimum"] %}disabled{% endif %}>تنفيذ التحويل</button></form>
+      <div class='panel' id='fxPreview' aria-live='polite' style='background:linear-gradient(135deg,#f1faf5,#f2f8fc)!important'>
+        <h2>معاينة التحويل قبل التأكيد</h2>
+        <div class='profile-info'><span>المبلغ المقابل</span><b id='fxResult'>—</b></div>
+        <div class='profile-info'><span>رسوم العملية (3%)</span><b id='fxFee'>—</b></div>
+        <div class='profile-info'><span>إجمالي الخصم من محفظتك</span><b id='fxTotal'>—</b></div>
+        <small id='fxPreviewHint'>أدخل المبلغ لعرض القيمة المقابلة والرسوم قبل التأكيد.</small>
+      </div>
+      <p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد. لا يتم الخصم إلا بعد ضغط زر التأكيد.</p>
+      <button id='fxSubmit' {% if rate<=0 or urc_limits["maximum"]<urc_limits["minimum"] %}disabled{% endif %}>تأكيد تحويل العملات</button></form>
       <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>
       <script>
       (function(){
@@ -1772,17 +1804,34 @@ def exchange():
         const minText=document.getElementById('fxMinText');
         const maxText=document.getElementById('fxMaxText');
         const submit=document.getElementById('fxSubmit');
+        const result=document.getElementById('fxResult'),feeOut=document.getElementById('fxFee');
+        const totalOut=document.getElementById('fxTotal'),hint=document.getElementById('fxPreviewHint');
+        const rate={{rate|tojson}};
+        const fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
         function update(){
           const option=direction.options[direction.selectedIndex];
-          const min=Number(option.dataset.min||0),max=Number(option.dataset.max||0),currency=option.dataset.currency||'';
+          const dir=option.value,min=Number(option.dataset.min||0),max=Number(option.dataset.max||0),currency=option.dataset.currency||'';
+          const target=dir==='URC_TO_SDG'?'SDG':'URC';
           amount.min=String(min);amount.max=String(max);
-          minText.textContent='الحد الأدنى: '+min.toLocaleString('en-US')+' '+currency+' قبل العمولة.';
-          maxText.textContent=max>=min?'الحد الأعلى الممكن الآن: '+max.toLocaleString('en-US')+' '+currency+'.':'الصرف بهذا الاتجاه غير متاح حالياً.';
-          submit.disabled=max<min;
-          amount.setCustomValidity('');
+          minText.textContent='الحد الأدنى: '+fmt(min)+' '+currency+' قبل العمولة.';
+          maxText.textContent=max>=min?'الحد الأعلى الممكن الآن: '+fmt(max)+' '+currency+'.':'الصرف بهذا الاتجاه غير متاح حالياً.';
+          const n=Number(amount.value||0);
+          const valid=Number.isSafeInteger(n)&&n>=min&&n<=max&&rate>0;
+          if(valid){
+            const converted=dir==='URC_TO_SDG'?n*rate:Math.floor(n/rate);
+            const fee=Math.ceil(n*0.03),total=n+fee;
+            result.textContent=fmt(converted)+' '+target;
+            feeOut.textContent=fmt(fee)+' '+currency;
+            totalOut.textContent=fmt(total)+' '+currency;
+            hint.textContent='السعر المعتمد: '+fmt(rate)+' SDG لكل URC. ستُخصم الرسوم بصورة منفصلة من محفظتك.';
+          }else{
+            result.textContent='—';feeOut.textContent='—';totalOut.textContent='—';
+            hint.textContent=n?'المبلغ خارج الحدود المتاحة لهذا الاتجاه.':'أدخل المبلغ لعرض القيمة المقابلة والرسوم قبل التأكيد.';
+          }
+          submit.disabled=max<min||!valid;
         }
         direction.addEventListener('change',update);
-        amount.addEventListener('input',function(){amount.setCustomValidity('');});
+        amount.addEventListener('input',update);
         update();
       })();
       </script>""",
