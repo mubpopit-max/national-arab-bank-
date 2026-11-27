@@ -378,9 +378,21 @@ def assert_epc_capacity(quantity):
     if issued+reserved+quantity>maximum: raise ValueError("الكمية تتجاوز المعروض المتاح من URC")
 
 def encryption():
-    key=os.getenv("EMPIRE_DATA_ENCRYPTION_KEY","")
-    if not key: raise RuntimeError("تسليم بيانات الحسابات متوقف حتى ضبط EMPIRE_DATA_ENCRYPTION_KEY")
-    return Fernet(key.encode())
+    key=os.getenv("EMPIRE_DATA_ENCRYPTION_KEY","").strip()
+    if key:
+        try:
+            return Fernet(key.encode("ascii"))
+        except (ValueError, UnicodeEncodeError) as exc:
+            raise RuntimeError("EMPIRE_DATA_ENCRYPTION_KEY is invalid; configure a valid persistent Fernet key") from exc
+    # Fallback for managed hosts missing the dedicated secret. Keep FLASK_SECRET_KEY stable.
+    from flask import current_app
+    app_secret=current_app.secret_key
+    if not app_secret:
+        raise RuntimeError("A persistent FLASK_SECRET_KEY is required for encrypted data")
+    current_app.logger.warning("EMPIRE_DATA_ENCRYPTION_KEY is unset; using a key derived from FLASK_SECRET_KEY. Configure a dedicated persistent key.")
+    material=hashlib.sha256(("empire-estory-data-encryption-v1:"+str(app_secret)).encode("utf-8")).digest()
+    import base64
+    return Fernet(base64.urlsafe_b64encode(material))
 
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
@@ -1677,6 +1689,54 @@ def transfer_receipt(reference):
       note=(detail["note"] or "").strip(),created_at=credit["created_at"])
     return page("إيصال التحويل",body)
   
+@empire_bp.get("/exchange/quote")
+@login_required
+def exchange_quote():
+    direction=(request.args.get("direction") or "").strip()
+    if direction not in ("URC_TO_SDG","SDG_TO_URC"):
+        return jsonify({"ok":False,"message":"اختر اتجاه التحويل."}),400
+    mode=setting("fx_rate_mode","manual")
+    try:
+        base=int(setting("fx_market_rate" if mode=="market" else "fx_manual_rate","5600"))
+        buy=int(setting("fx_buy_spread_bps","0"))
+        sell=int(setting("fx_sell_spread_bps","0"))
+        if base<=0 or not 0<=buy<=10000 or not 0<=sell<=10000:
+            raise ValueError
+    except (TypeError,ValueError):
+        return jsonify({"ok":False,"message":"خدمة الصرف متوقفة مؤقتاً بسبب إعدادات السعر."}),503
+    rate=(base*(10000-sell))//10000 if direction=="URC_TO_SDG" else (base*(10000+buy)+9999)//10000
+    source="URC" if direction=="URC_TO_SDG" else "SDG"
+    target="SDG" if source=="URC" else "URC"
+    reserve_raw=db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='protection:fund' AND currency=?",(target,)).fetchone()["n"]
+    reserve=max(0,int(reserve_raw))
+    wallet=max(0,int(balance(user()["username"],source)))
+    minimum=1 if source=="URC" else max(1,rate)
+    reserve_limit=reserve//rate if source=="URC" and rate>0 else (max(0,(reserve+1)*rate-1) if rate>0 else 0)
+    lo,hi=0,wallet
+    while lo<hi:
+        mid=(lo+hi+1)//2
+        if mid+platform_fee(mid)<=wallet: lo=mid
+        else: hi=mid-1
+    maximum=min(reserve_limit,lo,999_999_999_999)
+    data={"ok":True,"direction":direction,"source_currency":source,"target_currency":target,
+          "rate":rate,"minimum":minimum,"maximum":maximum,"available":maximum>=minimum,
+          "mode":"market" if mode=="market" else "manual"}
+    raw=(request.args.get("amount") or "").strip()
+    if raw:
+        if not re.fullmatch(r"[0-9]{1,12}",raw):
+            data.update({"valid":False,"message":"أدخل مبلغاً صحيحاً بالأرقام."})
+        else:
+            amount=int(raw)
+            if amount<minimum or amount>maximum or rate<=0:
+                data.update({"valid":False,"message":"المبلغ خارج حدود الرصيد والسيولة المتاحة حالياً."})
+            else:
+                converted=amount*rate if source=="URC" else amount//rate
+                fee=platform_fee(amount)
+                data.update({"valid":converted>0,"amount":amount,"converted":converted,"fee":fee,
+                             "total_debit":amount+fee,"message":"المعاينة محدثة من أرصدة النظام الحالية."})
+    return jsonify(data)
+
+
 @empire_bp.route("/exchange",methods=["GET","POST"])
 @login_required
 def exchange():
@@ -1836,46 +1896,46 @@ def exchange():
         <div class='profile-info'><span>إجمالي الخصم من محفظتك</span><b id='fxTotal'>—</b></div>
         <small id='fxPreviewHint'>أدخل المبلغ لعرض القيمة المقابلة والرسوم قبل التأكيد.</small>
       </div>
-      <p class='muted'>السعر الأساسي: {{'{:,}'.format(rate)}} SDG لكل URC. السعر النهائي يراعي هامش الشراء أو البيع المعتمد. لا يتم الخصم إلا بعد ضغط زر التأكيد.</p>
+      <p class='muted'>السعر والرصيد والسيولة والرسوم تُحدّث مباشرة من الخادم عند تغيير الاتجاه أو المبلغ. لا يتم الخصم إلا بعد ضغط زر التأكيد.</p>
       <button id='fxSubmit' {% if rate<=0 or urc_limits["maximum"]<urc_limits["minimum"] %}disabled{% endif %}>تأكيد تحويل العملات</button></form>
       <a class='btn secondary' href='/store/wallet'>العودة للمحفظة</a></section>
       <script>
       (function(){
-        const direction=document.getElementById('fxDirection');
-        const amount=document.getElementById('fxAmount');
-        const minText=document.getElementById('fxMinText');
-        const maxText=document.getElementById('fxMaxText');
-        const submit=document.getElementById('fxSubmit');
-        const result=document.getElementById('fxResult'),feeOut=document.getElementById('fxFee');
-        const totalOut=document.getElementById('fxTotal'),hint=document.getElementById('fxPreviewHint');
-        const fmt=n=>n.toLocaleString('en-US');
-        function update(){
-          const option=direction.options[direction.selectedIndex];
-          const dir=option.value,min=BigInt(option.dataset.min||'0'),max=BigInt(option.dataset.max||'0');
-          const rate=BigInt(option.dataset.rate||'0'),currency=option.dataset.currency||'';
-          const target=dir==='URC_TO_SDG'?'SDG':'URC';
-          amount.min=min.toString();amount.max=max.toString();
-          minText.textContent='الحد الأدنى: '+fmt(min)+' '+currency+' قبل العمولة.';
-          maxText.textContent=max>=min?'الحد الأعلى الممكن الآن: '+fmt(max)+' '+currency+'.':'الصرف بهذا الاتجاه غير متاح حالياً.';
-          const raw=(amount.value||'').trim();
-          let n=0n,valid=false;
-          if(/^[0-9]+$/.test(raw)){n=BigInt(raw);valid=n>=min&&n<=max&&rate>0n;}
-          if(valid){
-            const converted=dir==='URC_TO_SDG'?n*rate:n/rate;
-            const fee=(n*300n+9999n)/10000n,total=n+fee;
-            result.textContent=fmt(converted)+' '+target;
-            feeOut.textContent=fmt(fee)+' '+currency;
-            totalOut.textContent=fmt(total)+' '+currency;
-            hint.textContent='السعر المعتمد: '+fmt(rate)+' SDG لكل URC. ستُخصم الرسوم بصورة منفصلة من محفظتك.';
-          }else{
-            result.textContent='—';feeOut.textContent='—';totalOut.textContent='—';
-            hint.textContent=raw?'المبلغ خارج الحدود المتاحة لهذا الاتجاه.':'أدخل المبلغ لعرض القيمة المقابلة والرسوم قبل التأكيد.';
+        const direction=document.getElementById('fxDirection'),amount=document.getElementById('fxAmount');
+        const minText=document.getElementById('fxMinText'),maxText=document.getElementById('fxMaxText');
+        const submit=document.getElementById('fxSubmit'),result=document.getElementById('fxResult');
+        const feeOut=document.getElementById('fxFee'),totalOut=document.getElementById('fxTotal');
+        const hint=document.getElementById('fxPreviewHint'),fmt=n=>Number(n).toLocaleString('en-US');
+        let requestNo=0;
+        async function update(){
+          const id=++requestNo,dir=direction.value,raw=amount.value.trim();
+          submit.disabled=true;result.textContent='جارٍ تحديث المعاينة…';feeOut.textContent='—';totalOut.textContent='—';
+          try{
+            const query=new URLSearchParams({direction:dir});if(raw)query.set('amount',raw);
+            const response=await fetch('/store/exchange/quote?'+query.toString(),{credentials:'same-origin',headers:{'Accept':'application/json'}});
+            const data=await response.json();if(id!==requestNo)return;
+            if(!response.ok||!data.ok)throw new Error(data.message||'تعذر تحديث بيانات الصرف.');
+            amount.min=String(data.minimum);amount.max=String(data.maximum);
+            minText.textContent='الحد الأدنى: '+fmt(data.minimum)+' '+data.source_currency+' قبل العمولة.';
+            maxText.textContent=data.available?'المتاح حالياً حتى: '+fmt(data.maximum)+' '+data.source_currency+'.':'لا توجد سيولة أو حدود كافية لتنفيذ هذا الاتجاه حالياً.';
+            if(data.valid){
+              result.textContent=fmt(data.converted)+' '+data.target_currency;
+              feeOut.textContent=fmt(data.fee)+' '+data.source_currency;
+              totalOut.textContent=fmt(data.total_debit)+' '+data.source_currency;
+              hint.textContent='سعر التنفيذ الحالي: '+fmt(data.rate)+' SDG لكل URC · معاينة محدثة من الخادم.';
+              submit.disabled=false;
+            }else{
+              result.textContent='—';hint.textContent=data.message|| (raw?'المبلغ خارج الرصيد أو السيولة المتاحة.':'أدخل المبلغ لعرض معاينة حية قبل التأكيد.');
+              submit.disabled=true;
+            }
+          }catch(error){
+            if(id!==requestNo)return;result.textContent='—';
+            hint.textContent=error.message||'تعذر الاتصال بخدمة الصرف. حاول مجدداً.';
+            maxText.textContent='تعذر تحديث حدود الصرف الآن.';submit.disabled=true;
           }
-          submit.disabled=max<min||!valid;
         }
-        direction.addEventListener('change',update);
-        amount.addEventListener('input',update);
-        update();
+        direction.addEventListener('change',()=>{amount.value='';update();});
+        amount.addEventListener('input',update);update();
       })();
       </script>""",
       rate=base,mode="سعر السوق المرجعي" if mode=="market" else "السعر اليدوي",
