@@ -4205,6 +4205,21 @@ input:focus{border-color:#7955b8;box-shadow:0 0 0 4px rgba(111,75,170,.12);backg
 @media(max-width:360px){body{padding-right:12px;padding-left:12px}.brand{margin-bottom:16px}.brand-mark{width:62px;height:62px;border-radius:20px}.auth-card{padding:21px 17px;border-radius:22px}.card-heading{font-size:21px}input{height:51px}}
 @media(max-height:690px){body{place-items:start center;padding-top:18px}.brand-mark{width:56px;height:56px;margin-bottom:8px}.brand{margin-bottom:13px}.brand-mark svg{width:34px;height:34px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* National digital finance identity: Sudan green, gold and clear mobile hierarchy */
+html{background:#0d3c2a!important}body{background:radial-gradient(ellipse at 8% 5%,rgba(194,163,91,.22),transparent 34%),radial-gradient(ellipse at 92% 90%,rgba(28,130,79,.34),transparent 35%),linear-gradient(145deg,#082b20,#10553a 56%,#082b20)!important;overflow-x:hidden;overflow-y:auto;min-height:100svh}
+.auth-wrap{width:min(100%,460px)!important;margin:auto!important;padding:8px 0}
+.brand-mark{border-color:rgba(222,194,126,.82)!important;background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.04))!important;box-shadow:0 12px 34px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.18)!important}
+.brand-mark svg{stroke:#e6cb83!important}.brand h1{color:#fff!important;letter-spacing:0}.brand p{color:#d7eadc!important}
+.auth-card{width:100%;max-width:100%;border:1px solid rgba(219,197,145,.55)!important;border-radius:24px!important;background:linear-gradient(150deg,#fff 0%,#fbfdf9 100%)!important;box-shadow:0 24px 70px rgba(0,0,0,.28)!important}
+.card-heading{color:#17442f!important}.card-subtitle{color:#718477!important}.field label{color:#315b43!important}
+input{width:100%;min-width:0;max-width:100%;border:1px solid #d9e5da!important;background:#f8fbf7!important;border-radius:13px!important;color:#183b2c!important}
+input:focus{border-color:#16834f!important;box-shadow:0 0 0 4px rgba(22,131,79,.12)!important}
+.primary-btn{background:linear-gradient(110deg,#08764b,#14583c)!important;box-shadow:0 9px 20px rgba(14,91,55,.2)!important}
+.auth-links a{color:#126b43!important}.secure-note{color:#78897c!important}
+.note{border-color:#e8dfc5!important;background:linear-gradient(110deg,#f3f8f2,#fff9eb)!important;color:#5b6e5e!important}.note strong{color:#856b31!important}
+@media(max-width:420px){body{display:block;padding:16px 12px calc(18px + env(safe-area-inset-bottom))!important}.auth-wrap{max-width:430px!important}.brand{margin-bottom:15px!important}.brand-mark{width:58px!important;height:58px!important;border-radius:18px!important}.brand h1{font-size:clamp(21px,6vw,26px)!important}.auth-card{padding:clamp(17px,5vw,23px)!important;border-radius:20px!important}.card-heading{font-size:21px!important}input{height:50px!important}.primary-btn{min-height:50px!important}}
+@media(max-height:690px){body{display:block!important;padding-top:12px!important}.brand-mark{width:48px!important;height:48px!important;margin-bottom:5px!important}.brand-mark svg{width:30px!important;height:30px!important}.brand{margin-bottom:10px!important}}
 </style>
 </head>
 <body>
@@ -4280,6 +4295,21 @@ input:focus{border-color:#7955b8;box-shadow:0 0 0 4px rgba(111,75,170,.12);backg
 @media(max-width:360px){body{padding-right:11px;padding-left:11px}.auth-card{padding:19px 15px;border-radius:21px}.brand{margin-bottom:13px}.brand-mark{width:55px;height:55px}input{height:47px}.field{margin-bottom:10px}}
 @media(max-height:760px){body{place-items:start center;padding-top:13px}.brand{margin-bottom:10px}.brand-mark{width:49px;height:49px;margin-bottom:5px}.brand-mark svg{width:30px;height:30px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* National digital finance identity: Sudan green, gold and clear mobile hierarchy */
+html{background:#0d3c2a!important}body{background:radial-gradient(ellipse at 8% 5%,rgba(194,163,91,.22),transparent 34%),radial-gradient(ellipse at 92% 90%,rgba(28,130,79,.34),transparent 35%),linear-gradient(145deg,#082b20,#10553a 56%,#082b20)!important;overflow-x:hidden;overflow-y:auto;min-height:100svh}
+.auth-wrap{width:min(100%,460px)!important;margin:auto!important;padding:8px 0}
+.brand-mark{border-color:rgba(222,194,126,.82)!important;background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.04))!important;box-shadow:0 12px 34px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.18)!important}
+.brand-mark svg{stroke:#e6cb83!important}.brand h1{color:#fff!important;letter-spacing:0}.brand p{color:#d7eadc!important}
+.auth-card{width:100%;max-width:100%;border:1px solid rgba(219,197,145,.55)!important;border-radius:24px!important;background:linear-gradient(150deg,#fff 0%,#fbfdf9 100%)!important;box-shadow:0 24px 70px rgba(0,0,0,.28)!important}
+.card-heading{color:#17442f!important}.card-subtitle{color:#718477!important}.field label{color:#315b43!important}
+input{width:100%;min-width:0;max-width:100%;border:1px solid #d9e5da!important;background:#f8fbf7!important;border-radius:13px!important;color:#183b2c!important}
+input:focus{border-color:#16834f!important;box-shadow:0 0 0 4px rgba(22,131,79,.12)!important}
+.primary-btn{background:linear-gradient(110deg,#08764b,#14583c)!important;box-shadow:0 9px 20px rgba(14,91,55,.2)!important}
+.auth-links a{color:#126b43!important}.secure-note{color:#78897c!important}
+.note{border-color:#e8dfc5!important;background:linear-gradient(110deg,#f3f8f2,#fff9eb)!important;color:#5b6e5e!important}.note strong{color:#856b31!important}
+@media(max-width:420px){body{display:block;padding:16px 12px calc(18px + env(safe-area-inset-bottom))!important}.auth-wrap{max-width:430px!important}.brand{margin-bottom:15px!important}.brand-mark{width:58px!important;height:58px!important;border-radius:18px!important}.brand h1{font-size:clamp(21px,6vw,26px)!important}.auth-card{padding:clamp(17px,5vw,23px)!important;border-radius:20px!important}.card-heading{font-size:21px!important}input{height:50px!important}.primary-btn{min-height:50px!important}}
+@media(max-height:690px){body{display:block!important;padding-top:12px!important}.brand-mark{width:48px!important;height:48px!important;margin-bottom:5px!important}.brand-mark svg{width:30px!important;height:30px!important}.brand{margin-bottom:10px!important}}
 </style>
 </head>
 <body>
@@ -4873,6 +4903,18 @@ input:focus,select:focus,textarea:focus{outline:3px solid rgba(8,118,185,.13);bo
 .status{display:inline-flex;padding:4px 10px;border-radius:30px;background:#fff5df;color:#946313;font-size:11px;font-weight:900}.status.APPROVED{background:#eaf6ef;color:#137344}.status.REJECTED{background:#fff0ef;color:#b43c38}
 .request p{margin:6px 0;color:#526b7d;font-size:12px}.empty{text-align:center;padding:20px;color:var(--muted);font-size:13px}
 @media(max-width:380px){.page{width:calc(100% - 18px)}.card{padding:14px}.hero{padding:18px}}
+
+:root{--ink:#183b2c;--muted:#718477;--blue:#08764b;--green:#16834f;--line:#dfeae2}
+html,body{max-width:100%;overflow-x:hidden;background:#f3f7f3!important;color:#183b2c}
+.top-header{background:rgba(255,255,255,.97)!important;border-bottom-color:#dce8df}.top-header h2{color:#17432f!important}
+.page{width:min(100% - 20px,650px)!important;margin:14px auto 28px!important}
+.hero{background:linear-gradient(125deg,#073d2b,#08764b 60%,#b18c46)!important;box-shadow:0 12px 26px rgba(8,79,47,.13)!important}
+.card{border-color:#dfe9e1!important;box-shadow:0 5px 16px rgba(25,66,43,.04)!important}
+.account-card{border-color:#c9dfce!important;background:linear-gradient(145deg,#f0f8f1,#fffaf0)!important}.account-card .bank{color:#176b43!important}
+.account-number strong{color:#17432f!important;letter-spacing:1px!important;overflow-wrap:anywhere}.copy-btn{border-color:#d4e3d6!important;color:#176b43!important}
+.submit-btn{background:linear-gradient(110deg,#08764b,#b38e4a)!important}
+input,select,textarea{min-width:0;max-width:100%;border-color:#d7e4d8!important;background:#fbfdfb!important}
+@media(max-width:420px){.page{width:calc(100% - 18px)!important;margin:10px auto 22px!important}.top-header{padding:10px 12px!important;flex-wrap:wrap}.hero,.card{padding:15px!important;border-radius:17px!important}.account-number{align-items:flex-start;flex-wrap:wrap}.account-number strong{font-size:clamp(21px,6vw,28px)!important}.copy-btn{min-height:40px}.submit-btn{min-height:48px}}
 </style></head><body>
 <header class="top-header"><h2>تغذية حسابي</h2><a href="/store/" class="back-btn">العودة للرئيسية</a></header>
 <main class="page">
@@ -4913,12 +4955,20 @@ FOUNDER_PANEL_HTML = """
 input{width:100%;min-height:43px;padding:10px 12px;border:1px solid #d8e4ec;border-radius:11px;background:#f8fbfd;font:inherit}button{min-height:44px;padding:9px 12px;border:0;border-radius:11px;color:#fff;font-weight:850;font:inherit;cursor:pointer}.approve{background:#16834f}.reject{background:#c74440}
 .flash{padding:12px;border-radius:11px;background:#fff1f0;color:#a92f2b;font-weight:750}.status{display:inline-flex;padding:4px 10px;border-radius:30px;background:#fff5df;color:#946313;font-size:11px;font-weight:900}.status.APPROVED{background:#eaf6ef;color:#137344}.status.REJECTED{background:#fff0ef;color:#b43c38}.empty{padding:22px;text-align:center;color:var(--muted)}
 @media(max-width:560px){.stats{grid-template-columns:1fr 1fr}.details{grid-template-columns:1fr}.content{width:calc(100% - 18px)}}
+
+:root{--ink:#183b2c;--muted:#718477;--blue:#08764b;--green:#16834f;--line:#dfeae2}
+html,body{max-width:100%;overflow-x:hidden;background:#f3f7f3!important;color:#183b2c}
+.top-header{background:rgba(255,255,255,.97)!important;border-bottom-color:#dce8df;flex-wrap:wrap}.top-header h2{color:#17432f!important}
+.content{width:min(100% - 20px,920px)!important;margin:14px auto 30px!important}.hero{background:linear-gradient(125deg,#073d2b,#08764b 60%,#b18c46)!important}
+.stat,.card{border-color:#dfe9e1!important;box-shadow:0 5px 16px rgba(25,66,43,.04)!important}.stat strong{color:#08764b!important}
+.detail{background:#f5f9f5!important;min-width:0;overflow-wrap:anywhere}button{background:#08764b!important}
+@media(max-width:420px){.content{width:calc(100% - 18px)!important}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.details{grid-template-columns:1fr}.actions{grid-template-columns:1fr}.actions input{grid-column:1}.top-header{padding:10px 12px!important}.hero,.card{padding:14px!important;border-radius:17px!important}.actions button{width:100%}}
 </style></head><body><header class="top-header"><h2>مركز المالك · طلبات التغذية</h2><a href="/founder/receiving-accounts" class="back-btn">حسابات الاستقبال</a><a href="/store/admin" class="back-btn">لوحة المنصة</a></header>
 <main class="content">{% with messages = get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
 <section class="hero"><h1>مراجعة طلبات تغذية الحسابات</h1><p>افحص صورة الإيصال ورقم العملية قبل اعتماد أي مبلغ.</p></section>
 <section class="stats"><div class="stat"><small>رصيد حساب المالك</small><strong>{{ money(founder_user["balance"]) }} SDG</strong></div><div class="stat"><small>طلبات معلقة</small><strong>{{ pending_requests|length }}</strong></div><div class="stat"><small>إجمالي الطلبات المعروضة</small><strong>{{ all_requests|length }}</strong></div></section>
 <section class="card"><h2>الطلبات بانتظار المراجعة</h2>{% for req in pending_requests %}
-<article class="request"><div class="details"><div class="detail"><small>مرجع الطلب</small><b>{{ req["reference"] }}</b></div><div class="detail"><small>العميل</small><b>{{ req["username"] }}</b></div><div class="detail"><small>رقم حساب العميل</small><b dir="ltr">{{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ المطلوب</small><b>{{ money(req["amount"]) }} SDG</b></div><div class="detail"><small>وسيلة التحويل</small><b>{{ req["method"] }}</b></div><div class="detail"><small>رقم العملية البنكية</small><b dir="ltr">{{ req["operation_number"] }}</b></div><div class="detail"><small>تاريخ الطلب</small><b>{{ req["created_at"][:19] }}</b></div><div class="detail"><small>ملاحظة العميل</small><b>{{ req["note"] or "لا توجد" }}</b></div></div>
+<article class="request"><div class="details"><div class="detail"><small>مرجع الطلب</small><b>{{ req["reference"] }}</b></div><div class="detail"><small>العميل</small><b>{{ req["username"] }}</b></div><div class="detail"><small>رقم حساب العميل</small><b dir="ltr">{{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ المطلوب</small><b>{{ money(req["amount"]) }} SDG</b></div><div class="detail"><small>وسيلة التحويل</small><b>{{ req["method"] }}</b></div><div class="detail"><small>حساب الاستقبال الذي حُوّل إليه</small><b>{{ req["receiving_account_label"] or "الحساب السابق" }} · {{ req["receiving_account_number"] or "—" }}</b></div><div class="detail"><small>رقم العملية البنكية</small><b dir="ltr">{{ req["operation_number"] }}</b></div><div class="detail"><small>تاريخ الطلب</small><b>{{ req["created_at"][:19] }}</b></div><div class="detail"><small>ملاحظة العميل</small><b>{{ req["note"] or "لا توجد" }}</b></div></div>
 <a class="receipt" href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" rel="noopener">عرض صورة إيصال التحويل</a>
 <form method="post" class="actions"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="funding_id" value="{{ req['id'] }}"><input type="text" name="founder_note" maxlength="500" placeholder="ملاحظة للعميل (اختياري)"><button type="submit" name="action" value="approve" class="approve">اعتماد وإضافة الرصيد</button><button type="submit" name="action" value="reject" class="reject">رفض الطلب</button></form></article>
 {% else %}<div class="empty">لا توجد طلبات تغذية معلقة حالياً.</div>{% endfor %}</section>
