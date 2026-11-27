@@ -1735,6 +1735,10 @@ def exchange():
                 if limits["maximum"]<limits["minimum"]:
                     raise ValueError("الصرف بهذا الاتجاه غير متاح حالياً. لم يتم خصم أي مبلغ من محفظتك.")
                 raise ValueError("الحد الأعلى الممكن الآن هو {:,} {}. لم يتم تنفيذ العملية.".format(limits["maximum"],limits["currency"]))
+            rate=limits["rate"]
+            result=amount*rate if direction=="URC_TO_SDG" else amount//rate
+            if result<=0 or result>9_000_000_000_000_000_000:
+                raise ValueError("قيمة التحويل غير صالحة وفق سعر الصرف الحالي.")
             fee=platform_fee(amount)
             if direction=="URC_TO_SDG":
                 post(r,[("user:"+u["username"],"URC",-amount),("protection:fund","URC",amount),
@@ -1779,8 +1783,8 @@ def exchange():
       <p class='muted'>تُخصم عمولة التطبيق 3% بصورة منفصلة من محفظتك بالعملة التي تدفعها، وتُضاف إلى صندوق حماية المستخدمين.</p>
       <form method='post' id='fxForm'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>اتجاه التحويل</label><select name='direction' id='fxDirection'>
-        <option value='URC_TO_SDG' data-min='{{urc_limits["minimum"]}}' data-max='{{urc_limits["maximum"]}}' data-currency='URC'>تحويل URC إلى SDG</option>
-        <option value='SDG_TO_URC' data-min='{{sdg_limits["minimum"]}}' data-max='{{sdg_limits["maximum"]}}' data-currency='SDG'>تحويل SDG إلى URC</option>
+        <option value='URC_TO_SDG' data-min='{{urc_limits["minimum"]}}' data-max='{{urc_limits["maximum"]}}' data-rate='{{urc_limits["rate"]}}' data-currency='URC'>تحويل URC إلى SDG</option>
+        <option value='SDG_TO_URC' data-min='{{sdg_limits["minimum"]}}' data-max='{{sdg_limits["maximum"]}}' data-rate='{{sdg_limits["rate"]}}' data-currency='SDG'>تحويل SDG إلى URC</option>
       </select>
       <label>المبلغ المراد تحويله</label><input name='amount' id='fxAmount' type='number' min='{{urc_limits["minimum"]}}' max='{{urc_limits["maximum"]}}' step='1' inputmode='numeric' placeholder='أدخل المبلغ' required>
       <div class='panel' id='fxLimits' aria-live='polite' style='background:#f5faf6!important'>
@@ -1806,27 +1810,28 @@ def exchange():
         const submit=document.getElementById('fxSubmit');
         const result=document.getElementById('fxResult'),feeOut=document.getElementById('fxFee');
         const totalOut=document.getElementById('fxTotal'),hint=document.getElementById('fxPreviewHint');
-        const rate={{rate|tojson}};
-        const fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
+        const fmt=n=>n.toLocaleString('en-US');
         function update(){
           const option=direction.options[direction.selectedIndex];
-          const dir=option.value,min=Number(option.dataset.min||0),max=Number(option.dataset.max||0),currency=option.dataset.currency||'';
+          const dir=option.value,min=BigInt(option.dataset.min||'0'),max=BigInt(option.dataset.max||'0');
+          const rate=BigInt(option.dataset.rate||'0'),currency=option.dataset.currency||'';
           const target=dir==='URC_TO_SDG'?'SDG':'URC';
-          amount.min=String(min);amount.max=String(max);
+          amount.min=min.toString();amount.max=max.toString();
           minText.textContent='الحد الأدنى: '+fmt(min)+' '+currency+' قبل العمولة.';
           maxText.textContent=max>=min?'الحد الأعلى الممكن الآن: '+fmt(max)+' '+currency+'.':'الصرف بهذا الاتجاه غير متاح حالياً.';
-          const n=Number(amount.value||0);
-          const valid=Number.isSafeInteger(n)&&n>=min&&n<=max&&rate>0;
+          const raw=(amount.value||'').trim();
+          let n=0n,valid=false;
+          if(/^[0-9]+$/.test(raw)){n=BigInt(raw);valid=n>=min&&n<=max&&rate>0n;}
           if(valid){
-            const converted=dir==='URC_TO_SDG'?n*rate:Math.floor(n/rate);
-            const fee=Math.ceil(n*0.03),total=n+fee;
+            const converted=dir==='URC_TO_SDG'?n*rate:n/rate;
+            const fee=(n*300n+9999n)/10000n,total=n+fee;
             result.textContent=fmt(converted)+' '+target;
             feeOut.textContent=fmt(fee)+' '+currency;
             totalOut.textContent=fmt(total)+' '+currency;
             hint.textContent='السعر المعتمد: '+fmt(rate)+' SDG لكل URC. ستُخصم الرسوم بصورة منفصلة من محفظتك.';
           }else{
             result.textContent='—';feeOut.textContent='—';totalOut.textContent='—';
-            hint.textContent=n?'المبلغ خارج الحدود المتاحة لهذا الاتجاه.':'أدخل المبلغ لعرض القيمة المقابلة والرسوم قبل التأكيد.';
+            hint.textContent=raw?'المبلغ خارج الحدود المتاحة لهذا الاتجاه.':'أدخل المبلغ لعرض القيمة المقابلة والرسوم قبل التأكيد.';
           }
           submit.disabled=max<min||!valid;
         }
