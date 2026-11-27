@@ -139,7 +139,7 @@ def init_db():
         db().execute("ALTER TABLE es_topup_orders ADD COLUMN delivery_cipher TEXT NOT NULL DEFAULT ''")
     # Game orders deliver redeem codes; no player ID is collected or retained.
     db().execute("UPDATE es_topup_orders SET player_id='' WHERE player_id IS NOT NULL AND player_id!=''")
-    db().execute("UPDATE es_products SET instructions='سيتم تسليم كود الباقة داخل التطبيق بعد تأكيد الدفع.'")
+    db().execute("UPDATE es_products SET instructions='سيتم تسليم كود الباقة داخل التطبيق بعد تأكيد الدفع.' WHERE instructions='أدخل معرف اللاعب بدقة.'")
     defaults = {
       "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"15000000",
       "fx_rate_mode":"manual", "fx_market_rate":"0", "fx_manual_rate":"0", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
@@ -707,7 +707,7 @@ def complete_topup():
     agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
     if not agent or agent["status"]!="APPROVED": abort(403)
     r=request.form.get("reference",""); note=request.form.get("note","").strip()
-    if len(note)<4 or len(note)>300: abort(400)
+    if len(note)>300: abort(400)
     d=db(); d.execute("BEGIN IMMEDIATE")
     try:
         order=d.execute("SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.reference=? AND t.agent=? AND t.status='ASSIGNED'",
