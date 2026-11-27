@@ -1190,6 +1190,11 @@ def register():
                     "الرجاء إدخال كلمة المرور."
                 )
 
+            if len(password) < 8:
+                raise ValueError(
+                    "يجب ألا تقل كلمة المرور عن 8 أحرف."
+                )
+
             if len(
                 password.encode("utf-8")
             ) > 72:
@@ -4056,136 +4061,71 @@ LOGIN_HTML = """
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>الإمبراطورية إستوري - تسجيل الدخول</title>
-
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#21113f">
+<title>تسجيل الدخول | الإمبراطورية إستوري</title>
 <style>
-
-body {
-    margin:0;
-    background:radial-gradient(circle at top,#2a2417,#080808 70%);
-    font-family:Arial,sans-serif;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    min-height:100vh;
-}
-
-.logo-container {
-    text-align:center;
-    color:white;
-    margin-bottom:20px;
-}
-
-.logo-container h1 {
-    margin:0;
-    font-size:30px;
-    font-weight:bold;
-}
-
-.box {
-    background:white;
-    width:90%;
-    max-width:380px;
-    padding:30px 20px;
-    border-radius:12px;
-    box-shadow:0 8px 25px rgba(0,0,0,.25);
-}
-
-input,
-button {
-    width:100%;
-    box-sizing:border-box;
-    padding:12px;
-    margin:10px 0;
-    border-radius:6px;
-    border:1px solid #ccc;
-    font-size:15px;
-}
-
-button {
-    background:linear-gradient(135deg,#e5c16b,#9e762b);
-    color:white;
-    border:0;
-    font-weight:bold;
-    cursor:pointer;
-}
-
-.flash {
-    color:#d90429;
-    text-align:center;
-    font-size:13px;
-    font-weight:bold;
-}
-
-.links {
-    display:flex;
-    justify-content:space-between;
-    margin-top:15px;
-    font-size:13px;
-}
-
-.links a {
-    color:#a78338;
-    text-decoration:none;
-    font-weight:bold;
-}
-
+:root{color-scheme:light;--ink:#241b39;--muted:#7b718d;--purple:#5b35a6;--purple2:#321d67;--gold:#d8b56a;--line:#e9e3f1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{min-height:100%;background:#21113f}
+body{margin:0;min-height:100vh;min-height:100svh;padding:clamp(18px,5vh,52px) 16px calc(20px + env(safe-area-inset-bottom));display:grid;place-items:center;position:relative;overflow-x:hidden;background:radial-gradient(ellipse at 12% 8%,rgba(137,91,209,.48),transparent 36%),radial-gradient(ellipse at 92% 88%,rgba(207,165,88,.19),transparent 32%),linear-gradient(145deg,#160d2c,#30205b 54%,#17102b);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;color:var(--ink)}
+body:before,body:after{content:"";position:fixed;pointer-events:none;border:1px solid rgba(222,190,124,.16);border-radius:50%;width:340px;height:340px;inset:auto auto -190px -170px}
+body:after{width:250px;height:250px;inset:-140px -110px auto auto}
+.auth-wrap{width:100%;max-width:430px;position:relative;z-index:1}
+.brand{text-align:center;color:#fff;margin:0 auto 22px}
+.brand-mark{width:72px;height:72px;margin:0 auto 12px;display:grid;place-items:center;border:1px solid rgba(226,193,125,.65);border-radius:23px;background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.04));box-shadow:0 12px 34px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.18)}
+.brand-mark svg{width:43px;height:43px;fill:none;stroke:#e7c77f;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.brand h1{margin:0;font-size:clamp(23px,6vw,29px);font-weight:950;letter-spacing:-.5px}
+.brand p{margin:6px 0 0;color:#d9cfe9;font-size:12px}
+.auth-card{padding:clamp(22px,6vw,32px);border:1px solid rgba(255,255,255,.72);border-radius:26px;background:rgba(255,255,255,.97);box-shadow:0 24px 70px rgba(5,2,18,.32)}
+.card-heading{margin:0 0 6px;font-size:23px;font-weight:900;color:#2b1b48}
+.card-subtitle{margin:0 0 22px;color:var(--muted);font-size:13px;line-height:1.7}
+.field{display:block;margin:0 0 15px}
+.field label{display:block;margin:0 2px 7px;color:#43365a;font-size:12px;font-weight:850}
+.input-wrap{position:relative}
+input{display:block;width:100%;height:54px;padding:0 15px;border:1px solid #e2dce9;border-radius:14px;background:#fbfaff;color:#241b39;font:inherit;font-size:15px;outline:none;transition:border-color .18s,box-shadow .18s}
+input::placeholder{color:#a49aaf}
+input:focus{border-color:#7955b8;box-shadow:0 0 0 4px rgba(111,75,170,.12);background:#fff}
+.password-input{padding-left:54px}
+.toggle-password{position:absolute;left:7px;top:7px;width:40px;height:40px;border:0;border-radius:11px;background:#f0ebf7;color:#634394;font-size:11px;font-weight:800}
+.primary-btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:54px;margin-top:8px;border:0;border-radius:15px;background:linear-gradient(110deg,#6843ad,#39216e);box-shadow:0 9px 20px rgba(74,43,126,.22);color:#fff;font:inherit;font-size:15px;font-weight:900;cursor:pointer}
+.primary-btn:active{transform:scale(.99)}
+.auth-links{display:flex;justify-content:center;align-items:center;gap:7px;flex-wrap:wrap;margin-top:19px;color:#81758f;font-size:13px}
+.auth-links a{color:#5d389d;font-weight:900;text-decoration:none}
+.flash-list{margin:0 0 16px}
+.flash{margin:7px 0;padding:11px 12px;border:1px solid #f0caca;border-radius:12px;background:#fff2f1;color:#a33232;font-size:12px;line-height:1.6}
+.secure-note{display:flex;justify-content:center;align-items:center;gap:6px;margin:17px 0 0;color:#93889f;font-size:10px}
+.secure-note svg{width:14px;height:14px;stroke:#8b7b9d;fill:none;stroke-width:1.8}
+@media(max-width:360px){body{padding-right:12px;padding-left:12px}.brand{margin-bottom:16px}.brand-mark{width:62px;height:62px;border-radius:20px}.auth-card{padding:21px 17px;border-radius:22px}.card-heading{font-size:21px}input{height:51px}}
+@media(max-height:690px){body{place-items:start center;padding-top:18px}.brand-mark{width:56px;height:56px;margin-bottom:8px}.brand{margin-bottom:13px}.brand-mark svg{width:34px;height:34px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
-
 <body>
-
-<div class="logo-container">
+<main class="auth-wrap">
+  <header class="brand">
+    <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 4 39 10v12c0 10-6 17-15 22C15 39 9 32 9 22V10z"/><path d="m16 26 5 5 11-14"/><path d="M18 12h12"/></svg></div>
     <h1>الإمبراطورية إستوري</h1>
-</div>
-
-<div class="box">
-
-{% with messages = get_flashed_messages() %}
-{% for message in messages %}
-    <p class="flash">
-        {{ message }}
-    </p>
-{% endfor %}
-{% endwith %}
-
-<form method="post">
-
-<input
-name="account_number"
-placeholder="رقم الحساب"
-required
->
-
-<input
-name="password"
-type="password"
-placeholder="كلمة المرور"
-required
->
-
-<button type="submit">
-    تسجيل الدخول
-</button>
-
-</form>
-
-<div class="links">
-
-<a href="/register">
-    تسجيل حساب جديد
-</a>
-
-<a href="#">
-    نسيت كلمة المرور؟
-</a>
-
-</div>
-
-</div>
-
+    <p>عالمك الرقمي… في مكان واحد</p>
+  </header>
+  <section class="auth-card">
+    <h2 class="card-heading">مرحباً بعودتك</h2>
+    <p class="card-subtitle">سجّل الدخول للوصول إلى محفظتك وخدماتك الرقمية بأمان.</p>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash-list" role="alert" aria-live="polite">{% for message in messages %}<p class="flash">{{ message }}</p>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    <form method="post" autocomplete="on">
+      <div class="field"><label for="account_number">رقم الحساب</label><input id="account_number" name="account_number" type="text" inputmode="numeric" autocomplete="username" placeholder="أدخل رقم حسابك" required autofocus></div>
+      <div class="field"><label for="password">كلمة المرور</label><div class="input-wrap"><input class="password-input" id="password" name="password" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور" required><button class="toggle-password" type="button" data-target="password" aria-label="إظهار كلمة المرور">إظهار</button></div></div>
+      <button class="primary-btn" type="submit">تسجيل الدخول</button>
+    </form>
+    <div class="auth-links"><span>ليس لديك حساب؟</span><a href="/register">إنشاء حساب جديد</a></div>
+    <div class="secure-note"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>جلسة دخول محمية ومشفّرة</span></div>
+  </section>
+</main>
+<script>
+document.querySelectorAll(".toggle-password").forEach(function(button){button.addEventListener("click",function(){var field=document.getElementById(button.dataset.target);var show=field.type==="password";field.type=show?"text":"password";button.textContent=show?"إخفاء":"إظهار";button.setAttribute("aria-label",show?"إخفاء كلمة المرور":"إظهار كلمة المرور");});});
+</script>
 </body>
 </html>
 """
@@ -4194,156 +4134,71 @@ required
 REGISTER_HTML = """
 <!doctype html>
 <html lang="ar" dir="rtl">
-
 <head>
-
 <meta charset="utf-8">
-
-<meta
-name="viewport"
-content="width=device-width,initial-scale=1"
->
-
-<title>
-إنشاء حساب - الإمبراطورية إستوري
-</title>
-
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#21113f">
+<title>إنشاء حساب | الإمبراطورية إستوري</title>
 <style>
-
-body {
-    margin:0;
-    background:linear-gradient(135deg,#0056b3,#003366);
-    font-family:Arial,sans-serif;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    min-height:100vh;
-}
-
-.box {
-    background:white;
-    width:90%;
-    max-width:380px;
-    padding:25px;
-    border-radius:12px;
-    box-shadow:0 8px 25px rgba(0,0,0,.25);
-}
-
-input,
-button {
-    width:100%;
-    box-sizing:border-box;
-    padding:12px;
-    margin:8px 0;
-    border-radius:6px;
-    border:1px solid #ccc;
-    font-size:15px;
-}
-
-button {
-    background:linear-gradient(135deg,#007bff,#0056b3);
-    color:white;
-    border:0;
-    font-weight:bold;
-}
-
-.flash {
-    color:#d90429;
-    text-align:center;
-    font-size:13px;
-    font-weight:bold;
-}
-
-a {
-    display:block;
-    text-align:center;
-    margin-top:15px;
-    color:#a78338;
-    text-decoration:none;
-    font-weight:bold;
-}
-
-.note {
-    background:#eef6ff;
-    color:#a78338;
-    padding:10px;
-    border-radius:7px;
-    font-size:12px;
-    line-height:1.6;
-}
-
+:root{color-scheme:light;--ink:#241b39;--muted:#7b718d;--purple:#5b35a6;--gold:#d8b56a;--line:#e9e3f1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{min-height:100%;background:#21113f}
+body{margin:0;min-height:100vh;min-height:100svh;padding:24px 15px calc(22px + env(safe-area-inset-bottom));display:grid;place-items:center;position:relative;overflow-x:hidden;background:radial-gradient(ellipse at 10% 5%,rgba(137,91,209,.48),transparent 36%),radial-gradient(ellipse at 92% 90%,rgba(207,165,88,.19),transparent 32%),linear-gradient(145deg,#160d2c,#30205b 54%,#17102b);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;color:var(--ink)}
+body:before,body:after{content:"";position:fixed;pointer-events:none;border:1px solid rgba(222,190,124,.16);border-radius:50%;width:340px;height:340px;inset:auto auto -190px -170px}
+body:after{width:250px;height:250px;inset:-140px -110px auto auto}
+.auth-wrap{width:100%;max-width:470px;position:relative;z-index:1}
+.brand{text-align:center;color:#fff;margin:0 auto 17px}
+.brand-mark{width:62px;height:62px;margin:0 auto 9px;display:grid;place-items:center;border:1px solid rgba(226,193,125,.65);border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.04));box-shadow:0 12px 34px rgba(0,0,0,.22)}
+.brand-mark svg{width:36px;height:36px;fill:none;stroke:#e7c77f;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.brand h1{margin:0;font-size:24px;font-weight:950}
+.brand p{margin:5px 0 0;color:#d9cfe9;font-size:11px}
+.auth-card{padding:clamp(20px,5vw,28px);border:1px solid rgba(255,255,255,.72);border-radius:25px;background:rgba(255,255,255,.97);box-shadow:0 24px 70px rgba(5,2,18,.32)}
+.card-heading{margin:0 0 5px;font-size:22px;font-weight:900;color:#2b1b48}
+.card-subtitle{margin:0 0 17px;color:var(--muted);font-size:12px;line-height:1.7}
+.field{display:block;margin:0 0 12px}
+.field label{display:block;margin:0 2px 6px;color:#43365a;font-size:12px;font-weight:850}
+.input-wrap{position:relative}
+input{display:block;width:100%;height:50px;padding:0 13px;border:1px solid #e2dce9;border-radius:13px;background:#fbfaff;color:#241b39;font:inherit;font-size:14px;outline:none;transition:border-color .18s,box-shadow .18s}
+input::placeholder{color:#a49aaf}
+input:focus{border-color:#7955b8;box-shadow:0 0 0 4px rgba(111,75,170,.12);background:#fff}
+.password-input{padding-left:53px}
+.toggle-password{position:absolute;left:6px;top:6px;width:40px;height:38px;border:0;border-radius:10px;background:#f0ebf7;color:#634394;font-size:11px;font-weight:800}
+.pin-input{letter-spacing:7px;text-align:center;font-weight:900}
+.primary-btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:53px;margin-top:8px;border:0;border-radius:14px;background:linear-gradient(110deg,#6843ad,#39216e);box-shadow:0 9px 20px rgba(74,43,126,.22);color:#fff;font:inherit;font-size:15px;font-weight:900;cursor:pointer}
+.flash-list{margin:0 0 14px}
+.flash{margin:7px 0;padding:10px 12px;border:1px solid #f0caca;border-radius:12px;background:#fff2f1;color:#a33232;font-size:12px;line-height:1.6}
+.note{margin:0 0 16px;padding:12px 13px;border:1px solid #e8def5;border-radius:13px;background:linear-gradient(110deg,#f7f2fc,#fffaf0);color:#675477;font-size:11px;line-height:1.8}
+.note strong{color:#4e2f84}
+.auth-links{display:flex;justify-content:center;align-items:center;gap:7px;flex-wrap:wrap;margin-top:16px;color:#81758f;font-size:12px}
+.auth-links a{color:#5d389d;font-weight:900;text-decoration:none}
+@media(max-width:360px){body{padding-right:11px;padding-left:11px}.auth-card{padding:19px 15px;border-radius:21px}.brand{margin-bottom:13px}.brand-mark{width:55px;height:55px}input{height:47px}.field{margin-bottom:10px}}
+@media(max-height:760px){body{place-items:start center;padding-top:13px}.brand{margin-bottom:10px}.brand-mark{width:49px;height:49px;margin-bottom:5px}.brand-mark svg{width:30px;height:30px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-
 </head>
-
 <body>
-
-<div class="box">
-
-<h2
-style="text-align:center;color:#a78338;margin-top:0"
->
-حساب جديد
-</h2>
-
-{% with messages = get_flashed_messages() %}
-{% for message in messages %}
-
-<p class="flash">
-    {{ message }}
-</p>
-
-{% endfor %}
-{% endwith %}
-
-<div class="note">
-يبدأ الحساب دون رصيد تجاري. تتم إضافة الرصيد بعد التحقق من الدفع.
-<br>
-رقم الحساب الجديد يتكون من 7 أرقام بالضبط.
-</div>
-
-<form method="post">
-
-<input
-name="full_name"
-placeholder="الاسم الرباعي"
-required
->
-
-<input
-name="username"
-placeholder="اسم المستخدم"
-required
->
-
-<input
-name="password"
-type="password"
-placeholder="كلمة المرور"
-required
->
-
-<input
-name="pin"
-type="password"
-maxlength="4"
-inputmode="numeric"
-placeholder="رمز PIN للتحويل (4 أرقام)"
-required
->
-
-<button type="submit">
-إنشاء الحساب
-</button>
-
-</form>
-
-<a href="/login">
-العودة لتسجيل الدخول
-</a>
-
-</div>
-
+<main class="auth-wrap">
+  <header class="brand"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 4 39 10v12c0 10-6 17-15 22C15 39 9 32 9 22V10z"/><path d="m16 26 5 5 11-14"/><path d="M18 12h12"/></svg></div><h1>الإمبراطورية إستوري</h1><p>خطوتك الأولى إلى عالمك الرقمي</p></header>
+  <section class="auth-card">
+    <h2 class="card-heading">أنشئ حسابك الجديد</h2>
+    <p class="card-subtitle">أكمل البيانات التالية لبدء استخدام خدمات الإمبراطورية.</p>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash-list" role="alert" aria-live="polite">{% for message in messages %}<p class="flash">{{ message }}</p>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    <div class="note"><strong>معلومة مهمة:</strong> يبدأ الحساب دون رصيد. رقم حسابك المكوّن من 7 أرقام سيظهر بعد إتمام التسجيل، ولا تتم إضافة أي رصيد إلا بعد التحقق من الدفع.</div>
+    <form method="post" autocomplete="off">
+      <div class="field"><label for="full_name">الاسم الكامل</label><input id="full_name" name="full_name" type="text" autocomplete="name" placeholder="اكتب اسمك الكامل" maxlength="120" required></div>
+      <div class="field"><label for="username">اسم المستخدم</label><input id="username" name="username" type="text" autocomplete="username" placeholder="اختر اسم مستخدم" maxlength="50" required></div>
+      <div class="field"><label for="password">كلمة المرور</label><div class="input-wrap"><input class="password-input" id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" placeholder="8 أحرف على الأقل" required><button class="toggle-password" type="button" data-target="password">إظهار</button></div></div>
+      <div class="field"><label for="pin">رمز PIN للتحويل</label><input class="pin-input" id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" autocomplete="new-password" placeholder="••••" aria-describedby="pin-help" required><small id="pin-help" style="display:block;margin:5px 2px 0;color:#8b8098;font-size:10px">أربعة أرقام، احتفظ به ولا تشاركه مع أحد.</small></div>
+      <button class="primary-btn" type="submit">إنشاء الحساب</button>
+    </form>
+    <div class="auth-links"><span>لديك حساب بالفعل؟</span><a href="/login">تسجيل الدخول</a></div>
+  </section>
+</main>
+<script>
+document.querySelectorAll(".toggle-password").forEach(function(button){button.addEventListener("click",function(){var field=document.getElementById(button.dataset.target);var show=field.type==="password";field.type=show?"text":"password";button.textContent=show?"إخفاء":"إظهار";});});
+</script>
 </body>
 </html>
 """
