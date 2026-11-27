@@ -201,12 +201,12 @@ def init_db():
     conn.execute("UPDATE es_ledger SET account='fx:reserve' WHERE account='platform:fx_pool'")
     # Recover legacy FX reserve movements that an earlier migration placed in
     # protection:fund. Exchange posting line 2 is source-currency liquidity in,
-    # line 4 is target-currency liquidity out; line 6 is the separate fee and
+    # line 3 is target-currency liquidity out; line 6 is the separate fee and
     # intentionally remains in protection:fund. Audit references identify the
     # exact exchange transactions, so no balances are estimated.
     conn.execute("""
         UPDATE es_ledger SET account='fx:reserve'
-        WHERE account='protection:fund' AND line_no IN (2,4)
+        WHERE account='protection:fund' AND line_no IN (2,3)
           AND reference IN (
             SELECT object_ref FROM es_audit WHERE action='CURRENCY_EXCHANGE'
           )
