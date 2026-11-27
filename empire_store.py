@@ -644,7 +644,7 @@ def admin_managers():
     body=render_template_string("""<section class='panel'><span class='tag'>صلاحيات تحت سيطرة المالك</span><h1>إدارة المدير العام</h1>
       <p>أنشئ حساباً مستقلاً، ثم اختر بدقة الوحدات التي يستطيع إدارتها. لا يستطيع المدير إنشاء مديرين أو تعديل صلاحياته.</p>
       <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='create'>
-      <h2>إنشاء حساب مدير جديد</h2><label>رقم الحساب (اختياري — اتركه فارغاً للتوليد التلقائي)</label><input name='account_number' inputmode='numeric' pattern='[1-9][0-9]{6}' maxlength='7' placeholder='9274618'><label>الاسم الكامل</label><input name='full_name' maxlength='120' required>
+      <h2>إنشاء حساب المدير العام</h2><label>رقم الحساب</label><input name='account_number' inputmode='numeric' pattern='[1-9][0-9]{6}' maxlength='7' value='9274618' required><label>الاسم الكامل</label><input name='full_name' maxlength='120' value='المدير العام للإمبراطورية' required>
       <label>كلمة مرور أولية (10 أحرف على الأقل)</label><input name='password' type='password' minlength='10' maxlength='72' autocomplete='new-password' required>
       <h3>الصلاحيات الممنوحة</h3>{% for key,label in permissions %}<label class='permission-choice'><input type='checkbox' name='permissions' value='{{key}}'>{{label}}</label>{% endfor %}
       <button>إنشاء حساب المدير</button></form>
@@ -1826,7 +1826,7 @@ def admin_code_inventory():
         if not product:
             flash("الباقة المحددة غير موجودة.")
             return redirect(url_for("empire.admin_code_inventory"))
-        normalized=[re.sub(r"\\s+","",code).upper() for code in codes]
+        normalized=[re.sub(r"\s+","",code).upper() for code in codes]
         if any(not 4<=len(code)<=300 for code in normalized) or len(set(normalized))!=len(normalized):
             flash("تحقق من الأكواد: طول كل كود 4–300 حرف ولا يجوز تكرار كود داخل الدفعة.")
             return redirect(url_for("empire.admin_code_inventory"))
