@@ -1734,7 +1734,10 @@ def exchange_quote():
                 fee=platform_fee(amount)
                 data.update({"valid":converted>0,"amount":amount,"converted":converted,"fee":fee,
                              "total_debit":amount+fee,"message":"المعاينة محدثة من أرصدة النظام الحالية."})
-    return jsonify(data)
+    response=jsonify(data)
+    response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"]="no-cache"
+    return response
 
 
 @empire_bp.route("/exchange",methods=["GET","POST"])
