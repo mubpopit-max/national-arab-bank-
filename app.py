@@ -3,6 +3,7 @@ import re
 import secrets
 import sqlite3
 import json
+import io
 import urllib.request
 import urllib.error
 
@@ -11,6 +12,7 @@ from datetime import datetime, timezone
 from functools import wraps
 
 import bcrypt
+from PIL import Image, UnidentifiedImageError
 from dotenv import load_dotenv
 
 from flask import (
@@ -52,6 +54,7 @@ app.secret_key = SECRET_KEY
 UPLOAD_FOLDER = os.path.abspath("static/uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 def allowed_file(filename):
@@ -1396,9 +1399,15 @@ def account_funding():
                 "method", "BANKAK"
             ).strip()
 
+            if method not in {"BANKAK", "MY_CASHI", "BANK_TRANSFER"}:
+                raise ValueError("وسيلة التحويل غير معتمدة.")
+
             operation_number = request.form.get(
                 "operation_number", ""
             ).strip()
+
+            if not operation_number or len(operation_number) > 100:
+                raise ValueError("رقم العملية مطلوب ويجب ألا يتجاوز 100 حرف.")
 
             note = request.form.get(
                 "note", ""
@@ -1441,52 +1450,44 @@ def account_funding():
                     "رقم العملية هذا تم تسجيله مسبقاً."
                 )
 
-            file_ext = (
-                file.filename.rsplit(".", 1)[1]
-                .lower()
-            )
+            raw_image = file.read(5 * 1024 * 1024 + 1)
+            if len(raw_image) > 5 * 1024 * 1024:
+                raise ValueError("حجم صورة الإيصال يجب ألا يتجاوز 5 ميغابايت.")
 
-            secure_filename_str = (
-                f"rec_{secrets.token_hex(16)}.{file_ext}"
-            )
-
-            file_path = os.path.join(
-                UPLOAD_FOLDER,
-                secure_filename_str,
-            )
-
-            file.save(file_path)
+            try:
+                source = Image.open(io.BytesIO(raw_image))
+                source.verify()
+                source = Image.open(io.BytesIO(raw_image))
+                if source.width > 5000 or source.height > 5000:
+                    raise ValueError("أبعاد صورة الإيصال أكبر من المسموح.")
+                secure_filename_str = f"rec_{secrets.token_hex(16)}.jpg"
+                file_path = os.path.join(UPLOAD_FOLDER, secure_filename_str)
+                source.convert("RGB").save(file_path, "JPEG", quality=88, optimize=True)
+            except (UnidentifiedImageError, OSError):
+                raise ValueError("الملف المرفوع ليس صورة صالحة.")
 
             reference = generate_reference()
 
-            database.execute(
-                """
-                INSERT INTO funding_requests (
-                    reference,
-                    username,
-                    account_number,
-                    amount,
-                    method,
-                    operation_number,
-                    receipt_image_path,
-                    note,
-                    status,
-                    created_at
+            try:
+                database.execute(
+                    """
+                    INSERT INTO funding_requests (
+                        reference, username, account_number, amount, method,
+                        operation_number, receipt_image_path, note, status, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                    """,
+                    (
+                        reference, user["username"], user["account_number"], amount,
+                        method, operation_number, secure_filename_str, note[:500], now(),
+                    ),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
-                """,
-                (
-                    reference,
-                    user["username"],
-                    user["account_number"],
-                    amount,
-                    method,
-                    operation_number,
-                    secure_filename_str,
-                    note[:500],
-                    now(),
-                ),
-            )
+            except Exception:
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+                raise
 
             create_notification(
                 database,
@@ -4886,342 +4887,85 @@ class="action-btn"
 
 
 FUNDING_HTML = """
-<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>تغذية الحساب - الإمبراطورية إستوري</title>
+<!doctype html><html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f4f8fb">
+<title>تغذية الحساب | الإمبراطورية إستوري</title>
 <style>
-body {
-    margin:0;
-    background:#f0f2f5;
-    font-family:Arial;
-}
-.top-header {
-    background:linear-gradient(135deg,#007bff,#0056b3);
-    padding:12px 15px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    color:white;
-}
-.top-header h2 {
-    margin:0;
-    font-size:18px;
-}
-.back-btn {
-    background:white;
-    color:#a78338;
-    padding:5px 12px;
-    border-radius:4px;
-    text-decoration:none;
-    font-weight:bold;
-    font-size:12px;
-}
-.form-box {
-    max-width:450px;
-    margin:20px auto;
-    background:white;
-    padding:20px;
-    border-radius:8px;
-    border:1px solid #ddd;
-}
-.input-row {
-    margin-bottom:12px;
-}
-.input-row label {
-    display:block;
-    font-size:13px;
-    font-weight:bold;
-    color:#a78338;
-    margin-bottom:5px;
-}
-.input-row input, .input-row select, .input-row textarea {
-    width:100%;
-    box-sizing:border-box;
-    border:1px solid #ccc;
-    border-radius:6px;
-    padding:10px;
-    font-size:14px;
-}
-.submit-btn {
-    background:linear-gradient(135deg,#007bff,#0056b3);
-    color:white;
-    border:0;
-    padding:12px;
-    border-radius:6px;
-    font-weight:bold;
-    width:100%;
-    cursor:pointer;
-}
-.flash {
-    color:#d90429;
-    font-size:13px;
-    font-weight:bold;
-    text-align:center;
-    margin-bottom:10px;
-}
-.info-box {
-    background:#eef6ff;
-    color:#a78338;
-    padding:12px;
-    border-radius:6px;
-    font-size:13px;
-    line-height:1.6;
-    margin-bottom:15px;
-    text-align:center;
-}
-.requests-list {
-    max-width:450px;
-    margin:20px auto;
-    background:white;
-    padding:15px;
-    border-radius:8px;
-    border:1px solid #ddd;
-}
-.req-item {
-    border-bottom:1px solid #eee;
-    padding:10px 0;
-    font-size:13px;
-}
-.req-item:last-child {
-    border-bottom:0;
-}
-</style>
-</head>
-<body>
-
-<div class="top-header">
-    <h2>تغذية الحساب</h2>
-    <a href="/account" class="back-btn">رجوع 〉</a>
-</div>
-
-<div class="form-box">
-    {% with messages = get_flashed_messages() %}
-        {% for message in messages %}
-            <p class="flash">{{ message }}</p>
-        {% endfor %}
-    {% endwith %}
-
-    <div class="info-box">
-        <strong>حساب الاستقبال المعتمد للتحويل:</strong><br>
-        <span style="font-size:20px;font-weight:bold;color:#00a65a;">NATIONAL ARAB BANK</span><br>
-        رقم الحساب: <strong style="font-size:18px;">{{ receive_account }}</strong><br>
-        <small>يرجى التحويل أولاً ثم إدخال رقم العملية ورفع الإشعار أدناه.</small>
-    </div>
-
-    <form method="post" enctype="multipart/form-data">
-        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-
-        <div class="input-row">
-            <label>طريقة الدفع</label>
-            <select name="method">
-                <option value="BANKAK">بنكك (BANKAK)</option>
-                <option value="MY_CASHI">ماي كاشي (MY_CASHI)</option>
-                <option value="BANK_TRANSFER">تحويل بنكي مباشر (BANK TRANSFER)</option>
-            </select>
-        </div>
-
-        <div class="input-row">
-            <label>المبلغ (SDG)</label>
-            <input type="number" name="amount" min="1" step="1" placeholder="أدخل المبلغ المحول" required>
-        </div>
-
-        <div class="input-row">
-            <label>رقم العملية (إلزامي) *</label>
-            <input type="text" name="operation_number" placeholder="أدخل رقم العملية البنكية" required>
-        </div>
-
-        <div class="input-row">
-            <label>صورة إشعار التحويل (إلزامي) *</label>
-            <input type="file" name="receipt_image" accept="image/png, image/jpeg, image/jpg, image/webp" required>
-        </div>
-
-        <div class="input-row">
-            <label>ملاحظات (اختياري)</label>
-            <textarea name="note" placeholder="أي تفاصيل إضافية..." rows="2"></textarea>
-        </div>
-
-        <button type="submit" class="submit-btn">إرسال طلب التغذية</button>
-    </form>
-</div>
-
-<div class="requests-list">
-    <h3 style="font-size:15px;color:#a78338;margin-top:0;">طلبات التغذية السابقة</h3>
-    {% for req in user_requests %}
-        <div class="req-item">
-            <div><strong>مرجع الطلب:</strong> {{ req["reference"] }}</div>
-            <div><strong>المبلغ:</strong> {{ money(req["amount"]) }} SDG</div>
-            <div><strong>رقم العملية:</strong> {{ req["operation_number"] }}</div>
-            <div><strong>الحالة:</strong> 
-                <span style="color: {% if req['status'] == 'APPROVED' %}#00a65a{% elif req['status'] == 'REJECTED' %}#d90429{% else %}#ffc107{% endif %}; font-weight:bold;">
-                    {{ req["status"] }}
-                </span>
-            </div>
-            <small style="color:#888;">{{ req["created_at"][:19] }}</small>
-        </div>
-    {% else %}
-        <p style="font-size:13px;color:#666;text-align:center;">لا توجد طلبات تغذية سابقة.</p>
-    {% endfor %}
-</div>
-
-</body>
-</html>
+:root{color-scheme:light;--ink:#18364b;--muted:#718496;--blue:#0876b9;--green:#16834f;--line:#e3ebf1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;background:#f4f8fb;color:var(--ink);font:15px/1.65 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
+a{color:var(--blue);text-decoration:none}.top-header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
+.top-header h2{margin:0;font-size:17px;font-weight:900;color:#153d5b}.back-btn{padding:9px 13px;border-radius:12px;background:#edf5fa;color:#075b91;font-weight:800;font-size:12px}
+.page{width:min(100% - 24px,620px);margin:18px auto 36px}.hero{padding:22px;border-radius:24px;background:linear-gradient(125deg,#073b69,#086da5 58%,#16834f);color:#fff;box-shadow:0 14px 30px rgba(5,63,103,.14)}
+.hero small{display:block;color:#d8edf8;font-weight:700}.hero h1{margin:6px 0;color:#fff;font-size:24px}.hero p{margin:0;color:#e5f3fa;font-size:13px}
+.card{margin-top:14px;padding:18px;border:1px solid var(--line);border-radius:20px;background:#fff;box-shadow:0 4px 16px rgba(24,60,85,.045)}.card h2{margin:0 0 12px;color:#183d56;font-size:17px}
+.account-card{border:1px solid #b9dfcd;background:linear-gradient(145deg,#f0faf4,#fff);border-radius:17px;padding:16px}.account-card .bank{color:#16834f;font-size:12px;font-weight:900;letter-spacing:.5px}
+.account-number{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}.account-number strong{font-size:clamp(25px,7vw,32px);letter-spacing:2px;color:#153d5b;font-variant-numeric:tabular-nums;direction:ltr}
+.copy-btn{flex:0 0 auto;min-height:38px;padding:7px 12px;border:1px solid #cfe4d8;border-radius:11px;background:#fff;color:#16834f;font-weight:850}
+.notice{margin:12px 0 0;padding:11px 12px;border-radius:12px;background:#fff8e8;color:#805b16;font-size:12px}
+label{display:block;margin:12px 0 5px;color:#36576c;font-size:13px;font-weight:800}
+input,select,textarea{display:block;width:100%;min-height:48px;padding:12px 13px;border:1px solid #d8e4ec;border-radius:13px;background:#f8fbfd;color:#18364b;font:inherit}
+input:focus,select:focus,textarea:focus{outline:3px solid rgba(8,118,185,.13);border-color:#1684bd}textarea{min-height:84px;resize:vertical}input[type=file]{padding:10px;background:#fff}
+.preview{display:none;width:100%;max-height:260px;object-fit:contain;margin-top:10px;border:1px solid var(--line);border-radius:14px;background:#f8fbfd}
+.submit-btn{display:flex;width:100%;min-height:50px;align-items:center;justify-content:center;margin-top:18px;border:0;border-radius:14px;background:linear-gradient(110deg,#0876b9,#16834f);color:#fff;font:850 15px system-ui;box-shadow:0 8px 18px rgba(8,118,185,.16)}
+.flash{margin:10px 0;padding:12px 14px;border-radius:12px;background:#fff1f0;color:#a92f2b;font-weight:750;font-size:13px}
+.request{padding:14px 0;border-bottom:1px solid #edf1f4}.request:last-child{border-bottom:0}.request-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.status{display:inline-flex;padding:4px 10px;border-radius:30px;background:#fff5df;color:#946313;font-size:11px;font-weight:900}.status.APPROVED{background:#eaf6ef;color:#137344}.status.REJECTED{background:#fff0ef;color:#b43c38}
+.request p{margin:6px 0;color:#526b7d;font-size:12px}.empty{text-align:center;padding:20px;color:var(--muted);font-size:13px}
+@media(max-width:380px){.page{width:calc(100% - 18px)}.card{padding:14px}.hero{padding:18px}}
+</style></head><body>
+<header class="top-header"><h2>تغذية حسابي</h2><a href="/store/" class="back-btn">العودة للرئيسية</a></header>
+<main class="page">
+{% with messages = get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
+<section class="hero"><small>EMPIRE E-STORY · ACCOUNT FUNDING</small><h1>أضف رصيداً إلى حسابك</h1><p>حوّل إلى حساب الاستقبال المعتمد، ثم أرسل بيانات العملية والإيصال للمراجعة.</p></section>
+<section class="card"><h2>حساب التحويل المعتمد</h2><div class="account-card"><div class="bank">NATIONAL ARAB BANK</div><div class="account-number"><strong id="receiveAccount">{{ receive_account }}</strong><button class="copy-btn" type="button" id="copyAccount">نسخ الرقم</button></div><small>حساب الاستقبال المعتمد لتغذية الحسابات.</small></div>
+<div class="notice">أتمم التحويل أولاً. لا تتم إضافة الرصيد تلقائياً؛ تتم الإضافة بعد مراجعة الإيصال ورقم العملية واعتماد الطلب من المالك.</div></section>
+<section class="card"><h2>إرسال طلب التغذية</h2><form method="post" enctype="multipart/form-data" id="fundingForm">
+<input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<label for="method">وسيلة التحويل</label><select name="method" id="method" required><option value="BANKAK">بنكك (BANKAK)</option><option value="MY_CASHI">ماي كاشي (MY_CASHI)</option><option value="BANK_TRANSFER">تحويل بنكي مباشر</option></select>
+<label for="amount">المبلغ المحوّل (SDG)</label><input type="number" name="amount" id="amount" min="1" step="1" inputmode="numeric" placeholder="أدخل المبلغ" required>
+<label for="operation_number">رقم العملية البنكية</label><input type="text" name="operation_number" id="operation_number" maxlength="100" autocomplete="off" placeholder="أدخل رقم العملية كما يظهر في الإشعار" required>
+<label for="receipt_image">صورة إشعار التحويل</label><input type="file" name="receipt_image" id="receipt_image" accept="image/png,image/jpeg,image/webp" required><img class="preview" id="receiptPreview" alt="معاينة إيصال التحويل">
+<label for="note">ملاحظات إضافية (اختياري)</label><textarea name="note" id="note" maxlength="500" placeholder="أي معلومات تساعد في مراجعة العملية"></textarea>
+<button class="submit-btn" type="submit">إرسال طلب التغذية للمراجعة</button></form></section>
+<section class="card"><h2>سجل طلبات التغذية</h2>{% for req in user_requests %}
+<div class="request"><div class="request-top"><b>{{ req["reference"] }}</b><span class="status {{ req['status'] }}">{{ "معتمد" if req["status"]=="APPROVED" else ("مرفوض" if req["status"]=="REJECTED" else "قيد المراجعة") }}</span></div>
+<p>المبلغ: <b>{{ money(req["amount"]) }} SDG</b> · رقم العملية: {{ req["operation_number"] }}</p><p>{{ req["created_at"][:19] }}</p>{% if req["founder_note"] %}<p>ملاحظة الإدارة: {{ req["founder_note"] }}</p>{% endif %}</div>
+{% else %}<div class="empty">لا توجد طلبات تغذية سابقة.</div>{% endfor %}</section></main>
+<script>(function(){const copy=document.getElementById('copyAccount'),account=document.getElementById('receiveAccount');if(copy&&account){copy.addEventListener('click',async function(){try{await navigator.clipboard.writeText(account.textContent.trim());copy.textContent='تم النسخ';}catch(e){copy.textContent='انسخ الرقم يدوياً';}});}const input=document.getElementById('receipt_image'),preview=document.getElementById('receiptPreview');if(input&&preview){input.addEventListener('change',function(){const f=input.files&&input.files[0];if(!f){preview.removeAttribute('src');preview.style.display='none';return;}if(!/^image\\/(png|jpeg|webp)$/.test(f.type)){input.value='';preview.style.display='none';return;}preview.src=URL.createObjectURL(f);preview.style.display='block';});}const form=document.getElementById('fundingForm');if(form){form.addEventListener('submit',function(){const b=form.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='جارٍ إرسال الطلب…';}});}})();</script>
+</body></html>
 """
-
 
 FOUNDER_PANEL_HTML = """
-<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>لوحة المؤسس - مراجعة التغذية</title>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f4f8fb"><title>مركز المالك | مراجعة التغذية</title>
 <style>
-body {
-    margin:0;
-    background:#f0f2f5;
-    font-family:Arial;
-}
-.top-header {
-    background:linear-gradient(135deg,#0056b3,#003366);
-    padding:12px 15px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    color:white;
-}
-.top-header h2 {
-    margin:0;
-    font-size:18px;
-}
-.back-btn {
-    background:white;
-    color:#a78338;
-    padding:5px 12px;
-    border-radius:4px;
-    text-decoration:none;
-    font-weight:bold;
-    font-size:12px;
-}
-.content {
-    max-width:700px;
-    margin:20px auto;
-    padding:0 10px;
-}
-.card {
-    background:white;
-    border-radius:8px;
-    border:1px solid #ddd;
-    padding:20px;
-    margin-bottom:15px;
-}
-.flash {
-    color:#d90429;
-    font-weight:bold;
-    font-size:13px;
-    text-align:center;
-    margin-bottom:10px;
-}
-table {
-    width:100%;
-    border-collapse:collapse;
-    margin-top:10px;
-    font-size:13px;
-}
-th, td {
-    border:1px solid #ddd;
-    padding:8px;
-    text-align:right;
-}
-th {
-    background:#f8f9fa;
-    color:#a78338;
-}
-.btn-approve {
-    background:#00a65a;
-    color:white;
-    border:0;
-    padding:6px 12px;
-    border-radius:4px;
-    cursor:pointer;
-    font-weight:bold;
-}
-.btn-reject {
-    background:#d90429;
-    color:white;
-    border:0;
-    padding:6px 12px;
-    border-radius:4px;
-    cursor:pointer;
-    font-weight:bold;
-}
-.actions-form {
-    display:flex;
-    flex-direction:column;
-    gap:5px;
-}
-</style>
-</head>
-<body>
-
-<div class="top-header">
-    <h2>لوحة المؤسس - مراجعة طلبات التغذية</h2>
-    <a href="/account" class="back-btn">رجوع للبنك 〉</a>
-</div>
-
-<div class="content">
-
-    {% with messages = get_flashed_messages() %}
-        {% for message in messages %}
-            <p class="flash">{{ message }}</p>
-        {% endfor %}
-    {% endwith %}
-
-    <div class="card">
-        <h3 style="margin-top:0;color:#a78338;">حساب المؤسس</h3>
-        <p><strong>رقم الحساب:</strong> {{ founder_user["account_number"] }}</p>
-        <p><strong>الرصيد الحالي:</strong> <span style="color:#00a65a;font-weight:bold;">{{ money(founder_user["balance"]) }} SDG</span></p>
-    </div>
-
-    <div class="card">
-        <h3 style="margin-top:0;color:#a78338;">الطلبات المعلقة ({{ pending_requests|length }})</h3>
-        {% if pending_requests %}
-            {% for req in pending_requests %}
-                <div style="border-bottom:1px solid #eee; padding:15px 0;">
-                    <p><strong>مرجع الطلب:</strong> {{ req["reference"] }}</p>
-                    <p><strong>اسم المستخدم:</strong> {{ req["username"] }} | <strong>رقم الحساب:</strong> {{ req["account_number"] }}</p>
-                    <p><strong>المبلغ:</strong> <span style="color:#00a65a;font-weight:bold;">{{ money(req["amount"]) }} SDG</span></p>
-                    <p><strong>طريقة الدفع:</strong> {{ req["method"] }} | <strong>رقم العملية:</strong> {{ req["operation_number"] }}</p>
-                    <p><strong>إشعار التحويل:</strong> <a href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" style="color:#a78338;font-weight:bold;">عرض صورة الإشعار</a></p>
-                    <p><strong>ملاحظة العميل:</strong> {{ req["note"] or 'لا توجد ملاحظات' }}</p>
-                    <p><strong>وقت الطلب:</strong> {{ req["created_at"][:19] }}</p>
-
-                    <form method="post" class="actions-form">
-                        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-                        <input type="hidden" name="funding_id" value="{{ req['id'] }}">
-                        <input type="text" name="founder_note" placeholder="ملاحظة المؤسس عند الاعتماد أو الرفض" style="padding:6px;border:1px solid #ccc;border-radius:4px;">
-                        <div style="display:flex;gap:10px;margin-top:5px;">
-                            <button type="submit" name="action" value="approve" class="btn-approve">اعتماد وإضافة الرصيد</button>
-                            <button type="submit" name="action" value="reject" class="btn-reject">رفض الطلب</button>
-                        </div>
-                    </form>
-                </div>
-            {% endfor %}
-        {% else %}
-            <p style="color:#666;text-align:center;">لا توجد طلبات تغذية معلقة حالياً.</p>
-        {% endif %}
-    </div>
-
-</div>
-
-</body>
-</html>
+:root{--ink:#18364b;--muted:#718496;--blue:#0876b9;--green:#16834f;--line:#e3ebf1}*{box-sizing:border-box}body{margin:0;background:#f4f8fb;color:var(--ink);font:14px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
+.top-header{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 16px;background:#fff;border-bottom:1px solid var(--line)}.top-header h2{margin:0;font-size:16px;color:#153d5b}.back-btn{padding:8px 12px;border-radius:11px;background:#edf5fa;color:#075b91;text-decoration:none;font-weight:800;font-size:12px}
+.content{width:min(100% - 24px,900px);margin:18px auto 40px}.hero{padding:20px;border-radius:22px;background:linear-gradient(125deg,#073b69,#086da5 58%,#16834f);color:#fff}.hero h1{margin:0;color:#fff;font-size:23px}.hero p{margin:5px 0 0;color:#e1f1f8}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.stat,.card{padding:16px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:0 4px 14px rgba(24,60,85,.04)}.stat small{color:var(--muted)}.stat strong{display:block;margin-top:5px;font-size:23px;color:#0876b9}
+.card{margin:13px 0}.card h2{margin:0 0 10px;font-size:17px;color:#183d56}.request{padding:16px 0;border-bottom:1px solid #edf1f4}.request:last-child{border-bottom:0}
+.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.detail{padding:10px;border-radius:11px;background:#f7fafc;min-width:0}.detail small{display:block;color:var(--muted);font-size:11px}.detail b{overflow-wrap:anywhere}
+.receipt{display:inline-flex;align-items:center;gap:7px;margin:10px 0;padding:9px 12px;border-radius:11px;background:#eaf4fb;color:#075b91;text-decoration:none;font-weight:850}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.actions input{grid-column:1/-1}
+input{width:100%;min-height:43px;padding:10px 12px;border:1px solid #d8e4ec;border-radius:11px;background:#f8fbfd;font:inherit}button{min-height:44px;padding:9px 12px;border:0;border-radius:11px;color:#fff;font-weight:850;font:inherit;cursor:pointer}.approve{background:#16834f}.reject{background:#c74440}
+.flash{padding:12px;border-radius:11px;background:#fff1f0;color:#a92f2b;font-weight:750}.status{display:inline-flex;padding:4px 10px;border-radius:30px;background:#fff5df;color:#946313;font-size:11px;font-weight:900}.status.APPROVED{background:#eaf6ef;color:#137344}.status.REJECTED{background:#fff0ef;color:#b43c38}.empty{padding:22px;text-align:center;color:var(--muted)}
+@media(max-width:560px){.stats{grid-template-columns:1fr 1fr}.details{grid-template-columns:1fr}.content{width:calc(100% - 18px)}}
+</style></head><body><header class="top-header"><h2>مركز المالك · طلبات التغذية</h2><a href="/store/admin" class="back-btn">لوحة المنصة</a></header>
+<main class="content">{% with messages = get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
+<section class="hero"><h1>مراجعة طلبات تغذية الحسابات</h1><p>افحص صورة الإيصال ورقم العملية قبل اعتماد أي مبلغ.</p></section>
+<section class="stats"><div class="stat"><small>رصيد حساب المالك</small><strong>{{ money(founder_user["balance"]) }} SDG</strong></div><div class="stat"><small>طلبات معلقة</small><strong>{{ pending_requests|length }}</strong></div><div class="stat"><small>إجمالي الطلبات المعروضة</small><strong>{{ all_requests|length }}</strong></div></section>
+<section class="card"><h2>الطلبات بانتظار المراجعة</h2>{% for req in pending_requests %}
+<article class="request"><div class="details"><div class="detail"><small>مرجع الطلب</small><b>{{ req["reference"] }}</b></div><div class="detail"><small>العميل</small><b>{{ req["username"] }}</b></div><div class="detail"><small>رقم حساب العميل</small><b dir="ltr">{{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ المطلوب</small><b>{{ money(req["amount"]) }} SDG</b></div><div class="detail"><small>وسيلة التحويل</small><b>{{ req["method"] }}</b></div><div class="detail"><small>رقم العملية البنكية</small><b dir="ltr">{{ req["operation_number"] }}</b></div><div class="detail"><small>تاريخ الطلب</small><b>{{ req["created_at"][:19] }}</b></div><div class="detail"><small>ملاحظة العميل</small><b>{{ req["note"] or "لا توجد" }}</b></div></div>
+<a class="receipt" href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" rel="noopener">عرض صورة إيصال التحويل</a>
+<form method="post" class="actions"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="funding_id" value="{{ req['id'] }}"><input type="text" name="founder_note" maxlength="500" placeholder="ملاحظة للعميل (اختياري)"><button type="submit" name="action" value="approve" class="approve">اعتماد وإضافة الرصيد</button><button type="submit" name="action" value="reject" class="reject">رفض الطلب</button></form></article>
+{% else %}<div class="empty">لا توجد طلبات تغذية معلقة حالياً.</div>{% endfor %}</section>
+<section class="card"><h2>سجل طلبات التغذية السابقة</h2>{% for req in all_requests %}
+<article class="request"><div class="request-top"><b>{{ req["reference"] }}</b> <span class="status {{ req['status'] }}">{{ "معتمد" if req["status"]=="APPROVED" else ("مرفوض" if req["status"]=="REJECTED" else "قيد المراجعة") }}</span></div>
+<div class="details"><div class="detail"><small>العميل / الحساب</small><b>{{ req["username"] }} · {{ req["account_number"] }}</b></div><div class="detail"><small>المبلغ ورقم العملية</small><b>{{ money(req["amount"]) }} SDG · {{ req["operation_number"] }}</b></div></div>
+<a class="receipt" href="/founder/receipt_image/{{ req['receipt_image_path'] }}" target="_blank" rel="noopener">فتح الإيصال</a>{% if req["founder_note"] %}<p>ملاحظة المالك: {{ req["founder_note"] }}</p>{% endif %}</article>
+{% else %}<div class="empty">لا يوجد سجل بعد.</div>{% endfor %}</section></main></body></html>
 """
 
-
-TRANSFER_INDEX_HTML = """
+TRANSFER_INDEX_HTML = "
 <!doctype html>
 <html lang="ar" dir="rtl">
 
