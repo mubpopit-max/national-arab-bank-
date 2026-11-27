@@ -582,8 +582,7 @@ def admin_managers():
                 db().execute("INSERT INTO es_manager_permissions(username,permission,granted_by,created_at) VALUES(?,?,?,?)",
                              (username,permission,user()["username"],now()))
             audit(user()["username"],"MANAGER_CREATED","manager",account,"permissions="+",".join(permissions))
-            session["new_manager_credentials"]={"account":account,"password":password}
-            flash("تم إنشاء حساب المدير. احفظ بيانات الدخول الآن؛ لن تظهر كلمة المرور مرة أخرى.")
+            flash("تم إنشاء حساب المدير بنجاح. رقم الحساب: "+account+" · كلمة المرور هي التي أدخلتها عند الإنشاء.")
             return redirect(url_for("empire.admin_managers"))
         elif action=="permissions":
             account=(request.form.get("account_number") or "").strip()
@@ -625,10 +624,8 @@ def admin_managers():
         item=dict(row)
         item["permissions"]=[x["permission"] for x in db().execute("SELECT permission FROM es_manager_permissions WHERE username=? ORDER BY permission",(row["username"],)).fetchall()]
         managers.append(item)
-    new_credentials=session.pop("new_manager_credentials",None)
     body=render_template_string("""<section class='panel'><span class='tag'>صلاحيات تحت سيطرة المالك</span><h1>إدارة المدير العام</h1>
       <p>أنشئ حساباً مستقلاً، ثم اختر بدقة الوحدات التي يستطيع إدارتها. لا يستطيع المدير إنشاء مديرين أو تعديل صلاحياته.</p>
-      {% if fresh %}<div class='premium-banner'><b>تم إنشاء حساب المدير بنجاح</b><p>رقم الحساب: <strong dir='ltr'>{{fresh['account']}}</strong></p><p>كلمة المرور: <strong dir='ltr'>{{fresh['password']}}</strong></p><small>انسخ البيانات واحفظها في مكان آمن. لن تظهر مرة أخرى.</small><button type='button' class='btn secondary' onclick='navigator.clipboard.writeText("{{fresh['account']}}\\n{{fresh['password']}}")'>نسخ بيانات الدخول</button></div>{% endif %}
       <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='create'>
       <h2>إنشاء حساب مدير جديد</h2><label>الاسم الكامل</label><input name='full_name' maxlength='120' required>
       <label>كلمة مرور أولية (10 أحرف على الأقل)</label><input name='password' type='password' minlength='10' maxlength='72' autocomplete='new-password' required>
@@ -639,7 +636,7 @@ def admin_managers():
       <b>تعديل الصلاحيات</b>{% for key,label in permissions %}<label class='permission-choice'><input type='checkbox' name='permissions' value='{{key}}' {% if key in x['permissions'] %}checked{% endif %}>{{label}}</label>{% endfor %}<button>حفظ الصلاحيات</button></form>
       <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='reset_password'><input type='hidden' name='account_number' value='{{x['account_number']}}'><label>تعيين كلمة مرور جديدة</label><input type='password' name='password' minlength='10' maxlength='72' required><button>تغيير كلمة المرور</button></form>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='toggle'><input type='hidden' name='account_number' value='{{x['account_number']}}'><button class='btn secondary'>{{'إيقاف الحساب' if x['active'] else 'إعادة تفعيل الحساب'}}</button></form></article>{% else %}<p>لم يتم إنشاء مديرين بعد.</p>{% endfor %}</section>""",
-      managers=managers,permissions=list(allowed_permissions.items()),fresh=new_credentials,csrf=session.get("csrf",""))
+      managers=managers,permissions=list(allowed_permissions.items()),csrf=session.get("csrf",""))
     return page("إدارة المدير العام",body)
 
 @empire_bp.route("/ice-empire",methods=["GET","POST"])
@@ -686,7 +683,8 @@ def ice_empire():
     body=render_template_string("""<section class='ice-hero'><span class='ice-brand'>آيس ستوري × الإمبراطورية إستوري</span><h1>مرحباً بك في إمبراطورية الثلج</h1><p>مساحة خاصة لعملاء آيس ستوري المميزين.</p><div class='empire-slogans'><article><b>إمبراطورية النار</b><strong>هنا تصنع مجدك</strong></article><article><b>إمبراطورية الثلج</b><strong>متجرك وأكثر</strong></article></div></section>
       {% if member %}<section class='premium-banner'><span class='ice-badge'>❄ عميل مميز</span><h2>أهلاً بك في نادي العملاء المميزين</h2><p>نقاط الولاء</p><strong class='loyalty-points'>{{'{:,}'.format(member['points'])}}</strong><small>عضوية مفعلة منذ {{member['joined_at'][:10]}}</small></section>
       {% else %}<section class='panel'><h2>فعّل شارتك الثلجية</h2><p>أدخل الكود الخاص الذي حصلت عليه من آيس ستوري على واتساب، ثم اضغط تحقق.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>كود عميل آيس ستوري</label><input name='code' maxlength='16' placeholder='ICE-XXXXXXXXXXXX' autocapitalize='characters' autocomplete='off' required><button>تحقق وتفعيل العضوية</button></form></section>{% endif %}
-      <section class='panel'><h2>عملاء آيس ستوري المميزون</h2><p>مجتمع العملاء الذين فعّلوا عضويتهم بكود صحيح.</p><div class='premium-list'>{% for x in customers %}<div class='premium-customer'><span class='ice-mini'>❄</span><b>{{x['full_name']}}</b><span class='tag'>عميل مميز</span></div>{% else %}<p>كن أول المنضمين إلى النادي.</p>{% endfor %}</div></section>""",
+      <section class='panel'><h2>عملاء آيس ستوري المميزون</h2><p>مجتمع العملاء الذين فعّلوا عضويتهم بكود صحيح.</p><div class='premium-list'>{% for x in customers %}<div class='premium-customer'><span class='ice-mini'>❄</span><b>{{x['full_name']}}</b><span class='tag'>عميل مميز</span></div>{% else %}<p>كن أول المنضمين إلى النادي.</p>{% endfor %}</div></section>
+      <section class='panel ice-footer-note'><h2>آيس ستوري × الإمبراطورية إستوري</h2><p>امبراطورية النار</p><strong>هنا تصنع مجدك</strong><p>امبراطورية الثلج</p><strong>متجرك وأكثر</strong></section>""",
       member=member,customers=customers,csrf=session.get("csrf",""))
     return page("آيس ستوري · إمبراطورية الثلج",body)
 
@@ -1413,7 +1411,7 @@ def admin():
       "funding":db().execute("SELECT COUNT(*) n FROM funding_requests WHERE status='PENDING'").fetchone()["n"],
       "market_orders":db().execute("SELECT COUNT(*) n FROM es_market_orders WHERE status IN ('ESCROWED','DELIVERED','DISPUTED')").fetchone()["n"]
     }
-    body=render_template_string("""<section class='hero'><div><span class='hero-kicker'>OWNER CONTROL CENTER</span><h1>مركز قيادة الإمبراطورية</h1><p>لوحة المالك الشاملة لإدارة الأصول والخدمات والعمليات المالية.</p><span class='tag'>رقم حساب المالك: {{owner_account}}</span></div><div class='hero-character'><div class='metric'><small>الأصول الرقمية للمالك</small><strong>{{'{:,}'.format(owner_urc)}} URC</strong><small>الأصول النقدية: {{'{:,}'.format(owner_sdg)}} SDG</small></div></div></section>
+    body=render_template_string("""{% if is_founder %}<section class='hero'><div><span class='hero-kicker'>SUDAN DIGITAL FINANCE · OWNER</span><h1>مركز قيادة الإمبراطورية</h1><p>إدارة الأصول والخدمات والعمليات المالية.</p><span class='tag'>رقم حساب المالك: {{owner_account}}</span></div><div class='hero-character'><div class='metric'><small>الأصول الرقمية للمالك</small><strong>{{'{:,}'.format(owner_urc)}} URC</strong><small>الأصول النقدية: {{'{:,}'.format(owner_sdg)}} SDG</small></div></div></section>{% else %}<section class='hero'><div><span class='hero-kicker'>AUTHORIZED MANAGEMENT</span><h1>مركز إدارة الإمبراطورية</h1><p>تظهر هنا الوحدات التي منحك المالك صلاحية الوصول إليها فقط.</p></div></section>{% endif %}
     <section class='panel'><h2>مؤشرات المنصة</h2><div class='grid'>
     <article class='panel'><small>الإعلانات النشطة</small><h2>{{stats['listings']}}</h2></article>
     <article class='panel'><small>أموال صفقات السوق المحتجزة (SDG)</small><h2>{{'{:,}'.format(stats['escrow'])}}</h2></article>
@@ -1424,22 +1422,23 @@ def admin():
     <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div></section>
     <section class='admin-section'><div class='admin-section-head'><span>01 · العمليات المالية</span><h2>إدارة الأموال والمدفوعات</h2></div><div class='grid admin-links'>
     <a href='/founder/panel'><b>تغذية حسابات العملاء</b><small>{{stats['funding']}} طلب معلق</small></a>
-    <a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>
-    <a href='/store/admin/withdrawals'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small></a>
-    <a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a></div></section>
+    {% if is_founder or 'payments' in manager_permissions %}<a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>{% endif %}
+    {% if is_founder or 'withdrawals' in manager_permissions %}<a href='/store/admin/withdrawals'><b>طلبات السحب</b><small>{{stats['withdrawals']}} طلب معلق</small></a>{% endif %}
+    {% if is_founder or 'exchange' in manager_permissions %}<a href='/store/admin/exchange'><b>الصرف والسيولة</b><small>أسعار التحويل وأرصدة السيولة</small></a>{% endif %}</div></section>
     <section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
-    <a href='/store/admin/topups'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>
-    <a href='/store/admin/market-orders'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small></a>
-    <a href='/store/admin/disputes'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small></a></div></section>
+    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/topups'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/market-orders'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small></a>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<a href='/store/admin/disputes'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small></a>{% endif %}</div></section>
     <section class='admin-section'><div class='admin-section-head'><span>03 · المنتجات والشركاء</span><h2>إدارة الكتالوج والوكلاء</h2></div><div class='grid admin-links'>
-    <a href='/store/admin/products'><b>باقات الألعاب والأسعار</b><small>أسعار البيع وتكلفة المورد</small></a>
-    <a href='/store/admin/listings'><b>السوق والإعلانات</b><small>المنتجات والحسابات المعروضة</small></a>
-    <a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a></div></section>
+    {% if is_founder or 'products' in manager_permissions %}<a href='/store/admin/products'><b>باقات الألعاب والأسعار</b><small>أسعار البيع وتكلفة المورد</small></a>{% endif %}
+    {% if is_founder or 'catalog' in manager_permissions %}<a href='/store/admin/listings'><b>السوق والإعلانات</b><small>المنتجات والحسابات المعروضة</small></a>{% endif %}
+    {% if is_founder or 'agents' in manager_permissions %}<a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a>{% endif %}</div></section>
     <section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
-    <a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>
-    <a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>
+    {% if is_founder or 'settings' in manager_permissions %}<a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>{% endif %}
+    {% if is_founder or 'audit' in manager_permissions %}<a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>{% endif %}
     {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
-    return page("لوحة المالك",body)
+    manager_permissions=[x["permission"] for x in db().execute("SELECT permission FROM es_manager_permissions WHERE username=?",(user()["username"],)).fetchall()] if user()["role"]=="manager" else []
+    return page("لوحة المالك",body,manager_permissions=manager_permissions)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
 @login_required
@@ -1552,12 +1551,12 @@ def admin_products():
     <p>كل الباقات المطلوبة موجودة هنا. أدخل سعر البيع الذي تحدده، ثم فعّل الباقة لتظهر للعملاء. لا تُعرض أي باقة بسعر افتراضي.</p>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='create'>
     <label>اللعبة</label><select name='game' required><option>PUBG Mobile</option><option>Free Fire</option><option>Mobile Legends</option><option>Fortnite</option></select>
-    <label>اسم الباقة</label><input name='title' required><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' step='1' required>
-    <label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' step='1' value='0' required><button>إضافة باقة جديدة</button></form>
+    <label>اسم الباقة</label><input name='title' required><label>سعر البيع SDG</label><input name='price_sdg' type='text' inputmode='numeric' pattern='[0-9٠-٩٬,]+' required>
+    <label>تكلفة المورد SDG</label><input name='cost_sdg' type='text' inputmode='numeric' pattern='[0-9٠-٩٬,]+' value='0' required><button>إضافة باقة جديدة</button></form>
     {% for x in rows %}<article class='panel'><b>{{x['game']}} · {{x['title']}}</b>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'>
-    <input type='hidden' name='action' value='update'><label>سعر البيع SDG</label><input name='price_sdg' type='number' min='1' step='1' value='{{'' if x['price_sdg'] <= 1 else x['price_sdg']}}' placeholder='أدخل السعر' required>
-    <label>تكلفة المورد SDG</label><input name='cost_sdg' type='number' min='0' step='1' value='{{x['cost_sdg']}}' required>
+    <input type='hidden' name='action' value='update'><label>سعر البيع SDG</label><input name='price_sdg' type='text' inputmode='numeric' pattern='[0-9٠-٩٬,]+' value='{{'' if x['price_sdg'] <= 1 else x['price_sdg']}}' placeholder='أدخل السعر بالأرقام' autocomplete='off' required>
+    <label>تكلفة المورد SDG</label><input name='cost_sdg' type='text' inputmode='numeric' pattern='[0-9٠-٩٬,]+' value='{{x['cost_sdg']}}' required>
     <button type='submit'>حفظ السعر</button></form>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='product_id' value='{{x['id']}}'><input type='hidden' name='action' value='toggle'>
     <button class='btn secondary' type='submit' {% if x['price_sdg'] <= 1 %}disabled{% endif %}>{{'إيقاف الباقة' if x['active'] else 'تفعيل الباقة'}}</button></form>
