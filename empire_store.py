@@ -1600,6 +1600,7 @@ def transfer_epc():
             post(r,[("user:"+u["username"],currency,-qty),("user:"+current_target["username"],currency,qty),
                     ("user:"+u["username"],currency,-fee),("protection:fund",currency,fee)],
                  "تحويل "+currency+" إلى "+current_target["full_name"]+" · عمولة التطبيق 3%")
+            notify_protection_income(r,currency,fee,"عمولة تحويل محفظة")
             d.execute("INSERT INTO es_transfer_details(reference,sender,recipient,recipient_account,currency,note,created_at) VALUES(?,?,?,?,?,?,?)",
                       (r,u["username"],current_target["username"],account,currency,note,now()))
             d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
