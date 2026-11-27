@@ -1180,7 +1180,9 @@ def pay_topup():
         row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
                            WHERE t.reference=? AND t.buyer=? AND t.status='PENDING_PAYMENT'""",(r,u["username"])).fetchone()
         if not row: raise ValueError("طلب الشحن غير متاح للدفع")
-        post(r,[("user:"+u["username"],"SDG",-row["amount_sdg"]),("clearing:topups","SDG",row["amount_sdg"])],"دفع طلب شحن ألعاب من محفظة SDG")
+        fee=platform_fee(row["amount_sdg"])
+        post(r,[("user:"+u["username"],"SDG",-(row["amount_sdg"]+fee)),("clearing:topups","SDG",row["amount_sdg"]),
+                ("platform:revenue","SDG",fee)],"دفع طلب شحن ألعاب من المحفظة · عمولة التطبيق 3%")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
         row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
                          WHERE t.reference=? AND t.status='PAID'""",(r,)).fetchone()
@@ -1272,11 +1274,14 @@ def orders():
     open_jobs=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.status='PAID' AND t.agent IS NULL ORDER BY t.id LIMIT 50").fetchall() if agent and agent["status"]=="APPROVED" else []
     topup_labels={"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — بانتظار التنفيذ","ASSIGNED":"قيد التنفيذ لدى الوكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"تم تسليم الكود","REJECTED":"مرفوض","REFUNDED":"مسترد"}
     wallet_sdg=balance(u["username"],"SDG")
+    for item in top:
+        item["fee_sdg"]=platform_fee(item["amount_sdg"])
+        item["total_sdg"]=int(item["amount_sdg"])+item["fee_sdg"]
     body=render_template_string("""<section class='panel'><h1>طلباتي</h1><h2>صفقات الحسابات</h2>{% for x in markets %}<article class='panel'><b>{{x['reference']}}</b> · {{x['price_sdg']}} SDG · {{x['status']}}<p>المشتري: {{x['buyer']}} — البائع: {{x['seller']}}</p>
     {% if x['seller']==me and x['status']=='ESCROWED' %}<form method='post' action='/store/order/deliver'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><textarea name='delivery' minlength='10' maxlength='3000' placeholder='بيانات التسليم الآمنة' required></textarea><button>تسليم للمشتري</button></form>{% endif %}
     {% if x['buyer']==me and x['status']=='DELIVERED' %}<div class='panel'><b>بيانات التسليم</b><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>{{x['delivery_text']}}</pre></div><form method='post' action='/store/order/confirm'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تأكيد الاستلام وإطلاق مستحقات البائع</button></form>{% endif %}
     {% if x['status'] in ('ESCROWED','DELIVERED') and (x['buyer']==me or x['seller']==me) %}<form method='post' action='/store/order/dispute'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><input name='reason' maxlength='500' required placeholder='سبب النزاع'><button>فتح نزاع</button></form>{% endif %}</article>{% else %}<p>لا توجد صفقات.</p>{% endfor %}
-    <h2>أكواد الألعاب وطلباتي</h2>{% for x in top %}<article class='panel game-order-card'><div class='order-head'><b>{{x['game']}} · {{x['title']}}</b><span class='tag'>{{topup_labels.get(x['status'],x['status'])}}</span></div><p>رقم الطلب: <b dir='ltr'>{{x['reference']}}</b> · {{'{:,}'.format(x['amount_sdg'])}} SDG</p>
+    <h2>أكواد الألعاب وطلباتي</h2>{% for x in top %}<article class='panel game-order-card'><div class='order-head'><b>{{x['game']}} · {{x['title']}}</b><span class='tag'>{{topup_labels.get(x['status'],x['status'])}}</span></div><p>رقم الطلب: <b dir='ltr'>{{x['reference']}}</b> · قيمة الباقة {{'{:,}'.format(x['amount_sdg'])}} SDG · العمولة 3%: {{'{:,}'.format(x['fee_sdg'])}} SDG · الإجمالي: {{'{:,}'.format(x['total_sdg'])}} SDG</p>
     {% if x['buyer']==me and x['status']=='COMPLETED' and x['delivery_code_text'] %}<div class='redeem-code'><small>كود الباقة الخاص بك</small><strong dir='ltr'>{{x['delivery_code_text']}}</strong><button type='button' class='btn secondary' onclick='navigator.clipboard&&navigator.clipboard.writeText({{x['delivery_code_text']|tojson}}).then(()=>this.textContent="تم النسخ").catch(()=>{})'>نسخ الكود</button></div>{% endif %}
     {% if x['buyer']==me and x['status']=='PENDING_PAYMENT' %}<div class='panel'><b>طريقة الدفع</b><p>الدفع من محفظتك SDG — رصيدك الحالي: {{'{:,}'.format(wallet_sdg)}} SDG</p><form method='post' action='/store/topups/pay'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تأكيد الدفع من المحفظة</button></form><small class='muted'>يمكنك تغذية المحفظة أولاً عبر حسابات الاستقبال المعتمدة إذا لم يكفِ الرصيد.</small></div>{% endif %}
     {% if agent and agent['status']=='APPROVED' and x['status']=='PAID' and not x['agent'] %}<form method='post' action='/store/agent/topup/claim'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>استلام الطلب كوكيل</button></form>{% endif %}
