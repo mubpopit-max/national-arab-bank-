@@ -317,9 +317,9 @@ input,textarea,select{display:block;width:100%;min-height:46px;margin:7px 0 14px
 .banner-copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:4px}.banner-copy span{color:#123f71;font-size:16px;font-weight:950}.banner-copy strong{color:#39718b;font-size:10px}
 .banner-flag{position:relative;display:flex;width:48px;height:32px;flex-direction:column;overflow:hidden;border-radius:4px;transform:rotate(-7deg);box-shadow:0 4px 10px rgba(20,45,65,.12)}.banner-flag i{flex:1}.banner-flag i:nth-child(1){background:#d92732}.banner-flag i:nth-child(2){background:#fff}.banner-flag i:nth-child(3){background:#111}.banner-flag b{position:absolute;left:0;top:0;width:0;height:0;border-top:16px solid transparent;border-bottom:16px solid transparent;border-left:22px solid #16864b}.banner-crown{position:absolute;left:28%;bottom:-20px;color:rgba(8,103,161,.07);font-size:80px;pointer-events:none}
 .recent-panel{margin-top:12px!important}.view-all{font-size:11px;font-weight:850;white-space:nowrap}.transaction-row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #edf1f5}.transaction-row:last-child{border-bottom:0}.transaction-symbol{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:50%;background:#e6f6ed;color:#13864e;font-size:21px;font-weight:900}.transaction-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.transaction-info b{overflow:hidden;color:#1b3e56;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.transaction-info small{font-size:9px}.transaction-value{font-size:10px;white-space:nowrap}.transaction-value.in{color:#13864e}.transaction-value.out{color:#c04b4b}
-.app-bottom{position:relative;z-index:1;right:auto;bottom:auto;left:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:16px 0 0;padding:8px 8px 10px;border-top:1px solid #e0eaf1;background:#fff;box-shadow:0 -3px 12px rgba(20,60,85,.05);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
+.app-bottom{position:sticky;z-index:60;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:16px 0 0;padding:8px 8px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:rgba(255,255,255,.97);box-shadow:0 -5px 20px rgba(20,60,85,.08);backdrop-filter:blur(14px);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
 .app-bottom a{display:flex;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px 1px;color:#718496!important;font-size:10px;font-weight:850;line-height:1.1}.app-bottom a .ico{display:grid;place-items:center;width:26px;height:25px;font-size:0;line-height:1}.app-bottom a .ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.app-bottom a.active{color:#0875b9!important}.app-bottom a.active .ico{background:#e9f4fb;border-radius:9px;width:34px;height:29px}.app-bottom a:focus-visible{outline:2px solid #0875b9;outline-offset:2px;border-radius:10px}
-.empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
+.admin-links a{display:flex;min-width:0;min-height:76px;flex-direction:column;justify-content:center;gap:5px;padding:13px;border:1px solid #e1ebf1;border-radius:15px;background:linear-gradient(145deg,#fff,#f7fbfd);color:#164d70!important;font-weight:850;transition:transform .16s ease,border-color .16s ease}.admin-links a:active{transform:scale(.985)}.admin-links a small{font-size:11px;color:#16834f}.admin-filters{display:flex;gap:7px;overflow:auto;padding:5px 0 12px}.admin-filters a{flex:0 0 auto;padding:7px 11px;border:1px solid #dce8ef;border-radius:30px;background:#f7fafc;color:#175d85;font-size:11px;font-weight:800}.order-card{padding:15px!important}.order-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.order-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.order-grid>div{min-width:0;padding:9px;border-radius:11px;background:#f7fafc}.order-grid small{display:block;color:#718496;font-size:10px}.order-grid b{display:block;overflow-wrap:anywhere;font-size:12px;color:#183d56}@media(max-width:380px){.order-grid{grid-template-columns:1fr}}\n.empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
 footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;margin:18px auto!important;border-top:5px solid #16844f!important;background:#fff!important}.receipt-flag{display:flex;height:7px;margin-bottom:14px;overflow:hidden;border-radius:20px}.receipt-flag i{flex:1}.receipt-flag i:nth-child(1){background:#d52e36}.receipt-flag i:nth-child(2){background:#fff;border:1px solid #ddd}.receipt-flag i:nth-child(3){background:#111}.receipt-flag i:nth-child(4){background:#168447}
 .game-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}.game-catalog-card{display:flex;min-height:116px;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:14px 8px;border:1px solid var(--line);border-radius:18px;background:#f8fbfd;color:#18364b!important;text-align:center}.game-catalog-card .game-catalog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#e8f2fa;color:#0875b9}.game-catalog-card svg{width:27px;height:27px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.game-catalog-card small{font-size:10px}.game-catalog-card.pubg .game-catalog-icon{background:#fff1db;color:#a66b17}.game-catalog-card.ml .game-catalog-icon{background:#e9efff;color:#3d62b4}.game-catalog-card.freefire .game-catalog-icon{background:#fff0e8;color:#d65b24}.game-catalog-card.fortnite .game-catalog-icon{background:#e9f5ef;color:#188253}.profile-hero{display:flex;align-items:center;gap:10px}.profile-hero h1{margin:0}.profile-hero p{margin:0}.profile-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:#eaf4ef;font-size:26px}.profile-info{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.profile-info span{color:var(--muted)}.profile-setting{display:grid;grid-template-columns:38px 1fr auto 16px;align-items:center;gap:8px;padding:13px 0;color:var(--ink)!important}.profile-setting span{font-size:22px}.profile-setting small{font-size:11px}.profile-setting strong{font-size:22px;color:var(--muted)}
 .table-wrap{max-width:100%;overflow-x:auto}
@@ -1029,7 +1029,9 @@ def admin():
       "pending":db().execute("SELECT COUNT(*) n FROM es_payments WHERE status='PENDING'").fetchone()["n"],
       "withdrawals":db().execute("SELECT COUNT(*) n FROM es_withdrawals WHERE status='PENDING'").fetchone()["n"],
       "agents":db().execute("SELECT COUNT(*) n FROM es_agents WHERE status='APPROVED'").fetchone()["n"],
-      "topups":db().execute("SELECT COUNT(*) n FROM es_topup_orders WHERE status IN ('PAID','ASSIGNED')").fetchone()["n"]
+      "topups":db().execute("SELECT COUNT(*) n FROM es_topup_orders WHERE status IN ('PAID','ASSIGNED','PROCESSING')").fetchone()["n"],
+      "funding":db().execute("SELECT COUNT(*) n FROM funding_requests WHERE status='PENDING'").fetchone()["n"],
+      "market_orders":db().execute("SELECT COUNT(*) n FROM es_market_orders WHERE status IN ('ESCROWED','DELIVERED','DISPUTED')").fetchone()["n"]
     }
     body=render_template_string("""<section class='hero'><div><span class='hero-kicker'>OWNER CONTROL CENTER</span><h1>مركز قيادة الإمبراطورية</h1><p>لوحة المالك الشاملة لإدارة الأصول والخدمات والعمليات المالية.</p><span class='tag'>رقم حساب المالك: {{owner_account}}</span></div><div class='hero-character'><div class='metric'><small>الأصول الرقمية للمالك</small><strong>{{'{:,}'.format(owner_urc)}} URC</strong><small>الأصول النقدية: {{'{:,}'.format(owner_sdg)}} SDG</small></div></div></section>
     <section class='panel'><h2>مؤشرات المنصة</h2><div class='grid'>
@@ -1040,8 +1042,15 @@ def admin():
     <article class='panel'><small>طلبات السحب المعلقة</small><h2>{{stats['withdrawals']}}</h2></article>
     <article class='panel'><small>الوكلاء المعتمدون</small><h2>{{stats['agents']}}</h2></article>
     <article class='panel'><small>طلبات الشحن قيد التنفيذ</small><h2>{{stats['topups']}}</h2></article></div></section>
-    <section class='panel'><h2>إدارة شاملة</h2><div class='grid admin-links'>
-    <a href='/store/admin/exchange'>إدارة الصرف والسيولة</a><a href='/store/admin/settings'>إعدادات المنصة والأسعار</a><a href='/store/admin/agents'>إدارة الوكلاء</a><a href='/store/admin/listings'>إدارة السوق والإعلانات</a><a href='/store/admin/products'>باقات الشحن والتكلفة</a><a href='/store/admin/payments'>طلبات الدفع</a><a href='/store/admin/withdrawals'>طلبات السحب</a><a href='/store/admin/disputes'>النزاعات</a><a href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
+    <section class='panel'><h2>مركز الطلبات — كل نوع في قسم مستقل</h2><div class='grid admin-links'>
+    <a href='/founder/panel'><b>طلبات تغذية الحساب</b><small>{{stats['funding']}} طلب معلق</small></a>
+    <a href='/store/admin/payments'><b>طلبات الدفع وشراء URC</b><small>{{stats['pending']}} طلب معلق</small></a>
+    <a href='/store/admin/topups'><b>طلبات شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small></a>
+    <a href='/store/admin/market-orders'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small></a>
+    <a href='/store/admin/withdrawals'>طلبات السحب</a><a href='/store/admin/disputes'>النزاعات</a>
+    <a href='/store/admin/products'>باقات الشحن والتكلفة</a><a href='/store/admin/listings'>إدارة السوق والإعلانات</a>
+    <a href='/store/admin/agents'>إدارة الوكلاء</a><a href='/store/admin/exchange'>إدارة الصرف والسيولة</a>
+    <a href='/store/admin/settings'>إعدادات المنصة والأسعار</a><a href='/store/admin/audit'>سجل التدقيق</a></div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
     return page("لوحة المالك",body)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
@@ -1332,6 +1341,41 @@ def admin_disputes():
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['order_ref']}}'>
     <button name='action' value='BUYER'>استرداد المبلغ للمشتري</button><button name='action' value='SELLER'>تحرير مستحقات البائع</button></form></article>{% else %}<p>لا توجد نزاعات مفتوحة.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("النزاعات",body)
+
+@empire_bp.get("/admin/topups")
+@login_required
+@founder_required
+def admin_topups():
+    allowed = {"ALL","PENDING_PAYMENT","PAID","ASSIGNED","PROCESSING","COMPLETED","REJECTED","REFUNDED"}
+    status = request.args.get("status","ALL").upper()
+    if status not in allowed:
+        abort(400)
+    query = """SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id"""
+    params = ()
+    if status != "ALL":
+        query += " WHERE t.status=?"
+        params = (status,)
+    query += " ORDER BY t.id DESC LIMIT 300"
+    rows = db().execute(query,params).fetchall()
+    labels = {"PENDING_PAYMENT":"بانتظار الدفع","PAID":"مدفوع — بانتظار التنفيذ","ASSIGNED":"استلمه وكيل","PROCESSING":"قيد التنفيذ","COMPLETED":"مكتمل","REJECTED":"مرفوض","REFUNDED":"مسترد"}
+    body = render_template_string("""<section class='panel'><h1>طلبات شحن الألعاب</h1><p>قسم مستقل لطلبات PUBG وFree Fire وMobile Legends وغيرها. لا يعتبر الطلب مكتملاً إلا بعد توثيق التنفيذ.</p>
+      <div class='admin-filters'><a href='/store/admin/topups'>الكل</a>{% for k,v in labels.items() %}<a href='/store/admin/topups?status={{k}}'>{{v}}</a>{% endfor %}</div>
+      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
+      <div class='order-grid'><div><small>العميل</small><b>{{x['buyer']}}</b></div><div><small>اللعبة / الباقة</small><b>{{x['game']}} · {{x['title']}}</b></div><div><small>معرف اللاعب</small><b dir='ltr'>{{x['player_id']}}</b></div><div><small>القيمة</small><b>{{'{:,}'.format(x['amount_sdg'])}} SDG</b></div><div><small>الوكيل</small><b>{{x['agent'] or 'لم يعيّن بعد'}}</b></div><div><small>آخر تحديث</small><b>{{x['updated_at']}}</b></div></div>{% if x['note'] %}<p>{{x['note']}}</p>{% endif %}</article>
+      {% else %}<div class='empty-state'>لا توجد طلبات في هذا القسم.</div>{% endfor %}</section>""",rows=rows,labels=labels)
+    return page("طلبات شحن الألعاب",body)
+
+@empire_bp.get("/admin/market-orders")
+@login_required
+@founder_required
+def admin_market_orders():
+    rows = db().execute("""SELECT o.*,l.title,l.game,l.category FROM es_market_orders o LEFT JOIN es_listings l ON l.id=o.listing_id ORDER BY o.id DESC LIMIT 300""").fetchall()
+    labels = {"ESCROWED":"بانتظار تسليم البائع","DELIVERED":"تم التسليم — بانتظار تأكيد المشتري","RELEASED":"أغلقت لصالح البائع","REFUNDED":"تم رد المبلغ","DISPUTED":"نزاع مفتوح"}
+    body = render_template_string("""<section class='panel'><h1>طلبات المتجر والصفقات</h1><p>هذا القسم خاص بمشتريات المتجر وصفقات الحسابات، ومنفصل عن تغذية الحساب وشحن الألعاب.</p>
+      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b>{{x['reference']}}</b><span class='tag'>{{labels.get(x['status'],x['status'])}}</span></div>
+      <div class='order-grid'><div><small>العنصر</small><b>{{x['title'] or 'عنصر محذوف'}} · {{x['category'] or ''}}</b></div><div><small>المبلغ المحجوز</small><b>{{'{:,}'.format(x['price_sdg'])}} SDG</b></div><div><small>المشتري</small><b>{{x['buyer']}}</b></div><div><small>البائع</small><b>{{x['seller']}}</b></div><div><small>الحالة</small><b>{{labels.get(x['status'],x['status'])}}</b></div><div><small>التاريخ</small><b>{{x['updated_at']}}</b></div></div></article>
+      {% else %}<div class='empty-state'>لا توجد صفقات مسجلة.</div>{% endfor %}</section>""",rows=rows,labels=labels)
+    return page("طلبات المتجر والصفقات",body)
 
 @empire_bp.get("/admin/audit")
 @login_required
