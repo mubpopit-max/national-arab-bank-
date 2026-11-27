@@ -4,7 +4,7 @@ Uses a separate double-entry store ledger in the existing SQLite database.
 No legacy bank balance is imported or treated as store money. External payment
 verification is manual until a supported Binance/payment API is configured.
 """
-import os, re, json, sqlite3, secrets, io
+import os, re, json, sqlite3, secrets, io, hashlib, bcrypt
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
@@ -103,6 +103,22 @@ def init_db():
       buyer TEXT NOT NULL, seller TEXT NOT NULL, price_sdg INTEGER NOT NULL CHECK(price_sdg>0),
       status TEXT NOT NULL CHECK(status IN ('ESCROWED','DELIVERED','RELEASED','REFUNDED','DISPUTED')),
       delivery_cipher TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_ice_codes(
+      id INTEGER PRIMARY KEY, code_hash TEXT UNIQUE NOT NULL, code_tail TEXT NOT NULL,
+      points INTEGER NOT NULL CHECK(points>=0), status TEXT NOT NULL DEFAULT 'AVAILABLE'
+        CHECK(status IN ('AVAILABLE','REDEEMED','REVOKED')),
+      created_by TEXT NOT NULL, used_by TEXT, created_at TEXT NOT NULL, used_at TEXT);
+    CREATE INDEX IF NOT EXISTS es_ice_codes_status ON es_ice_codes(status,created_at);
+    CREATE TABLE IF NOT EXISTS es_loyalty_members(
+      username TEXT PRIMARY KEY, points INTEGER NOT NULL DEFAULT 0 CHECK(points>=0),
+      badge TEXT NOT NULL DEFAULT 'ICE_PREMIUM', source TEXT NOT NULL DEFAULT 'ICE_STORY',
+      joined_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_loyalty_ledger(
+      id INTEGER PRIMARY KEY, username TEXT NOT NULL, reference TEXT UNIQUE NOT NULL,
+      points_delta INTEGER NOT NULL, memo TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_manager_permissions(
+      username TEXT NOT NULL, permission TEXT NOT NULL, granted_by TEXT NOT NULL,
+      created_at TEXT NOT NULL, PRIMARY KEY(username,permission));
     CREATE TABLE IF NOT EXISTS es_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_audit(
       id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
@@ -187,6 +203,43 @@ def founder_required(fn):
         u=user()
         if not u or not u["active"] or u["role"]!="founder": abort(403)
         return fn(*a,**kw)
+    return wrapped
+
+def admin_permission(permission):
+    """Founder has full access; managers receive only explicitly granted modules."""
+    def decorate(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            current = user()
+            if not current or not current["active"]:
+                return redirect("/login")
+            if current["role"] == "founder":
+                return fn(*args, **kwargs)
+            if current["role"] != "manager":
+                abort(403)
+            allowed = db().execute(
+                "SELECT 1 FROM es_manager_permissions WHERE username=? AND permission=?",
+                (current["username"], permission)
+            ).fetchone()
+            if not allowed:
+                abort(403)
+            return fn(*args, **kwargs)
+        return wrapped
+    return decorate
+
+def manager_dashboard_required(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        current = user()
+        if not current or not current["active"]:
+            return redirect("/login")
+        if current["role"] == "founder":
+            return fn(*args, **kwargs)
+        if current["role"] != "manager":
+            abort(403)
+        if not db().execute("SELECT 1 FROM es_manager_permissions WHERE username=? LIMIT 1",(current["username"],)).fetchone():
+            abort(403)
+        return fn(*args, **kwargs)
     return wrapped
 
 def csrf():
@@ -345,6 +398,85 @@ footer{display:none!important}.receipt-card,.transfer-receipt{max-width:520px;ma
 @media(max-width:360px){main{padding:0 10px!important}.wallet-top{grid-template-columns:44px minmax(0,1fr) 38px;gap:8px;padding:20px 11px 30px!important}.wallet-card-icon{width:44px;height:44px}.wallet-top .amount{font-size:22px!important}.service-grid{gap:8px}.service-grid .service-card{min-height:108px!important}.service-grid .service-icon{width:46px!important;height:46px!important}.app-bottom{gap:0;padding-left:3px;padding-right:3px}.app-bottom a{font-size:9px;min-height:52px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 @media print{body{background:#fff!important;padding:0}.app-header,.app-bottom,.nav,footer{display:none!important}.panel{box-shadow:none!important}}
+
+/* Sudan digital-finance visual system and small-screen layout safeguards */
+:root{color-scheme:light;--ink:#183b2c;--muted:#718477;--blue:#087a50;--green:#16834f;--line:#dfeae2;--gold:#c7a45a;--surface:#fff;--canvas:#f3f7f3}
+html,body{max-width:100%;overflow-x:hidden;background:var(--canvas)!important;color:var(--ink)!important}
+body{padding-bottom:calc(28px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif}
+header.app-header{background:rgba(255,255,255,.97)!important;border-bottom:1px solid #dce8df}
+.header-brand .brand{color:#123e2c!important}
+main{width:100%;max-width:680px!important;padding:0 clamp(10px,3.5vw,20px)!important;margin:14px auto 30px!important}
+.panel,.metric,.admin-section,.admin-links a,.service-card{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.panel{border-color:#dfe9e2!important;box-shadow:0 5px 18px rgba(25,66,43,.045)!important}
+h1,h2,h3{color:#17432f!important;overflow-wrap:anywhere}
+p{overflow-wrap:anywhere}
+.btn,button{max-width:100%;white-space:normal;line-height:1.35;background:linear-gradient(115deg,#08764b,#15945e)!important}
+.btn.secondary{background:#edf5ef!important;color:#175b3c!important;border-color:#d8e8dc!important}
+input,textarea,select{min-width:0;max-width:100%;border-color:#d6e4da;background:#fbfdfb}
+input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);border-color:#16834f}
+.tag{border-color:#d8c18a;background:#fbf5e7;color:#795b1e}
+.wallet-top{background:linear-gradient(128deg,#073d2b 0%,#08744c 57%,#b38b3e 140%)!important}
+.service-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.service-grid .service-card{min-height:108px!important;border-color:#e0eae2!important;box-shadow:0 5px 15px rgba(18,62,39,.055)!important}
+.service-grid .service-icon{background:#eaf4ec;color:#147247}
+.service-icon.store,.service-icon.accounts,.service-icon.transfer,.service-icon.coins,.service-icon.funding,.service-icon.profile,.service-icon.games,.service-icon.exchange,.service-icon.withdraw,.service-icon.agents{background:#eaf4ec!important;color:#147247!important}
+.national-banner{border-color:#d7e5d8;background:linear-gradient(110deg,#e4f2e7,#fffdf7 54%,#f7f0dc)}
+.admin-section{border-color:#dce8de;background:linear-gradient(145deg,#fff,#f7faf7)}
+.admin-section:before{background:linear-gradient(90deg,#08764b,#d1b16a,#08764b)}
+.admin-section-head span{background:#eaf3e9;color:#17613f}
+.admin-section-head h2{color:#17432f!important}
+.admin-links{grid-template-columns:repeat(2,minmax(0,1fr))}
+.admin-links a{display:flex;flex-direction:column;justify-content:center;gap:6px;border-color:#e0e9e1;background:#fff;color:#17432f!important}
+.transfer-step,.recipient-confirm{border-color:#dce9df!important}
+.transfer-submit{background:linear-gradient(110deg,#08764b,#c39d4f)!important}
+.ice-hero{position:relative;overflow:hidden;padding:clamp(18px,5vw,28px);border-radius:24px;background:radial-gradient(circle at 90% 8%,rgba(255,255,255,.35),transparent 28%),linear-gradient(135deg,#0b3550,#176c86 55%,#d4eaf0);color:#fff;box-shadow:0 14px 30px rgba(11,66,85,.15)}
+.ice-hero h1,.ice-hero p{color:#fff!important}.ice-brand{color:#e8f8ff;font-weight:900;font-size:12px}
+.empire-slogans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:18px}
+.empire-slogans article{min-width:0;padding:13px;border:1px solid rgba(255,255,255,.25);border-radius:15px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px)}
+.empire-slogans b,.empire-slogans strong{display:block;color:#fff}.empire-slogans b{font-size:12px}.empire-slogans strong{margin-top:5px;font-size:14px}
+.premium-banner{margin:13px 0;padding:17px;border:1px solid #cfe4d8;border-radius:19px;background:linear-gradient(145deg,#f2faf5,#fffaf0)}
+.ice-badge{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid #a9d9e9;border-radius:30px;background:linear-gradient(110deg,#e7f8ff,#fff);color:#176d91;font-weight:950;box-shadow:0 4px 12px rgba(34,125,157,.12)}
+.loyalty-points{display:block;color:#16724a;font-size:34px;font-weight:950;line-height:1.2}
+.premium-list{display:grid;gap:8px}.premium-customer{display:flex;align-items:center;gap:9px;min-width:0;padding:10px;border:1px solid #e3eee6;border-radius:13px;background:#fbfdfb}
+.premium-customer b{flex:1;min-width:0;overflow-wrap:anywhere}.ice-mini{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:11px;background:#e6f7fb;color:#2484a3}
+.loyalty-service .service-icon{background:linear-gradient(145deg,#e5f8ff,#f7fdff)!important;color:#2a8aa9!important;border:1px solid #b9e0eb}
+.permission-choice{display:flex;align-items:center;gap:9px;margin:8px 0;padding:9px;border:1px solid #e3ece5;border-radius:11px;background:#fbfdfb}
+.permission-choice input{width:18px;min-height:18px;height:18px;margin:0;flex:0 0 18px;accent-color:#16834f}
+.code-line{padding:9px 12px;border:1px dashed #9bcbb0;border-radius:10px;background:#fff;font-weight:900;letter-spacing:1px}
+@media(max-width:420px){
+  main{padding:0 10px!important;margin-top:10px!important}
+  header.app-header{height:auto;min-height:58px;padding:7px 9px!important;gap:7px}
+  .header-menu,.header-alert,.header-avatar{flex-basis:36px;width:36px;height:36px}
+  .header-brand .brand{font-size:15px!important;white-space:normal;line-height:1.2}
+  .header-brand small{font-size:8px!important}
+  .wallet-top{grid-template-columns:42px minmax(0,1fr) 36px!important;gap:8px!important;padding:18px 12px 29px!important;min-height:150px!important;border-radius:21px!important}
+  .wallet-card-icon{width:42px;height:42px;border-radius:13px}
+  .balance-toggle{width:36px!important;min-width:36px!important;height:36px!important;min-height:36px!important}
+  .wallet-top .amount{font-size:clamp(20px,6vw,28px)!important;white-space:normal;overflow-wrap:anywhere}
+  .service-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .service-grid .service-card{min-height:96px!important;padding:10px 6px!important;border-radius:16px!important}
+  .service-grid .service-icon{width:43px!important;height:43px!important;border-radius:14px!important}
+  .grid,.admin-links{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-section{padding:13px!important;margin:13px 0!important}
+  .admin-section-head{align-items:flex-start}
+  .admin-section-head h2{font-size:15px!important}
+  .admin-links a{min-height:78px;padding:10px!important}
+  .empire-slogans{grid-template-columns:1fr}
+  .panel{padding:13px!important;border-radius:16px!important}
+  .btn,button{width:100%;min-height:46px}
+  form .btn,form button{width:100%}
+  .premium-customer{flex-wrap:wrap}
+}
+@media(max-width:340px){
+  .grid,.admin-links{grid-template-columns:1fr}
+  .wallet-top{grid-template-columns:36px minmax(0,1fr) 34px!important}
+  .wallet-card-icon{width:36px;height:36px}
+}
+@media(min-width:700px){
+  main{max-width:920px!important}
+  .service-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol><symbol id='i-pubg' viewBox='0 0 24 24'><path d='M4 5h16v14H4zM8 9h8M8 12h5M8 15h8'/><path d='M2 8V4h4M18 4h4v4M2 16v4h4M18 20h4v-4'/></symbol><symbol id='i-freefire' viewBox='0 0 24 24'><path d='M13 2c1 5-4 6-3 11 1-2 3-3 4-5 4 4 5 7 3 11a7 7 0 0 1-13-3c0-4 3-7 5-9 0 4 1 5 2 6 0-5 1-8 2-11z'/></symbol><symbol id='i-ml' viewBox='0 0 24 24'><path d='M3 18 8 6l4 7 4-7 5 12M6 18h12'/><path d='m8 6 4 2 4-2'/></symbol><symbol id='i-fortnite' viewBox='0 0 24 24'><path d='M5 3h14v18H5zM9 7h7M9 11h5M9 15h7'/><path d='M8 3v18'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/store/profile' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
     {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>عملاتي</a><a href='/store/profile'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
@@ -399,6 +531,197 @@ def store_notifications():
     body=render_template_string("""<section class='panel'><h1>الإشعارات</h1>{% for n in rows %}<article class='panel'><b>{{n['title']}}</b><p>{{n['message']}}</p><small>{{n['created_at']}}</small>{% if n['reference'] %}<p><small>المرجع: {{n['reference']}}</small></p>{% endif %}</article>{% else %}<div class='empty-state'>لا توجد إشعارات حالياً.</div>{% endfor %}</section>""",rows=rows)
     return page("الإشعارات",body)
 
+
+@empire_bp.route("/admin/managers",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_managers():
+    allowed_permissions = {
+        "products":"إدارة أسعار وباقات المنتجات",
+        "orders":"متابعة الطلبات والتسليم",
+        "payments":"مراجعة طلبات الدفع",
+        "withdrawals":"مراجعة طلبات السحب",
+        "exchange":"إدارة الصرف والسيولة",
+        "catalog":"إدارة إعلانات السوق",
+        "agents":"إدارة الوكلاء",
+        "settings":"إعدادات المنصة",
+        "audit":"سجل التدقيق"
+    }
+    if request.method=="POST":
+        csrf()
+        action=(request.form.get("action") or "").strip()
+        if action=="create":
+            full_name=(request.form.get("full_name") or "").strip()
+            password=request.form.get("password") or ""
+            if len(full_name)<3 or len(full_name)>120:
+                flash("أدخل الاسم الكامل للمدير.")
+                return redirect(url_for("empire.admin_managers"))
+            if len(password)<10 or len(password.encode("utf-8"))>72:
+                flash("كلمة مرور المدير يجب أن تكون 10 أحرف على الأقل.")
+                return redirect(url_for("empire.admin_managers"))
+            permissions=[p for p in request.form.getlist("permissions") if p in allowed_permissions]
+            if not permissions:
+                flash("حدد صلاحية واحدة على الأقل للمدير.")
+                return redirect(url_for("empire.admin_managers"))
+            account=""
+            for _ in range(30):
+                candidate=str(secrets.randbelow(9000000)+1000000)
+                if not db().execute("SELECT 1 FROM users WHERE account_number=?",(candidate,)).fetchone():
+                    account=candidate
+                    break
+            if not account:
+                raise RuntimeError("تعذر إنشاء رقم حساب فريد للمدير.")
+            username="manager_"+account
+            password_hash=bcrypt.hashpw(password.encode("utf-8"),bcrypt.gensalt()).decode("utf-8")
+            pin_hash=bcrypt.hashpw(secrets.token_hex(8).encode("utf-8"),bcrypt.gensalt()).decode("utf-8")
+            db().execute("""INSERT INTO users(username,full_name,account_number,password_hash,pin_hash,balance,currency,role,active,created_at)
+              VALUES(?,?,?,?,?,0,'SDG','manager',1,?)""",(username,full_name,account,password_hash,pin_hash,now()))
+            for permission in permissions:
+                db().execute("INSERT INTO es_manager_permissions(username,permission,granted_by,created_at) VALUES(?,?,?,?)",
+                             (username,permission,user()["username"],now()))
+            audit(user()["username"],"MANAGER_CREATED","manager",account,"permissions="+",".join(permissions))
+            session["new_manager_credentials"]={"account":account,"password":password}
+            flash("تم إنشاء حساب المدير. احفظ بيانات الدخول الآن؛ لن تظهر كلمة المرور مرة أخرى.")
+            return redirect(url_for("empire.admin_managers"))
+        elif action=="permissions":
+            account=(request.form.get("account_number") or "").strip()
+            target=db().execute("SELECT username FROM users WHERE account_number=? AND role='manager'",(account,)).fetchone()
+            if not target: abort(404)
+            permissions=[p for p in request.form.getlist("permissions") if p in allowed_permissions]
+            db().execute("DELETE FROM es_manager_permissions WHERE username=?",(target["username"],))
+            for permission in permissions:
+                db().execute("INSERT INTO es_manager_permissions(username,permission,granted_by,created_at) VALUES(?,?,?,?)",
+                             (target["username"],permission,user()["username"],now()))
+            audit(user()["username"],"MANAGER_PERMISSIONS_UPDATED","manager",account,"permissions="+",".join(permissions))
+            flash("تم تحديث صلاحيات المدير.")
+        elif action=="toggle":
+            account=(request.form.get("account_number") or "").strip()
+            target=db().execute("SELECT username,active FROM users WHERE account_number=? AND role='manager'",(account,)).fetchone()
+            if not target: abort(404)
+            active=0 if target["active"] else 1
+            db().execute("UPDATE users SET active=? WHERE username=?",(active,target["username"]))
+            audit(user()["username"],"MANAGER_STATUS_CHANGED","manager",account,"active="+str(active))
+            flash("تم تحديث حالة حساب المدير.")
+        elif action=="reset_password":
+            account=(request.form.get("account_number") or "").strip()
+            password=request.form.get("password") or ""
+            target=db().execute("SELECT username FROM users WHERE account_number=? AND role='manager'",(account,)).fetchone()
+            if not target: abort(404)
+            if len(password)<10 or len(password.encode("utf-8"))>72:
+                flash("كلمة المرور الجديدة يجب أن تكون 10 أحرف على الأقل.")
+                return redirect(url_for("empire.admin_managers"))
+            password_hash=bcrypt.hashpw(password.encode("utf-8"),bcrypt.gensalt()).decode("utf-8")
+            db().execute("UPDATE users SET password_hash=? WHERE username=?",(password_hash,target["username"]))
+            audit(user()["username"],"MANAGER_PASSWORD_RESET","manager",account)
+            flash("تم تغيير كلمة مرور المدير.")
+        else:
+            abort(400)
+        return redirect(url_for("empire.admin_managers"))
+    rows=db().execute("SELECT username,full_name,account_number,active FROM users WHERE role='manager' ORDER BY id DESC").fetchall()
+    managers=[]
+    for row in rows:
+        item=dict(row)
+        item["permissions"]=[x["permission"] for x in db().execute("SELECT permission FROM es_manager_permissions WHERE username=? ORDER BY permission",(row["username"],)).fetchall()]
+        managers.append(item)
+    new_credentials=session.pop("new_manager_credentials",None)
+    body=render_template_string("""<section class='panel'><span class='tag'>صلاحيات تحت سيطرة المالك</span><h1>إدارة المدير العام</h1>
+      <p>أنشئ حساباً مستقلاً، ثم اختر بدقة الوحدات التي يستطيع إدارتها. لا يستطيع المدير إنشاء مديرين أو تعديل صلاحياته.</p>
+      {% if fresh %}<div class='premium-banner'><b>تم إنشاء حساب المدير بنجاح</b><p>رقم الحساب: <strong dir='ltr'>{{fresh['account']}}</strong></p><p>كلمة المرور: <strong dir='ltr'>{{fresh['password']}}</strong></p><small>انسخ البيانات واحفظها في مكان آمن. لن تظهر مرة أخرى.</small><button type='button' class='btn secondary' onclick='navigator.clipboard.writeText("{{fresh['account']}}\\n{{fresh['password']}}")'>نسخ بيانات الدخول</button></div>{% endif %}
+      <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='create'>
+      <h2>إنشاء حساب مدير جديد</h2><label>الاسم الكامل</label><input name='full_name' maxlength='120' required>
+      <label>كلمة مرور أولية (10 أحرف على الأقل)</label><input name='password' type='password' minlength='10' maxlength='72' autocomplete='new-password' required>
+      <h3>الصلاحيات الممنوحة</h3>{% for key,label in permissions %}<label class='permission-choice'><input type='checkbox' name='permissions' value='{{key}}'>{{label}}</label>{% endfor %}
+      <button>إنشاء حساب المدير</button></form>
+      <h2>المديرون الحاليون</h2>{% for x in managers %}<article class='panel'><b>{{x['full_name']}}</b><p>رقم الحساب: <strong dir='ltr'>{{x['account_number']}}</strong> · {{'نشط' if x['active'] else 'موقوف'}}</p>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='permissions'><input type='hidden' name='account_number' value='{{x['account_number']}}'>
+      <b>تعديل الصلاحيات</b>{% for key,label in permissions %}<label class='permission-choice'><input type='checkbox' name='permissions' value='{{key}}' {% if key in x['permissions'] %}checked{% endif %}>{{label}}</label>{% endfor %}<button>حفظ الصلاحيات</button></form>
+      <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='reset_password'><input type='hidden' name='account_number' value='{{x['account_number']}}'><label>تعيين كلمة مرور جديدة</label><input type='password' name='password' minlength='10' maxlength='72' required><button>تغيير كلمة المرور</button></form>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='toggle'><input type='hidden' name='account_number' value='{{x['account_number']}}'><button class='btn secondary'>{{'إيقاف الحساب' if x['active'] else 'إعادة تفعيل الحساب'}}</button></form></article>{% else %}<p>لم يتم إنشاء مديرين بعد.</p>{% endfor %}</section>""",
+      managers=managers,permissions=list(allowed_permissions.items()),fresh=new_credentials,csrf=session.get("csrf",""))
+    return page("إدارة المدير العام",body)
+
+@empire_bp.route("/ice-empire",methods=["GET","POST"])
+@login_required
+def ice_empire():
+    u=user()
+    if request.method=="POST":
+        csrf()
+        submitted=(request.form.get("code") or "").strip().upper().replace(" ","")
+        if not re.fullmatch(r"ICE-[A-Z0-9]{12}",submitted):
+            flash("صيغة الكود غير صحيحة. راجع الكود الذي استلمته من آيس ستوري.")
+            return redirect(url_for("empire.ice_empire"))
+        code_hash=hashlib.sha256(submitted.encode("utf-8")).hexdigest()
+        d=db()
+        d.execute("BEGIN IMMEDIATE")
+        try:
+            code=d.execute("SELECT * FROM es_ice_codes WHERE code_hash=? AND status='AVAILABLE'",(code_hash,)).fetchone()
+            if not code:
+                raise ValueError("الكود غير متاح أو سبق استخدامه. تواصل مع آيس ستوري للمساعدة.")
+            existing=d.execute("SELECT username FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
+            if existing:
+                raise ValueError("حسابك مسجل بالفعل ضمن عملاء آيس ستوري المميزين.")
+            stamp=now()
+            d.execute("UPDATE es_ice_codes SET status='REDEEMED',used_by=?,used_at=? WHERE id=? AND status='AVAILABLE'",(u["username"],stamp,code["id"]))
+            if d.execute("SELECT changes() n").fetchone()["n"]!=1:
+                raise ValueError("تم استخدام الكود في عملية أخرى. حاول مجدداً.")
+            points=int(code["points"])
+            d.execute("INSERT INTO es_loyalty_members(username,points,badge,source,joined_at,updated_at) VALUES(?,?,'ICE_PREMIUM','ICE_STORY',?,?)",
+                      (u["username"],points,stamp,stamp))
+            d.execute("INSERT INTO es_loyalty_ledger(username,reference,points_delta,memo,created_at) VALUES(?,?,?,?,?)",
+                      (u["username"],"ICE-"+secrets.token_hex(8).upper(),points,"مكافأة تفعيل عضوية آيس ستوري المميزة",stamp))
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (u["username"],"تهانينا! أصبحت عميلاً مميزاً","مبارك لك الانضمام إلى عملاء آيس ستوري المميزين في الإمبراطورية إستوري. حصل حسابك على الشارة الثلجية ونقاط الولاء. امبراطورية النار: هنا تصنع مجدك · امبراطورية الثلج: متجرك وأكثر.", "ICE-"+secrets.token_hex(6).upper(),stamp))
+            audit(u["username"],"ICE_PREMIUM_REDEEMED","loyalty",code["code_tail"],"points="+str(points))
+            d.commit()
+            flash("مبارك! تمت ترقيتك إلى عميل مميز. ظهرت الشارة الثلجية وأضيفت نقاط الولاء إلى حسابك.")
+        except Exception as exc:
+            d.rollback()
+            flash(str(exc))
+        return redirect(url_for("empire.ice_empire"))
+    member=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
+    customers=db().execute("""SELECT u.full_name,m.points,m.joined_at FROM es_loyalty_members m
+      JOIN users u ON u.username=m.username ORDER BY m.joined_at DESC LIMIT 100""").fetchall()
+    body=render_template_string("""<section class='ice-hero'><span class='ice-brand'>آيس ستوري × الإمبراطورية إستوري</span><h1>مرحباً بك في إمبراطورية الثلج</h1><p>مساحة خاصة لعملاء آيس ستوري المميزين.</p><div class='empire-slogans'><article><b>إمبراطورية النار</b><strong>هنا تصنع مجدك</strong></article><article><b>إمبراطورية الثلج</b><strong>متجرك وأكثر</strong></article></div></section>
+      {% if member %}<section class='premium-banner'><span class='ice-badge'>❄ عميل مميز</span><h2>أهلاً بك في نادي العملاء المميزين</h2><p>نقاط الولاء</p><strong class='loyalty-points'>{{'{:,}'.format(member['points'])}}</strong><small>عضوية مفعلة منذ {{member['joined_at'][:10]}}</small></section>
+      {% else %}<section class='panel'><h2>فعّل شارتك الثلجية</h2><p>أدخل الكود الخاص الذي حصلت عليه من آيس ستوري على واتساب، ثم اضغط تحقق.</p><form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>كود عميل آيس ستوري</label><input name='code' maxlength='16' placeholder='ICE-XXXXXXXXXXXX' autocapitalize='characters' autocomplete='off' required><button>تحقق وتفعيل العضوية</button></form></section>{% endif %}
+      <section class='panel'><h2>عملاء آيس ستوري المميزون</h2><p>مجتمع العملاء الذين فعّلوا عضويتهم بكود صحيح.</p><div class='premium-list'>{% for x in customers %}<div class='premium-customer'><span class='ice-mini'>❄</span><b>{{x['full_name']}}</b><span class='tag'>عميل مميز</span></div>{% else %}<p>كن أول المنضمين إلى النادي.</p>{% endfor %}</div></section>""",
+      member=member,customers=customers,csrf=session.get("csrf",""))
+    return page("آيس ستوري · إمبراطورية الثلج",body)
+
+@empire_bp.route("/admin/ice-codes",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_ice_codes():
+    if request.method=="POST":
+        csrf()
+        count_raw=(request.form.get("count") or "1").strip()
+        points_raw=(request.form.get("points") or "100").strip()
+        if not re.fullmatch(r"[1-9][0-9]{0,2}",count_raw) or int(count_raw)>100:
+            abort(400,"عدد الأكواد من 1 إلى 100")
+        if not re.fullmatch(r"[0-9]{1,7}",points_raw):
+            abort(400,"عدد نقاط الولاء غير صالح")
+        count,points=int(count_raw),int(points_raw)
+        created=[]
+        for _ in range(count):
+            plain="ICE-"+secrets.token_hex(6).upper()
+            digest=hashlib.sha256(plain.encode("utf-8")).hexdigest()
+            db().execute("INSERT INTO es_ice_codes(code_hash,code_tail,points,status,created_by,created_at) VALUES(?,?,?,'AVAILABLE',?,?)",
+                         (digest,plain[-4:],points,user()["username"],now()))
+            created.append(plain)
+        audit(user()["username"],"ICE_CODES_CREATED","loyalty",str(count),"points_each="+str(points))
+        session["new_ice_codes"]=created
+        flash("تم إنشاء الأكواد. انسخها ووزعها على العملاء؛ لن تُعرض مرة أخرى.")
+        return redirect(url_for("empire.admin_ice_codes"))
+    generated=session.pop("new_ice_codes",[])
+    rows=db().execute("SELECT code_tail,points,status,created_at,used_by,used_at FROM es_ice_codes ORDER BY id DESC LIMIT 200").fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>آيس ستوري × الإمبراطورية إستوري</span><h1>أكواد العملاء المميزين</h1>
+      <p>كل كود فريد ويستخدم مرة واحدة فقط. تحفظ المنصة بصمة الكود ولا تحتفظ بنصه الصريح بعد إنشائه.</p>
+      {% if generated %}<div class='premium-banner'><h2>الأكواد الجديدة — انسخها الآن</h2>{% for code in generated %}<p class='code-line' dir='ltr'>{{code}}</p>{% endfor %}<button type='button' onclick='navigator.clipboard.writeText({{generated|tojson}}.join("\\n"))'>نسخ جميع الأكواد</button></div>{% endif %}
+      <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><label>عدد الأكواد (1–100)</label><input type='number' name='count' min='1' max='100' value='1' required><label>نقاط الولاء لكل كود</label><input type='number' name='points' min='0' max='9999999' value='100' required><button>إنشاء أكواد جديدة</button></form>
+      <h2>سجل الأكواد</h2>{% for x in rows %}<article class='panel'><b dir='ltr'>••••{{x['code_tail']}}</b> · {{x['points']}} نقطة · {{'متاح' if x['status']=='AVAILABLE' else ('مستخدم' if x['status']=='REDEEMED' else 'ملغي')}}{% if x['used_by'] %}<p>استُخدم بواسطة: {{x['used_by']}}</p>{% endif %}<small>{{x['created_at'][:16]}}</small></article>{% else %}<p>لم تُنشأ أكواد بعد.</p>{% endfor %}</section>""",
+      generated=generated,rows=rows,csrf=session.get("csrf",""))
+    return page("أكواد آيس ستوري",body)
+
 @empire_bp.get("/healthz")
 def healthz():
     try:
@@ -443,7 +766,8 @@ def home():
     <a class="service-card" href="/store/topups"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>الألعاب</strong></a>
     <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>صرف العملات</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
-    <a class="service-card" href="/store/agents"><i class="service-icon agents"><svg><use href="#i-user"/></svg></i><strong>الوكلاء</strong></a></div></section>
+    <a class="service-card" href="/store/agents"><i class="service-icon agents"><svg><use href="#i-user"/></svg></i><strong>الوكلاء</strong></a>
+    <a class="service-card loyalty-service" href="/store/ice-empire"><i class="service-icon loyalty"><span>❄</span></i><strong>آيس ستوري · عميل مميز</strong></a></div></section>
     <section class="national-banner"><div class="banner-copy"><span>معاً نبني السودان الرقمي</span><strong>خدمات متكاملة .. أمان وثقة</strong></div><div class="banner-flag" aria-label="علم السودان"><i></i><i></i><i></i><b></b></div><div class="banner-crown">♛</div></section>
     <section class="panel recent-panel"><div class="section-heading"><div><span class="section-kicker">حسابك أولاً</span><h2>آخر العمليات</h2></div><a class="view-all" href="/store/wallet">عرض الكل ←</a></div>
     {% for x in rows %}<div class="transaction-row"><span class="transaction-symbol">{{'↗' if x['delta'] < 0 else '↙'}}</span><div class="transaction-info"><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}}</small></div><b class="transaction-value {{'out' if x['delta'] < 0 else 'in'}}" dir="ltr">{{'+' if x['delta'] > 0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class="empty-state">ستظهر هنا آخر حركات محفظتك.</div>{% endfor %}</section>
@@ -1014,7 +1338,7 @@ def exchange():
     
 @empire_bp.route("/admin/exchange",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("exchange")
 def admin_exchange():
     seed_owner_assets()
     u=user()
@@ -1063,7 +1387,7 @@ def admin_exchange():
 
 @empire_bp.get("/admin")
 @login_required
-@founder_required
+@manager_dashboard_required
 def admin():
     seed_owner_assets()
     owner=db().execute("SELECT username,account_number FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
@@ -1106,12 +1430,13 @@ def admin():
     <a href='/store/admin/agents'><b>إدارة الوكلاء</b><small>الاعتماد والعمولات والخدمات</small></a></div></section>
     <section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
     <a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>
-    <a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a></div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
+    <a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>
+    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg)
     return page("لوحة المالك",body)
 
 @empire_bp.route("/admin/agents",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("agents")
 def admin_agents():
     u=user()
     if request.method=="POST":
@@ -1130,7 +1455,7 @@ def admin_agents():
 
 @empire_bp.route("/admin/listings",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("catalog")
 def admin_listings():
     if request.method=="POST":
         csrf(); listing_id=request.form.get("listing_id",""); action=request.form.get("action","")
@@ -1148,7 +1473,7 @@ def admin_listings():
 
 @empire_bp.route("/admin/products",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("products")
 def admin_products():
     # Create the session CSRF token before rendering any form on this page.
     # page() initializes it later, which was too late for this route's pre-rendered HTML.
@@ -1235,7 +1560,7 @@ def admin_products():
 
 @empire_bp.route("/admin/payments",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("payments")
 def admin_payments():
     u=user()
     if request.method=="POST":
@@ -1315,7 +1640,7 @@ def buy_epc():
 
 @empire_bp.route("/admin/settings",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("settings")
 def admin_settings():
     if request.method=="POST":
         csrf()
@@ -1341,7 +1666,7 @@ def admin_settings():
 
 @empire_bp.route("/admin/withdrawals",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("withdrawals")
 def admin_withdrawals():
     u=user()
     if request.method=="POST":
@@ -1373,7 +1698,7 @@ def admin_withdrawals():
 
 @empire_bp.route("/admin/disputes",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("orders")
 def admin_disputes():
     u=user()
     if request.method=="POST":
@@ -1403,7 +1728,7 @@ def admin_disputes():
 
 @empire_bp.route("/admin/topups",methods=["GET","POST"])
 @login_required
-@founder_required
+@admin_permission("orders")
 def admin_topups():
     if request.method=="POST":
         csrf()
@@ -1459,7 +1784,7 @@ def admin_topups():
 
 @empire_bp.get("/admin/market-orders")
 @login_required
-@founder_required
+@admin_permission("orders")
 def admin_market_orders():
     rows = db().execute("""SELECT o.*,l.title,l.game,l.category FROM es_market_orders o LEFT JOIN es_listings l ON l.id=o.listing_id ORDER BY o.id DESC LIMIT 300""").fetchall()
     labels = {"ESCROWED":"بانتظار تسليم البائع","DELIVERED":"تم التسليم — بانتظار تأكيد المشتري","RELEASED":"أغلقت لصالح البائع","REFUNDED":"تم رد المبلغ","DISPUTED":"نزاع مفتوح"}
@@ -1471,7 +1796,7 @@ def admin_market_orders():
 
 @empire_bp.get("/admin/audit")
 @login_required
-@founder_required
+@admin_permission("audit")
 def admin_audit():
     rows=db().execute("SELECT * FROM es_audit ORDER BY id DESC LIMIT 300").fetchall()
     body=render_template_string("""<section class='panel'><h1>سجل التدقيق</h1>{% for x in rows %}<p>{{x['created_at']}} · {{x['actor']}} · {{x['action']}} · {{x['object_type']}} {{x['object_ref']}} · {{x['details']}}</p>{% else %}<p>السجل فارغ.</p>{% endfor %}</section>""",rows=rows)
