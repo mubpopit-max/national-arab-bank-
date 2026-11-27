@@ -1,4 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/empire_estory_icon"
-    android:gravity="center" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#090D14"
+        android:pathData="M18,0h72c9.94,0 18,8.06 18,18v72c0,9.94 -8.06,18 -18,18h-72c-9.94,0 -18,-8.06 -18,-18v-72c0,-9.94 8.06,-18 18,-18z" />
+    <path
+        android:fillColor="#111B27"
+        android:strokeColor="#C9A34E"
+        android:strokeWidth="2"
+        android:pathData="M54,8 C67,17 78,20 88,23 L88,49 C88,69 74,85 54,98 C34,85 20,69 20,49 L20,23 C30,20 41,17 54,8z" />
+    <path
+        android:fillColor="#C9A34E"
+        android:pathData="M31,40 L37,24 L48,33 L54,17 L60,33 L71,24 L77,40 L72,46 L36,46 Z" />
+    <path
+        android:fillColor="#F1D58A"
+        android:pathData="M36,47h36v3h-36z" />
+    <path
+        android:fillColor="#E0BD68"
+        android:pathData="M38,55h32v7h-24v6h20v7h-20v6h24v7h-32z" />
+    <path
+        android:fillColor="#C9A34E"
+        android:pathData="M27,48h4v4h-4zM77,48h4v4h-4z" />
+    <path
+        android:fillColor="#F1D58A"
+        android:pathData="M54,91l2.4,2.4L54,96l-2.4,-2.6z" />
+</vector>
