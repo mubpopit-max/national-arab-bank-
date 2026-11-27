@@ -113,6 +113,7 @@ def init_db():
       token_hash TEXT PRIMARY KEY, codes_json TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS es_ice_codes(
       id INTEGER PRIMARY KEY, code_hash TEXT UNIQUE NOT NULL, code_tail TEXT NOT NULL,
+      code_cipher TEXT NOT NULL DEFAULT '', copied_at TEXT,
       points INTEGER NOT NULL CHECK(points>=0), status TEXT NOT NULL DEFAULT 'AVAILABLE'
         CHECK(status IN ('AVAILABLE','REDEEMED','REVOKED')),
       created_by TEXT NOT NULL, used_by TEXT, created_at TEXT NOT NULL, used_at TEXT);
@@ -145,6 +146,11 @@ def init_db():
             db().execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
         if "phone" not in user_cols:
             db().execute("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+    ice_cols={r["name"] for r in db().execute("PRAGMA table_info(es_ice_codes)").fetchall()}
+    if "code_cipher" not in ice_cols:
+        db().execute("ALTER TABLE es_ice_codes ADD COLUMN code_cipher TEXT NOT NULL DEFAULT ''")
+    if "copied_at" not in ice_cols:
+        db().execute("ALTER TABLE es_ice_codes ADD COLUMN copied_at TEXT")
     payment_cols={r["name"] for r in db().execute("PRAGMA table_info(es_payments)").fetchall()}
     if "quantity_epc" not in payment_cols:
         db().execute("ALTER TABLE es_payments ADD COLUMN quantity_epc INTEGER NOT NULL DEFAULT 0")
@@ -167,6 +173,7 @@ def init_db():
     defaults = {
       "epc_price_sdg":"0", "epc_price_usdt_micros":"0", "epc_max_supply":"15000000",
       "fx_rate_mode":"manual", "fx_market_rate":"5600", "fx_manual_rate":"5600", "fx_buy_spread_bps":"0", "fx_sell_spread_bps":"0",
+      "platform_fee_bps":"300",
       "binance_id":os.getenv("EMPIRE_BINANCE_ID",""),
       "store_name":"الإمبراطورية إستوري", "market_fee_bps":"0",
       "topups_enabled":"0", "epc_sales_enabled":"0"
@@ -270,6 +277,11 @@ def setting(key,default=""):
 def money_int(value):
     if not re.fullmatch(r"[1-9][0-9]{0,11}",str(value or "")): raise ValueError("المبلغ غير صالح")
     return int(value)
+
+def platform_fee(amount):
+    """Three percent platform fee, rounded up to the smallest whole currency unit."""
+    amount=int(amount)
+    return (amount*300+9999)//10000 if amount>0 else 0
 
 def ref():
     return secrets.token_hex(8).upper()
@@ -879,6 +891,7 @@ def home():
     <a class="service-card" href="/store/profile"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
     <a class="service-card" href="/store/topups"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>الألعاب</strong></a>
     <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>صرف العملات</strong></a>
+    <a class="service-card" href="/store/history"><i class="service-icon funding"><svg><use href="#i-bell"/></svg></i><strong>المعاملات السابقة</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
     <a class="service-card" href="/store/agents"><i class="service-icon agents"><svg><use href="#i-user"/></svg></i><strong>الوكلاء</strong></a>
     <a class="service-card loyalty-service" href="/store/loyalty"><i class="service-icon loyalty"><span>★</span></i><strong>نقاط الولاء</strong></a>
@@ -937,7 +950,8 @@ def withdrawal():
         encrypted=encryption().encrypt(details.encode()).decode()
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
-            post(r,[("user:"+u["username"],"SDG",-amount),("payout:pending","SDG",amount)],"حجز طلب سحب مستحقات")
+            fee=platform_fee(amount)
+            post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("platform:revenue","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
             d.execute("INSERT INTO es_withdrawals(reference,username,amount_sdg,payout_method,payout_details_cipher,created_at) VALUES(?,?,?,?,?,?)",
                       (r,u["username"],amount,method,encrypted,now()))
             audit(u["username"],"WITHDRAWAL_REQUESTED","withdrawal",r)
@@ -945,7 +959,7 @@ def withdrawal():
         except Exception: d.rollback(); raise
         flash("تم حجز المبلغ ورفع طلب السحب للمراجعة. لا يعتبر مدفوعاً قبل تأكيد المالك.")
         return redirect(url_for("empire.wallet"))
-    body=render_template_string("""<section class='panel'><h1>طلب سحب SDG</h1><p>سيتم حجز المبلغ من محفظتك حتى يراجع المالك الطلب. أدخل بيانات الاستلام بدقة.</p>
+    body=render_template_string("""<section class='panel'><h1>طلب سحب SDG</h1><p>سيتم حجز مبلغ السحب من محفظتك، وتُخصم عمولة التطبيق 3% بشكل منفصل. أدخل بيانات الاستلام بدقة.</p>
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>المبلغ SDG</label><input name='amount' type='number' min='1' required>
     <label>وسيلة الاستلام</label><select name='payout_method'><option value='BANK_TRANSFER'>تحويل بنكي</option><option value='MOBILE_WALLET'>محفظة هاتف</option><option value='OTHER'>أخرى</option></select>
     <label>بيانات الاستلام</label><textarea name='payout_details' maxlength='500' required></textarea><button>إرسال طلب السحب</button></form></section>""",csrf=session.get("csrf",""))
@@ -1078,7 +1092,8 @@ def buy_listing():
     try:
         listing=d.execute("SELECT * FROM es_listings WHERE id=? AND status='PUBLISHED'",(listing["id"],)).fetchone()
         if not listing: raise ValueError("الإعلان لم يعد متاحاً")
-        post(r,[("user:"+u["username"],"SDG",-listing["price_sdg"]),("escrow:market","SDG",listing["price_sdg"])],"حجز قيمة صفقة سوق")
+        fee=platform_fee(listing["price_sdg"])
+        post(r,[("user:"+u["username"],"SDG",-(listing["price_sdg"]+fee)),("escrow:market","SDG",listing["price_sdg"]),("platform:revenue","SDG",fee)],"حجز قيمة صفقة سوق · عمولة التطبيق 3%")
         d.execute("INSERT INTO es_market_orders(reference,listing_id,buyer,seller,price_sdg,status,created_at,updated_at) VALUES(?,?,?,?,?,'ESCROWED',?,?)",
                   (r,listing["id"],u["username"],listing["seller"],listing["price_sdg"],now(),now()))
         d.execute("UPDATE es_listings SET status='SOLD' WHERE id=?",(listing["id"],))
@@ -1291,9 +1306,8 @@ def confirm_order():
     try:
         row=d.execute("SELECT * FROM es_market_orders WHERE reference=? AND buyer=? AND status='DELIVERED'",(r,u["username"])).fetchone()
         if not row: raise ValueError("الصفقة لم تعد بانتظار تأكيد الاستلام")
-        fee=(row["price_sdg"]*int(setting("market_fee_bps","500")))//10000
-        seller_amount=row["price_sdg"]-fee
-        post(r+"R",[("escrow:market","SDG",-row["price_sdg"]),("user:"+row["seller"],"SDG",seller_amount),("platform:revenue","SDG",fee)],"تحرير صفقة بعد تأكيد المشتري")
+        seller_amount=row["price_sdg"]
+        post(r+"R",[("escrow:market","SDG",-row["price_sdg"]),("user:"+row["seller"],"SDG",seller_amount)],"تحرير صفقة بعد تأكيد المشتري — العمولة حُصّلت من المشتري")
         d.execute("UPDATE es_market_orders SET status='RELEASED',updated_at=? WHERE reference=?",(now(),r))
         d.execute("UPDATE es_listings SET status='SOLD' WHERE id=?",(row["listing_id"],))
         audit(u["username"],"ESCROW_RELEASED","market_order",r,"seller credit="+str(seller_amount))
@@ -1396,7 +1410,10 @@ def transfer_epc():
             current_target=d.execute("SELECT username,full_name,account_number,active FROM users WHERE account_number=?",(account,)).fetchone()
             if not current_target or not current_target["active"] or current_target["username"]==u["username"]:
                 raise ValueError("حساب المستلم لم يعد صالحاً.")
-            post(r,[("user:"+u["username"],currency,-qty),("user:"+current_target["username"],currency,qty)],"تحويل "+currency+" إلى "+current_target["full_name"])
+            fee=platform_fee(qty)
+            post(r,[("user:"+u["username"],currency,-qty),("user:"+current_target["username"],currency,qty),
+                    ("user:"+u["username"],currency,-fee),("platform:revenue",currency,fee)],
+                 "تحويل "+currency+" إلى "+current_target["full_name"]+" · عمولة التطبيق 3%")
             d.execute("INSERT INTO es_transfer_details(reference,sender,recipient,recipient_account,currency,note,created_at) VALUES(?,?,?,?,?,?,?)",
                       (r,u["username"],current_target["username"],account,currency,note,now()))
             d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
@@ -1405,6 +1422,10 @@ def transfer_epc():
                       (u["username"],"تم التحويل بنجاح","تم إرسال "+format(qty,",")+" "+currency+" إلى "+current_target["full_name"]+" · رقم العملية "+r,r,now()))
             audit(u["username"],"WALLET_TRANSFER","wallet",r,"to="+current_target["username"]+";currency="+currency)
             d.commit()
+        except ValueError as exc:
+            d.rollback()
+            flash(str(exc))
+            return redirect(url_for("empire.transfer_epc"))
         except Exception:
             d.rollback()
             raise
@@ -1490,14 +1511,17 @@ def exchange():
             abort(400,"قيمة التحويل تتجاوز الحد المحاسبي المسموح.")
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
+            fee=platform_fee(amount)
             if direction=="URC_TO_SDG":
                 pool=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='SDG'").fetchone()["n"])
                 if pool<result: raise ValueError("سيولة SDG المتاحة لدى المنصة لا تكفي لإتمام التحويل")
-                post(r,[("user:"+u["username"],"URC",-amount),("platform:fx_pool","URC",amount),("platform:fx_pool","SDG",-result),("user:"+u["username"],"SDG",result)],"تحويل URC إلى SDG")
+                post(r,[("user:"+u["username"],"URC",-amount),("platform:fx_pool","URC",amount),("platform:fx_pool","SDG",-result),("user:"+u["username"],"SDG",result),
+                        ("user:"+u["username"],"URC",-fee),("platform:revenue","URC",fee)],"تحويل URC إلى SDG · عمولة التطبيق 3%")
             else:
                 pool=int(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='platform:fx_pool' AND currency='URC'").fetchone()["n"])
                 if pool<result: raise ValueError("سيولة URC المتاحة لدى المنصة لا تكفي لإتمام التحويل")
-                post(r,[("user:"+u["username"],"SDG",-amount),("platform:fx_pool","SDG",amount),("platform:fx_pool","URC",-result),("user:"+u["username"],"URC",result)],"تحويل SDG إلى URC")
+                post(r,[("user:"+u["username"],"SDG",-amount),("platform:fx_pool","SDG",amount),("platform:fx_pool","URC",-result),("user:"+u["username"],"URC",result),
+                        ("user:"+u["username"],"SDG",-fee),("platform:revenue","SDG",fee)],"تحويل SDG إلى URC · عمولة التطبيق 3%")
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,direction+" rate="+str(rate))
             d.commit()
         except ValueError as exc:
@@ -1832,7 +1856,8 @@ def buy_epc():
             r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
             try:
                 assert_epc_capacity(qty)
-                post(r,[("user:"+u["username"],"SDG",-cost),("platform:epc_sales","SDG",cost),("user:"+u["username"],"URC",qty),("issuer:urc","URC",-qty)],"شراء URC من محفظة SDG")
+                fee=platform_fee(cost)
+                post(r,[("user:"+u["username"],"SDG",-(cost+fee)),("platform:epc_sales","SDG",cost),("platform:revenue","SDG",fee),("user:"+u["username"],"URC",qty),("issuer:urc","URC",-qty)],"شراء URC من محفظة SDG · عمولة التطبيق 3%")
                 audit(u["username"],"EPC_PURCHASE","wallet",r); d.commit()
             except Exception: d.rollback(); raise
             flash("تم شراء URC وإضافتها إلى محفظتك.")
@@ -1936,8 +1961,7 @@ def admin_disputes():
                 d.execute("UPDATE es_listings SET status='PAUSED' WHERE id=?",(order["listing_id"],))
                 d.execute("UPDATE es_disputes SET status='RESOLVED_BUYER',resolution='refund',resolved_at=? WHERE order_ref=?",(now(),r))
             else:
-                fee=(order["price_sdg"]*int(setting("market_fee_bps","500")))//10000
-                post(r+"S",[("escrow:market","SDG",-order["price_sdg"]),("user:"+order["seller"],"SDG",order["price_sdg"]-fee),("platform:revenue","SDG",fee)],"تحرير مستحقات البائع بعد قرار النزاع")
+                post(r+"S",[("escrow:market","SDG",-order["price_sdg"]),("user:"+order["seller"],"SDG",order["price_sdg"])],"تحرير مستحقات البائع بعد قرار النزاع — العمولة حُصّلت من المشتري")
                 d.execute("UPDATE es_market_orders SET status='RELEASED',updated_at=? WHERE reference=?",(now(),r))
                 d.execute("UPDATE es_disputes SET status='RESOLVED_SELLER',resolution='release',resolved_at=? WHERE order_ref=?",(now(),r))
             audit(u["username"],"DISPUTE_RESOLVED_"+action,"market_order",r)
