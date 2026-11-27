@@ -372,6 +372,27 @@ def init_db():
     )
 
 
+    # Provision the dedicated general-manager account once. The password is
+    # stored only as a bcrypt hash; the plaintext is never written to the database.
+    manager_account = "9274618"
+    manager_username = "manager_" + manager_account
+    manager_password_hash = "$2y$12$nM5tXwbdkiF6CCE7XmBeYu2CY7FZHjrkdJoFs7CgFOe6qKmuWWlKe"
+    manager_exists = database.execute(
+        "SELECT 1 FROM users WHERE account_number=? OR username=?",
+        (manager_account, manager_username),
+    ).fetchone()
+    if not manager_exists:
+        manager_pin_hash = bcrypt.hashpw(
+            secrets.token_hex(16).encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+        database.execute(
+            """INSERT INTO users
+               (username,full_name,account_number,password_hash,pin_hash,balance,currency,role,active,created_at)
+               VALUES(?,?,?,?,?,0,'SDG','manager',1,?)""",
+            (manager_username,"المدير العام للإمبراطورية",manager_account,
+             manager_password_hash,manager_pin_hash,0,now()),
+        )
+
     funding_columns = {row["name"] for row in database.execute("PRAGMA table_info(funding_requests)").fetchall()}
     for column, definition in (
         ("receiving_account_id", "INTEGER"),
