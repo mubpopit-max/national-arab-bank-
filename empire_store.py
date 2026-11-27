@@ -1363,7 +1363,7 @@ def pay_topup():
         fee=platform_fee(row["amount_sdg"])
         post(r,[("user:"+u["username"],"SDG",-(row["amount_sdg"]+fee)),("clearing:topups","SDG",row["amount_sdg"]),
                 ("protection:fund","SDG",fee)],"دفع طلب شحن ألعاب من المحفظة · عمولة التطبيق 3%")
-                notify_protection_income(r,"SDG",fee,"عمولة شحن ألعاب")
+        notify_protection_income(r,"SDG",fee,"عمولة شحن ألعاب")
         d.execute("UPDATE es_topup_orders SET status='PAID',updated_at=? WHERE reference=? AND status='PENDING_PAYMENT'",(now(),r))
         row=d.execute("""SELECT t.*,p.cost_sdg FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id
                          WHERE t.reference=? AND t.status='PAID'""",(r,)).fetchone()
