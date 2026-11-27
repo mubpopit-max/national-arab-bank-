@@ -30,6 +30,7 @@ public final class MainActivity extends Activity {
 
     private WebView webView;
     private ValueCallback<Uri[]> fileChooserCallback;
+    private int systemBottomInset = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +61,9 @@ public final class MainActivity extends Activity {
                 right = insets.getSystemWindowInsetRight();
                 bottom = insets.getSystemWindowInsetBottom();
             }
-            view.setPadding(left, top, right, bottom);
+            systemBottomInset = bottom;
+            view.setPadding(left, top, right, 0);
+            view.post(() -> applyWebInsets());
             return insets;
         });
         setContentView(webView);
@@ -98,6 +101,13 @@ public final class MainActivity extends Activity {
         webView.loadUrl(START_URL);
     }
 
+    private void applyWebInsets() {
+        if (webView == null) return;
+        String script = "document.documentElement.style.setProperty('--native-bottom-inset','"
+            + systemBottomInset + "px');";
+        webView.evaluateJavascript(script, null);
+    }
+
     private boolean handleNavigation(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         String host = uri.getHost();
@@ -130,6 +140,12 @@ public final class MainActivity extends Activity {
     }
 
     private final class SecureWebViewClient extends WebViewClient {
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
+            applyWebInsets();
+        }
+
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             return handleNavigation(request.getUrl());
