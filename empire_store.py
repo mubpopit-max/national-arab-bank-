@@ -401,7 +401,7 @@ input,textarea,select{display:block;width:100%;min-height:46px;margin:7px 0 14px
 .banner-copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:4px}.banner-copy span{color:#123f71;font-size:16px;font-weight:950}.banner-copy strong{color:#39718b;font-size:10px}
 .banner-flag{position:relative;display:flex;width:48px;height:32px;flex-direction:column;overflow:hidden;border-radius:4px;transform:rotate(-7deg);box-shadow:0 4px 10px rgba(20,45,65,.12)}.banner-flag i{flex:1}.banner-flag i:nth-child(1){background:#d92732}.banner-flag i:nth-child(2){background:#fff}.banner-flag i:nth-child(3){background:#111}.banner-flag b{position:absolute;left:0;top:0;width:0;height:0;border-top:16px solid transparent;border-bottom:16px solid transparent;border-left:22px solid #16864b}.banner-crown{position:absolute;left:28%;bottom:-20px;color:rgba(8,103,161,.07);font-size:80px;pointer-events:none}
 .recent-panel{margin-top:12px!important}.view-all{font-size:11px;font-weight:850;white-space:nowrap}.transaction-row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #edf1f5}.transaction-row:last-child{border-bottom:0}.transaction-symbol{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:50%;background:#e6f6ed;color:#13864e;font-size:21px;font-weight:900}.transaction-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.transaction-info b{overflow:hidden;color:#1b3e56;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.transaction-info small{font-size:9px}.transaction-value{font-size:10px;white-space:nowrap}.transaction-value.in{color:#13864e}.transaction-value.out{color:#c04b4b}
-.app-bottom{position:sticky;z-index:60;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:16px 0 0;padding:8px 8px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:rgba(255,255,255,.97);box-shadow:0 -5px 20px rgba(20,60,85,.08);backdrop-filter:blur(14px);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
+.app-bottom{position:sticky;z-index:60;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px;margin:16px 0 0;padding:8px 8px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid #e0eaf1;background:rgba(255,255,255,.97);box-shadow:0 -5px 20px rgba(20,60,85,.08);backdrop-filter:blur(14px);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
 .app-bottom a{display:flex;min-width:0;min-height:54px;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px 1px;color:#718496!important;font-size:10px;font-weight:850;line-height:1.1}.app-bottom a .ico{display:grid;place-items:center;width:26px;height:25px;font-size:0;line-height:1}.app-bottom a .ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.app-bottom a.active{color:#0875b9!important}.app-bottom a.active .ico{background:#e9f4fb;border-radius:9px;width:34px;height:29px}.app-bottom a:focus-visible{outline:2px solid #0875b9;outline-offset:2px;border-radius:10px}
 .admin-section{margin:16px 0 20px;padding:15px;border:1px solid #e1eaf0;border-radius:20px;background:linear-gradient(150deg,#fff,#f7fafc);box-shadow:0 5px 18px rgba(20,60,85,.04)}.admin-section-head{margin:0 2px 12px;padding-bottom:10px;border-bottom:1px solid #e8eef3}.admin-section-head span{color:#16834f;font-size:10px;font-weight:900;letter-spacing:.4px}.admin-section-head h2{margin:4px 0 0;font-size:17px}.admin-links a{display:flex;min-width:0;min-height:76px;flex-direction:column;justify-content:center;gap:5px;padding:13px;border:1px solid #e1ebf1;border-radius:15px;background:linear-gradient(145deg,#fff,#f7fbfd);color:#164d70!important;font-weight:850;transition:transform .16s ease,border-color .16s ease}.admin-links a:active{transform:scale(.985)}.admin-links a small{font-size:11px;color:#16834f}.admin-filters{display:flex;gap:7px;overflow:auto;padding:5px 0 12px}.admin-filters a{flex:0 0 auto;padding:7px 11px;border:1px solid #dce8ef;border-radius:30px;background:#f7fafc;color:#175d85;font-size:11px;font-weight:800}.order-card{padding:15px!important}.order-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.order-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.order-grid>div{min-width:0;padding:9px;border-radius:11px;background:#f7fafc}.order-grid small{display:block;color:#718496;font-size:10px}.order-grid b{display:block;overflow-wrap:anywhere;font-size:12px;color:#183d56}@media(max-width:380px){.order-grid{grid-template-columns:1fr}}\n.transfer-step{padding:20px!important}.transfer-step>p{line-height:1.8}.transfer-step form{margin-top:18px}.recipient-confirm{display:grid;gap:6px;margin:16px 0;padding:17px;border:1px solid #dcebe3;border-radius:17px;background:linear-gradient(135deg,#f1faf5,#f3f8fc)}.recipient-confirm small{color:#678}.recipient-confirm strong{font-size:20px;color:#173e58}.recipient-confirm span{font-weight:850;letter-spacing:1px}.recipient-confirm em{justify-self:start;padding:4px 10px;border-radius:20px;font-size:11px;font-style:normal;font-weight:800}.recipient-confirm .verified{background:#e1f5e9;color:#137343}.recipient-confirm .unverified{background:#fff3df;color:#98640d}.transfer-submit{width:100%;min-height:50px;margin:10px 0 4px;background:linear-gradient(110deg,#0876b9,#16834f)!important;box-shadow:0 7px 16px rgba(8,118,185,.16)!important}.fulfill-code-form{margin-top:14px;padding:14px;border:1px solid #dcebe3;border-radius:15px;background:#f5fbf7}.fulfill-code-form button{width:100%}.empty-state{padding:20px;border:1px dashed #dce6ed;border-radius:15px;color:#718496;text-align:center}.flash{padding:12px 14px;border:1px solid #cce7d6;border-radius:12px;background:#eff9f2;color:#17633d}
 /* Final owner-console and mobile refinements: retain every existing admin action. */
@@ -465,6 +465,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
 .premium-list{display:grid;gap:8px}.premium-customer{display:flex;align-items:center;gap:9px;min-width:0;padding:10px;border:1px solid #e3eee6;border-radius:13px;background:#fbfdfb}
 .premium-customer b{flex:1;min-width:0;overflow-wrap:anywhere}.ice-mini{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:11px;background:#e6f7fb;color:#2484a3}
 .loyalty-service .service-icon{background:linear-gradient(145deg,#e5f8ff,#f7fdff)!important;color:#2a8aa9!important;border:1px solid #b9e0eb}
+.history-strip{display:flex;align-items:center;gap:10px;margin:9px 0;padding:12px;border:1px solid #e0eae2;border-radius:14px;background:#fbfdfb;color:var(--ink)!important}.history-mark{display:grid;place-items:center;flex:0 0 36px;height:36px;border-radius:12px;background:#e8f5ec;color:#16834f;font-size:19px;font-weight:900}.history-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.history-main b{font-size:12px;overflow-wrap:anywhere}.history-main small{font-size:9px;overflow-wrap:anywhere}.history-strip>strong{font-size:11px;white-space:nowrap;color:#176b45}.history-detail-hero{display:grid;gap:6px;margin:14px 0;padding:15px;border-radius:15px;background:#f0f7f2}.history-detail-hero b{overflow-wrap:anywhere;font-size:13px}
 .permission-choice{display:flex;align-items:center;gap:9px;margin:8px 0;padding:9px;border:1px solid #e3ece5;border-radius:11px;background:#fbfdfb}
 .permission-choice input{width:18px;min-height:18px;height:18px;margin:0;flex:0 0 18px;accent-color:#16834f}
 .code-line{padding:9px 12px;border:1px dashed #9bcbb0;border-radius:10px;background:#fff;font-weight:900;letter-spacing:1px}
@@ -504,7 +505,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(20,132,78,.13);bo
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style></head><body><svg xmlns='http://www.w3.org/2000/svg' aria-hidden='true' style='position:absolute;width:0;height:0;overflow:hidden'><symbol id='i-wallet' viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='15' rx='3'/><path d='M3 9h18M16 14h2'/><path d='M6 5V4a2 2 0 0 1 2-2h10'/></symbol><symbol id='i-home' viewBox='0 0 24 24'><path d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z'/></symbol><symbol id='i-store' viewBox='0 0 24 24'><path d='M3 9h18l-1.5-5h-15zM5 9v11h14V9M9 20v-6h6v6'/><path d='M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0'/></symbol><symbol id='i-transfer' viewBox='0 0 24 24'><path d='M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4'/></symbol><symbol id='i-coins' viewBox='0 0 24 24'><ellipse cx='9' cy='6' rx='6' ry='3'/><path d='M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5M15 13c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3z'/></symbol><symbol id='i-user' viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></symbol><symbol id='i-bell' viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></symbol><symbol id='i-game' viewBox='0 0 24 24'><path d='M6 8h12a4 4 0 0 1 3.8 5l-1.2 4a2 2 0 0 1-3.3 1l-2.3-2H9l-2.3 2a2 2 0 0 1-3.3-1l-1.2-4A4 4 0 0 1 6 8z'/><path d='M7 11v4m-2-2h4m7-1h.01M18 14h.01'/></symbol><symbol id='i-exchange' viewBox='0 0 24 24'><path d='M7 7h13m-4-4 4 4-4 4M17 17H4m4-4-4 4 4 4'/></symbol><symbol id='i-arrow-down' viewBox='0 0 24 24'><path d='M12 3v13m-5-5 5 5 5-5M4 21h16'/></symbol><symbol id='i-eye' viewBox='0 0 24 24'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></symbol><symbol id='i-eye-off' viewBox='0 0 24 24'><path d='m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8'/><path d='M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-3 3.8M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7a9 9 0 0 0 3-.5'/></symbol><symbol id='i-pubg' viewBox='0 0 24 24'><path d='M4 5h16v14H4zM8 9h8M8 12h5M8 15h8'/><path d='M2 8V4h4M18 4h4v4M2 16v4h4M18 20h4v-4'/></symbol><symbol id='i-freefire' viewBox='0 0 24 24'><path d='M13 2c1 5-4 6-3 11 1-2 3-3 4-5 4 4 5 7 3 11a7 7 0 0 1-13-3c0-4 3-7 5-9 0 4 1 5 2 6 0-5 1-8 2-11z'/></symbol><symbol id='i-ml' viewBox='0 0 24 24'><path d='M3 18 8 6l4 7 4-7 5 12M6 18h12'/><path d='m8 6 4 2 4-2'/></symbol><symbol id='i-fortnite' viewBox='0 0 24 24'><path d='M5 3h14v18H5zM9 7h7M9 11h5M9 15h7'/><path d='M8 3v18'/></symbol></svg><header class='app-header'><a class='header-menu' href='/store/' aria-label='الرئيسية'><svg><use href='#i-home'/></svg></a><div class='header-brand'><div class='brand'>Empire E-Story</div><small>Digital Life .. Greater Sudan</small></div><a class='header-alert' href='/store/notifications' aria-label='الإشعارات'><svg><use href='#i-bell'/></svg></a><a class='header-avatar' href='/store/profile' aria-label='الملف الشخصي'><svg><use href='#i-user'/></svg></a></header><main>{% if request.endpoint == 'empire.home' %}<section class='wallet-top'><div class='wallet-card-icon'><svg aria-hidden='true'><use href='#i-wallet'/></svg></div><div class='wallet-balance'><div class='eyebrow'>رصيد المحفظة</div><div class='amount' id='sdgBalance' data-balance='{{wallet_sdg}}'>{{'{:,}'.format(wallet_sdg)}} <span>SDG</span></div><div class='currency'>جنيه سوداني</div></div><button class='balance-toggle' id='balanceToggle' type='button' aria-label='إخفاء الرصيد' aria-pressed='false'><svg aria-hidden='true'><use id='balanceEye' href='#i-eye'/></svg></button><div class='wallet-secure'><span>✓</span><small>محفظتك بأمان</small></div></section>{% endif %}<div class='page-content'>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<p class='flash'>{{m}}</p>{% endfor %}{% endwith %}
-    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>عملاتي</a><a href='/store/profile'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
+    {{body|safe}}<footer><a href='/account'>حسابي</a> · <a href='/logout'>تسجيل الخروج</a><span style='float:left'>الإمبراطورية إستوري ©</span></footer></div></main><nav class='app-bottom' aria-label='التنقل الرئيسي'><a href='/store/'><span class='ico'><svg><use href='#i-home'/></svg></span>الرئيسية</a><a href='/store/marketplace'><span class='ico'><svg><use href='#i-store'/></svg></span>المتجر</a><a href='/store/transfer-epc'><span class='ico'><svg><use href='#i-transfer'/></svg></span>التحويلات</a><a href='/store/history'><span class='ico'><svg><use href='#i-bell'/></svg></span>المعاملات</a><a href='/store/wallet'><span class='ico'><svg><use href='#i-coins'/></svg></span>محفظتي</a><a href='/store/profile'><span class='ico'><svg><use href='#i-user'/></svg></span>حسابي</a></nav><script>
 (function(){
   const balance=document.getElementById('sdgBalance'),toggle=document.getElementById('balanceToggle');
   if(balance&&toggle){
@@ -841,6 +842,46 @@ def admin_ice_codes():
       <h2>سجل الأكواد</h2>{% for x in rows %}<article class='panel'><b dir='ltr'>••••{{x['code_tail']}}</b> · {{x['points']}} نقطة · {{'متاح' if x['status']=='AVAILABLE' else ('مستخدم' if x['status']=='REDEEMED' else 'ملغي')}}{% if x['used_by'] %}<p>استُخدم بواسطة: {{x['used_by']}}</p>{% endif %}<small>{{x['created_at'][:16]}}</small></article>{% else %}<p>لم تُنشأ أكواد بعد.</p>{% endfor %}</section>""",
       generated=generated,rows=rows,csrf=session.get("csrf",""))
     return page("أكواد آيس ستوري",body)
+
+@empire_bp.get("/history")
+@login_required
+def transaction_history():
+    u=user(); account="user:"+u["username"]
+    refs=db().execute("""SELECT reference,MAX(created_at) created_at,MAX(memo) memo,MAX(id) last_id
+      FROM es_ledger WHERE account=? GROUP BY reference ORDER BY last_id DESC LIMIT 100""",(account,)).fetchall()
+    items=[]
+    for row in refs:
+        movements=db().execute("SELECT currency,delta FROM es_ledger WHERE reference=? AND account=? ORDER BY line_no",(row["reference"],account)).fetchall()
+        principal=max(movements,key=lambda x:abs(int(x["delta"]))) if movements else None
+        items.append({"reference":row["reference"],"created_at":row["created_at"],"memo":row["memo"],
+                      "amount":abs(int(principal["delta"])) if principal else 0,
+                      "currency":principal["currency"] if principal else ""})
+    body=render_template_string("""<section class='panel'><span class='tag'>سجل حسابك</span><h1>المعاملات السابقة</h1><p>كل شريط يعرض قيمة العملية ووقتها ورقمها والخدمة. اضغط على أي عملية لفتح إشعارها الكامل.</p>
+      {% for x in items %}<a class='history-strip' href='/store/history/{{x["reference"]}}'><span class='history-mark'>↗</span><span class='history-main'><b>{{x['memo']}}</b><small>{{x['created_at'][:19].replace('T',' ')}} UTC</small><small dir='ltr'>{{x['reference']}}</small></span><strong>{{'{:,}'.format(x['amount'])}} {{x['currency']}}</strong></a>{% else %}<div class='empty-state'>لا توجد معاملات مسجلة في محفظتك بعد.</div>{% endfor %}</section>""",items=items)
+    return page("المعاملات السابقة",body)
+
+@empire_bp.get("/history/<reference>")
+@login_required
+def transaction_history_detail(reference):
+    u=user(); account="user:"+u["username"]
+    own=db().execute("SELECT currency,delta,memo,created_at FROM es_ledger WHERE reference=? AND account=? ORDER BY line_no",(reference,account)).fetchall()
+    if not own: abort(404)
+    row=own[0]
+    transfer=db().execute("SELECT sender,recipient,recipient_account,note FROM es_transfer_details WHERE reference=? AND (sender=? OR recipient=?)",
+                          (reference,u["username"],u["username"])).fetchone()
+    movements=[{"currency":x["currency"],"delta":int(x["delta"])} for x in own]
+    counterparty=""
+    if transfer:
+        other=transfer["recipient"] if transfer["sender"]==u["username"] else transfer["sender"]
+        person=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(other,)).fetchone()
+        if person: counterparty=person["full_name"]+" · "+person["account_number"]
+    body=render_template_string("""<section class='panel'><span class='tag'>إشعار معاملة كامل</span><h1>{{memo}}</h1><div class='history-detail-hero'><small>رقم العملية</small><b dir='ltr'>{{reference}}</b><small>التاريخ والوقت (UTC)</small><b dir='ltr'>{{created_at}}</b></div>
+      <h2>تفاصيل حركة محفظتك</h2>{% for x in movements %}<div class='profile-info'><span>{{'إضافة إلى المحفظة' if x['delta']>0 else 'خصم من المحفظة'}} · {{x['currency']}}</span><b>{{'+' if x['delta']>0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% endfor %}
+      {% if counterparty %}<div class='profile-info'><span>الطرف الآخر</span><b>{{counterparty}}</b></div>{% endif %}
+      {% if note %}<div class='profile-info'><span>ملاحظة</span><b>{{note}}</b></div>{% endif %}
+      <p class='muted'>هذه التفاصيل تعرض حركات حسابك فقط، ولا تعرض رصيد الطرف الآخر.</p><a class='btn secondary' href='/store/history'>العودة إلى المعاملات السابقة</a></section>""",
+      memo=row["memo"],reference=reference,created_at=row["created_at"],movements=movements,counterparty=counterparty,note=transfer["note"] if transfer else "")
+    return page("إشعار المعاملة",body)
 
 @empire_bp.get("/healthz")
 def healthz():
@@ -1393,7 +1434,7 @@ def transfer_epc():
               {% if premium %}<strong class='ice-badge'>❄ عميل آيس ستوري مميز</strong>{% endif %}</div>
               <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='execute'><input type='hidden' name='recipient_account' value='{{target['account_number']}}'>
               <label>عملة التحويل</label><select name='currency'><option value='SDG'>الجنيه السوداني · SDG</option><option value='URC'>URC</option></select>
-              <label>المبلغ</label><input name='quantity' type='number' min='1' step='1' inputmode='numeric' placeholder='أدخل المبلغ' required>
+              <label>المبلغ الذي سيصل للمستلم</label><input name='quantity' type='number' min='1' step='1' inputmode='numeric' placeholder='أدخل المبلغ' required><p class='muted'>عمولة التطبيق 3% تُخصم منفصلة من رصيد محفظتك، ولا تُنقص المبلغ الذي يصل للمستلم.</p>
               <label>ملاحظات للمستلم <span class='muted'>(اختياري)</span></label><textarea name='note' maxlength='250' placeholder='اكتب ملاحظة مختصرة'></textarea>
               <button class='transfer-submit'>تأكيد وإرسال التحويل</button></form>
               <a class='btn secondary' href='/store/transfer-epc'>تغيير رقم الحساب</a></section>""",target=target,verified=verified,csrf=session.get("csrf",""))
@@ -1447,14 +1488,17 @@ def transfer_epc():
 def transfer_receipt(reference):
     u=user()
     rows=db().execute("SELECT account,currency,delta,memo,created_at FROM es_ledger WHERE reference=? ORDER BY line_no",(reference,)).fetchall()
-    if len(rows)!=2 or any(not row["account"].startswith("user:") for row in rows): abort(404)
-    debit=next((row for row in rows if row["delta"]<0),None)
-    credit=next((row for row in rows if row["delta"]>0),None)
-    if not debit or not credit or debit["currency"]!=credit["currency"]: abort(404)
-    sender=debit["account"][5:]; recipient=credit["account"][5:]
-    if u["username"] not in (sender,recipient): abort(404)
     detail=db().execute("SELECT * FROM es_transfer_details WHERE reference=?",(reference,)).fetchone()
     if not detail: abort(404)
+    sender=detail["sender"]; recipient=detail["recipient"]
+    if u["username"] not in (sender,recipient): abort(404)
+    user_rows=[row for row in rows if row["account"].startswith("user:")]
+    credit=next((row for row in user_rows if row["account"]=="user:"+recipient and row["delta"]>0),None)
+    if not credit: abort(404)
+    sender_debits=[row for row in user_rows if row["account"]=="user:"+sender and row["delta"]<0]
+    fee_row=next((row for row in sender_debits if abs(row["delta"])!=credit["delta"]),None)
+    fee=abs(fee_row["delta"]) if fee_row else 0
+    if u["username"] not in (sender,recipient): abort(404)
     sender_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(sender,)).fetchone()
     recipient_user=db().execute("SELECT full_name,account_number FROM users WHERE username=?",(recipient,)).fetchone()
     amount=credit["delta"]
@@ -1463,7 +1507,7 @@ def transfer_receipt(reference):
       <div style='text-align:center'><span class='tag'>إشعار تحويل رسمي</span><div style='font-size:42px;color:#16844f'>✓</div>
       <h1>تم التحويل بنجاح</h1><p>الإمبراطورية إستوري · خدمة مالية سودانية</p></div>
       <div style='background:#edf7f1;border:1px solid #d1eadb;border-radius:16px;padding:17px;text-align:center;margin:14px 0'>
-        <small>قيمة التحويل</small><div style='font-size:30px;font-weight:900;color:#145c3a'>{{'{:,}'.format(amount)}} {{currency}}</div><b style='color:#16844f'>عملية مكتملة</b>
+        <small>قيمة التحويل</small><div style='font-size:30px;font-weight:900;color:#145c3a'>{{'{:,}'.format(amount)}} {{currency}}</div><b style='color:#16844f'>عملية مكتملة</b>{% if fee and u_is_sender %}<p>عمولة التطبيق 3%: {{'{:,}'.format(fee)}} {{currency}} · خُصمت منفصلة من محفظة المرسل</p>{% endif %}
       </div>
       <div style='display:grid;gap:11px'>
         <div><small>من المرسل</small><b>{{sender_name}} · {{sender_account}}</b></div>
@@ -1478,7 +1522,7 @@ def transfer_receipt(reference):
       amount=amount,currency=credit["currency"],reference=reference,
       sender_name=sender_user["full_name"],sender_account=sender_user["account_number"],
       recipient_name=recipient_user["full_name"],recipient_account=recipient_user["account_number"],
-      note=detail["note"],created_at=credit["created_at"])
+      note=detail["note"],created_at=credit["created_at"],fee=fee,u_is_sender=(u["username"]==sender))
     return page("إشعار التحويل",body)
 
 @empire_bp.route("/exchange",methods=["GET","POST"])
