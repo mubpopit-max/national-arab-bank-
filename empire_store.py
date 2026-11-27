@@ -72,6 +72,12 @@ def init_db():
       status TEXT NOT NULL DEFAULT 'PENDING_PAYMENT'
         CHECK(status IN ('PENDING_PAYMENT','PAID','ASSIGNED','PROCESSING','COMPLETED','REJECTED','REFUNDED')),
       agent TEXT, note TEXT NOT NULL DEFAULT '', delivery_cipher TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_game_code_inventory(
+      id INTEGER PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES es_products(id),
+      code_cipher TEXT NOT NULL, code_hash TEXT NOT NULL UNIQUE, code_tail TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'AVAILABLE' CHECK(status IN ('AVAILABLE','USED','REVOKED')),
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL, used_order_ref TEXT, used_at TEXT);
+    CREATE INDEX IF NOT EXISTS es_game_inventory_available ON es_game_code_inventory(product_id,status,id);
 
     CREATE TABLE IF NOT EXISTS es_wallets(
       username TEXT NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('SDG','URC')),
@@ -568,8 +574,16 @@ def admin_managers():
             if not permissions:
                 flash("حدد صلاحية واحدة على الأقل للمدير.")
                 return redirect(url_for("empire.admin_managers"))
-            account=""
-            for _ in range(30):
+            requested_account=(request.form.get("account_number") or "").strip()
+            if requested_account and not re.fullmatch(r"[1-9][0-9]{6}",requested_account):
+                flash("رقم حساب المدير يجب أن يتكون من 7 أرقام ويبدأ برقم غير صفر.")
+                return redirect(url_for("empire.admin_managers"))
+            account=requested_account
+            if account and db().execute("SELECT 1 FROM users WHERE account_number=?",(account,)).fetchone():
+                flash("رقم الحساب مستخدم بالفعل. استخدم خيار تغيير كلمة المرور إذا كان الحساب موجوداً.")
+                return redirect(url_for("empire.admin_managers"))
+            for _ in range(30) if not account else ():
+
                 candidate=str(secrets.randbelow(9000000)+1000000)
                 if not db().execute("SELECT 1 FROM users WHERE account_number=?",(candidate,)).fetchone():
                     account=candidate
@@ -630,7 +644,7 @@ def admin_managers():
     body=render_template_string("""<section class='panel'><span class='tag'>صلاحيات تحت سيطرة المالك</span><h1>إدارة المدير العام</h1>
       <p>أنشئ حساباً مستقلاً، ثم اختر بدقة الوحدات التي يستطيع إدارتها. لا يستطيع المدير إنشاء مديرين أو تعديل صلاحياته.</p>
       <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='create'>
-      <h2>إنشاء حساب مدير جديد</h2><label>الاسم الكامل</label><input name='full_name' maxlength='120' required>
+      <h2>إنشاء حساب مدير جديد</h2><label>رقم الحساب (اختياري — اتركه فارغاً للتوليد التلقائي)</label><input name='account_number' inputmode='numeric' pattern='[1-9][0-9]{6}' maxlength='7' placeholder='9274618'><label>الاسم الكامل</label><input name='full_name' maxlength='120' required>
       <label>كلمة مرور أولية (10 أحرف على الأقل)</label><input name='password' type='password' minlength='10' maxlength='72' autocomplete='new-password' required>
       <h3>الصلاحيات الممنوحة</h3>{% for key,label in permissions %}<label class='permission-choice'><input type='checkbox' name='permissions' value='{{key}}'>{{label}}</label>{% endfor %}
       <button>إنشاء حساب المدير</button></form>
@@ -1498,7 +1512,7 @@ def admin():
     {% if is_founder or 'settings' in manager_permissions or 'audit' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>04 · التحكم والرقابة</span><h2>الإعدادات وسجل النظام</h2></div><div class='grid admin-links'>
     {% if is_founder or 'settings' in manager_permissions %}<a href='/store/admin/settings'><b>إعدادات المنصة</b><small>الأسعار وسياسات التشغيل</small></a>{% endif %}
     {% if is_founder or 'audit' in manager_permissions %}<a href='/store/admin/audit'><b>سجل التدقيق</b><small>تتبع إجراءات الإدارة</small></a>{% endif %}
-    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
+    {% if is_founder %}<a href='/store/admin/managers'><b>المدير العام</b><small>إنشاء حساب وتحديد صلاحياته</small></a><a href='/store/admin/code-inventory'><b>مخزون أكواد الألعاب</b><small>إضافة الأكواد ومتابعة المتاح والمستخدم</small></a><a href='/store/admin/ice-codes'><b>أكواد آيس ستوري</b><small>إنشاء أكواد العملاء ونقاط الولاء</small></a><a href='/founder/receiving-accounts'><b>حسابات استقبال التحويلات</b><small>فوري · بنكك · برافو</small></a>{% endif %}</div></section>{% endif %}""",stats=stats,owner_account=owner_account,owner_urc=owner_urc,owner_sdg=owner_sdg,
       is_founder=is_founder,manager_permissions=manager_permissions)
     dashboard_title="لوحة المدير العام" if user()["role"]=="manager" else "لوحة المالك"
     return page(dashboard_title,body,manager_permissions=manager_permissions,is_founder=is_founder)
@@ -1794,6 +1808,58 @@ def admin_disputes():
     <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['order_ref']}}'>
     <button name='action' value='BUYER'>استرداد المبلغ للمشتري</button><button name='action' value='SELLER'>تحرير مستحقات البائع</button></form></article>{% else %}<p>لا توجد نزاعات مفتوحة.</p>{% endfor %}</section>""",rows=rows,csrf=session.get("csrf",""))
     return page("النزاعات",body)
+
+@empire_bp.route("/admin/code-inventory",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_code_inventory():
+    session.setdefault("csrf", secrets.token_urlsafe(32))
+    if request.method=="POST":
+        csrf()
+        product_id=request.form.get("product_id","").strip()
+        raw_codes=request.form.get("codes","")
+        codes=[line.strip() for line in raw_codes.splitlines() if line.strip()]
+        if not product_id.isdigit() or not 1<=len(codes)<=500:
+            flash("اختر الباقة وأدخل من 1 إلى 500 كود، كل كود في سطر مستقل.")
+            return redirect(url_for("empire.admin_code_inventory"))
+        product=db().execute("SELECT id,game,title FROM es_products WHERE id=?",(int(product_id),)).fetchone()
+        if not product:
+            flash("الباقة المحددة غير موجودة.")
+            return redirect(url_for("empire.admin_code_inventory"))
+        normalized=[re.sub(r"\\s+","",code).upper() for code in codes]
+        if any(not 4<=len(code)<=300 for code in normalized) or len(set(normalized))!=len(normalized):
+            flash("تحقق من الأكواد: طول كل كود 4–300 حرف ولا يجوز تكرار كود داخل الدفعة.")
+            return redirect(url_for("empire.admin_code_inventory"))
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            for code in normalized:
+                digest=hashlib.sha256(code.encode("utf-8")).hexdigest()
+                cipher=encryption().encrypt(code.encode("utf-8")).decode("utf-8")
+                d.execute("INSERT INTO es_game_code_inventory(product_id,code_cipher,code_hash,code_tail,status,created_by,created_at) VALUES(?,?,?,?, 'AVAILABLE',?,?)",
+                          (int(product_id),cipher,digest,code[-4:],user()["username"],now()))
+            audit(user()["username"],"GAME_CODES_IMPORTED","game_code_inventory",product_id,"count="+str(len(normalized)))
+            d.commit()
+            flash("تمت إضافة "+str(len(normalized))+" كوداً إلى مخزون "+product["game"]+" · "+product["title"]+".")
+        except sqlite3.IntegrityError:
+            d.rollback()
+            flash("توجد أكواد مكررة مسبقاً في المخزون؛ لم تُحفظ أي أكواد من هذه الدفعة.")
+        except Exception as exc:
+            d.rollback()
+            flash(str(exc))
+        return redirect(url_for("empire.admin_code_inventory"))
+    products=db().execute("SELECT id,game,title FROM es_products ORDER BY game,title").fetchall()
+    rows=db().execute("""SELECT p.game,p.title,
+      SUM(CASE WHEN i.status='AVAILABLE' THEN 1 ELSE 0 END) available,
+      SUM(CASE WHEN i.status='USED' THEN 1 ELSE 0 END) used,
+      SUM(CASE WHEN i.status='REVOKED' THEN 1 ELSE 0 END) revoked
+      FROM es_products p LEFT JOIN es_game_code_inventory i ON i.product_id=p.id
+      GROUP BY p.id ORDER BY p.game,p.title""").fetchall()
+    body=render_template_string("""<section class='panel'><h1>مخزون أكواد الألعاب</h1>
+      <p>أدخل الأكواد المشتراة من المورد لكل لعبة وباقة. تحفظ مشفرة، ولا تظهر كاملة في لوحة الإدارة، ويُستهلك كل كود مرة واحدة عند التسليم.</p>
+      <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><label>اللعبة والباقة</label><select name='product_id' required>{% for p in products %}<option value='{{p['id']}}'>{{p['game']}} · {{p['title']}}</option>{% endfor %}</select>
+      <label>الأكواد — كود واحد في كل سطر</label><textarea name='codes' rows='8' maxlength='160000' required placeholder='CODE-XXXX-XXXX'></textarea><button>إضافة الأكواد إلى المخزون</button></form>
+      <h2>ملخص المخزون حسب الباقة</h2>{% for x in rows %}<article class='panel'><b>{{x['game']}} · {{x['title']}}</b><p>متاح: {{x['available'] or 0}} · مستخدم: {{x['used'] or 0}} · ملغي: {{x['revoked'] or 0}}</p></article>{% else %}<p>لا توجد باقات بعد.</p>{% endfor %}</section>""",products=products,rows=rows,csrf=session.get("csrf",""))
+    return page("مخزون أكواد الألعاب",body)
 
 @empire_bp.route("/admin/topups",methods=["GET","POST"])
 @login_required
