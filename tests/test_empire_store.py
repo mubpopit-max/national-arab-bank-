@@ -104,15 +104,32 @@ class EmpireLedgerTests(unittest.TestCase):
         ], "test URC exchange reserve")
         d.commit()
 
+        first_quote = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=10")
+        self.assertEqual(first_quote.status_code, 200)
+        first_quote_data = first_quote.get_json()
+        self.assertTrue(first_quote_data["valid"])
         first = client.post("/store/exchange", data={
             "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
+            "quote_id": first_quote_data["quote_id"],
         }, follow_redirects=True)
         self.assertEqual(first.status_code, 200)
         self.assertEqual(fx_reserve_balance("SDG"), 504000)
         self.assertEqual(balance(username, "SDG"), 156000)
+        balance_after_first = balance(username, "URC")
+        replay = client.post("/store/exchange", data={
+            "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
+            "quote_id": first_quote_data["quote_id"],
+        }, follow_redirects=True)
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(balance(username, "URC"), balance_after_first)
 
+        second_quote = client.get("/store/exchange/quote?direction=SDG_TO_URC&amount=56000")
+        self.assertEqual(second_quote.status_code, 200)
+        second_quote_data = second_quote.get_json()
+        self.assertTrue(second_quote_data["valid"])
         second = client.post("/store/exchange", data={
             "csrf": csrf_token, "direction": "SDG_TO_URC", "amount": "56000",
+            "quote_id": second_quote_data["quote_id"],
         }, follow_redirects=True)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(fx_reserve_balance("URC"), 100)
