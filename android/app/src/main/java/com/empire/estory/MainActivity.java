@@ -64,6 +64,8 @@ public final class MainActivity extends Activity {
             if (id != activeDownloadId) return;
 
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            activeDownloadId = -1L;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(PENDING_URL).apply();
             Uri apkUri = manager.getUriForDownloadedFile(id);
             if (apkUri == null) {
                 showBlockingError("تعذر تنزيل ملف التحديث كاملاً. أعد المحاولة.");
@@ -186,6 +188,7 @@ public final class MainActivity extends Activity {
 
     private void startApkDownload(String apkUrl) {
         if (activeDownloadId != -1L) return;
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(PENDING_URL).apply();
         DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
         request.setTitle("تحديث الإمبراطورية إستوري");
