@@ -474,12 +474,26 @@ def seed_game_products():
               VALUES(?,?,?,'سيتم تسليم كود الباقة بعد تأكيد الدفع.',1,0,0,?)""",
               (code,game,title,now()))
 
-def assert_epc_capacity(quantity):
+def remaining_epc_supply():
     maximum=int(setting("epc_max_supply","15000000"))
-    if maximum<=0: raise ValueError("يجب على المالك تحديد الحد الأقصى لإصدار URC قبل البيع")
-    issued=-db().execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"]
-    reserved=db().execute("SELECT COALESCE(SUM(quantity_epc),0) n FROM es_payments WHERE purpose='EPC_PURCHASE' AND status='PENDING'").fetchone()["n"]
-    if issued+reserved+quantity>maximum: raise ValueError("الكمية تتجاوز المعروض المتاح من URC")
+    if maximum<=0:
+        raise ValueError("يجب على المالك تحديد الحد الأقصى لإصدار URC قبل البيع")
+    issued=-int(db().execute(
+        "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'"
+    ).fetchone()["n"])
+    burned=int(db().execute(
+        "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='burn:urc' AND currency='URC'"
+    ).fetchone()["n"])
+    reserved=int(db().execute(
+        "SELECT COALESCE(SUM(quantity_epc),0) n FROM es_payments WHERE purpose='EPC_PURCHASE' AND status='PENDING'"
+    ).fetchone()["n"])
+    return max(0, maximum-max(0,issued-burned)-reserved)
+
+def assert_epc_capacity(quantity):
+    if int(quantity)<=0:
+        raise ValueError("كمية URC غير صالحة")
+    if int(quantity)>remaining_epc_supply():
+        raise ValueError("الكمية تتجاوز المعروض المتاح من URC")
 
 def encryption():
     key=os.getenv("EMPIRE_DATA_ENCRYPTION_KEY","").strip()
@@ -1150,8 +1164,26 @@ def manifest():
 
 @empire_bp.get("/icon.svg")
 def app_icon():
-    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='#0b263d'/><circle cx='256' cy='256' r='206' fill='none' stroke='#d9b45b' stroke-width='18'/><rect x='106' y='155' width='300' height='202' rx='12' fill='#fff'/><path d='M106 167q0-12 12-12h276q12 0 12 12v55H106z' fill='#d92736'/><path d='M106 290h300v55q0 12-12 12H118q-12 0-12-12z' fill='#111820'/><path d='M106 155l135 101-135 101z' fill='#168447'/><path d='M256 203l15 24 29-8-4 30 25 16-25 16 4 30-29-8-15 24-15-24-29 8 4-30-25-16 25-16-4-30 29 8z' fill='#d9b45b'/></svg>"""
-    return svg,200,{"Content-Type":"image/svg+xml"}
+    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'>
+    <defs>
+      <linearGradient id='bg' x2='0' y2='1'><stop stop-color='#171014'/><stop offset='.58' stop-color='#08090d'/><stop offset='1' stop-color='#240b0a'/></linearGradient>
+      <linearGradient id='gold' x2='0' y2='1'><stop stop-color='#fff0a8'/><stop offset='.35' stop-color='#e9b84e'/><stop offset='.7' stop-color='#9d5b16'/><stop offset='1' stop-color='#ffe28a'/></linearGradient>
+      <linearGradient id='fire' x2='0' y2='1'><stop stop-color='#fff9b2'/><stop offset='.3' stop-color='#ffb21e'/><stop offset='.68' stop-color='#ed3515'/><stop offset='1' stop-color='#7d1010'/></linearGradient>
+      <radialGradient id='glow'><stop stop-color='#ff8b18' stop-opacity='.55'/><stop offset='1' stop-color='#ff2b12' stop-opacity='0'/></radialGradient>
+    </defs>
+    <rect width='512' height='512' rx='112' fill='url(#bg)'/><circle cx='256' cy='236' r='220' fill='url(#glow)'/>
+    <path d='M75 256 Q18 170 66 75 Q80 157 139 183 Q108 107 157 43 Q158 130 218 170 Q192 90 256 24 Q320 90 294 170 Q354 130 355 43 Q404 107 373 183 Q432 157 446 75 Q494 170 437 256 Q398 216 358 231 Q410 269 430 330 Q369 300 324 325 Q295 347 256 356 Q217 347 188 325 Q143 300 82 330 Q102 269 154 231 Q114 216 75 256Z' fill='url(#fire)' stroke='url(#gold)' stroke-width='7' stroke-linejoin='round'/>
+    <path d='M256 70 Q224 124 245 169 Q210 148 211 112 Q183 161 220 204 Q190 194 178 169 Q169 231 227 252 L256 274 L285 252 Q343 231 334 169 Q322 194 292 204 Q329 161 301 112 Q302 148 267 169 Q288 124 256 70Z' fill='#ff4a16' stroke='#ffd56d' stroke-width='5'/>
+    <path d='M252 188 L278 202 L267 220 L291 228 L256 252 L221 228 L245 220 L234 202Z' fill='#fff0a5'/>
+    <path d='M100 300 Q256 354 412 300 L386 365 Q256 407 126 365Z' fill='#101116' stroke='url(#gold)' stroke-width='8'/>
+    <path d='M132 312 L150 262 L190 288 L220 232 L256 286 L292 232 L322 288 L362 262 L380 312 L350 333 L162 333Z' fill='url(#gold)' stroke='#6f3b12' stroke-width='5' stroke-linejoin='round'/>
+    <path d='M157 333 H355 L340 362 H172Z' fill='#9e2017' stroke='url(#gold)' stroke-width='5'/><path d='M256 326 L274 346 L256 367 L238 346Z' fill='#fff0a5' stroke='#8d3a13' stroke-width='4'/>
+    <path d='M58 380 Q155 418 256 404 Q357 418 454 380 L436 437 Q347 474 256 458 Q165 474 76 437Z' fill='#111216' stroke='url(#gold)' stroke-width='6'/>
+    <path d='M83 393 Q160 421 256 410 Q352 421 429 393' fill='none' stroke='#d71928' stroke-width='17'/><path d='M83 412 Q160 440 256 429 Q352 440 429 412' fill='none' stroke='#fff' stroke-width='15'/><path d='M83 431 Q160 459 256 448 Q352 459 429 431' fill='none' stroke='#168447' stroke-width='15'/>
+    <path d='M256 454 L264 467 L279 469 L268 480 L271 495 L256 487 L241 495 L244 480 L233 469 L248 467Z' fill='url(#gold)'/>
+    <g fill='#ffd66b'><circle cx='73' cy='275' r='5'/><circle cx='439' cy='275' r='5'/><circle cx='111' cy='180' r='4'/><circle cx='401' cy='180' r='4'/><circle cx='183' cy='84' r='4'/><circle cx='329' cy='84' r='4'/></g>
+    <rect x='8' y='8' width='496' height='496' rx='105' fill='none' stroke='#d9a94a' stroke-width='5'/></svg>"""
+    return svg,200,{"Content-Type":"image/svg+xml","Cache-Control":"public, max-age=31536000"}
 
 @empire_bp.get("/sw.js")
 def service_worker():
@@ -1243,6 +1275,10 @@ def withdrawal():
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
             fee=platform_fee(amount)
+            pending=int(d.execute("SELECT COALESCE(SUM(amount_sdg),0) n FROM es_withdrawals WHERE status='PENDING'").fetchone()["n"])
+            cash_available=max(0,fx_reserve_balance("SDG")-pending)
+            if amount>cash_available:
+                raise ValueError("سيولة SDG النقدية المتاحة لا تكفي لطلب السحب.")
             post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("protection:fund","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
             notify_protection_income(r,"SDG",fee,"رسوم طلب سحب")
             d.execute("INSERT INTO es_withdrawals(reference,username,amount_sdg,payout_method,payout_details_cipher,created_at) VALUES(?,?,?,?,?,?)",
@@ -1805,16 +1841,19 @@ def exchange_quote():
     except (TypeError,ValueError):
         return jsonify({"ok":False,"message":"السعر غير متاح حالياً."}),503
     source="URC" if direction=="URC_TO_SDG" else "SDG"; target="SDG" if source=="URC" else "URC"
-    reserve=fx_reserve_balance(target); wallet=max(0,int(balance(user()["username"],source)))
+    wallet=max(0,int(balance(user()["username"],source)))
     minimum=1 if source=="URC" else max(1,rate)
-    reserve_limit=reserve//rate if source=="URC" and rate>0 else (max(0,(reserve+1)*rate-1) if rate>0 else 0)
-    if source=="URC" and rate>0: reserve_limit=min(reserve_limit,9_000_000_000_000_000_000//rate)
     lo,hi=0,wallet
     while lo<hi:
         mid=(lo+hi+1)//2
         if mid+platform_fee(mid)<=wallet: lo=mid
         else: hi=mid-1
-    maximum=min(reserve_limit,lo,999_999_999_999)
+    # Internal conversion uses digital balances only. Cash liquidity is not
+    # consulted here; only SDG withdrawals reserve real payout liquidity.
+    supply_limit=999_999_999_999
+    if source=="SDG" and rate>0:
+        supply_limit=max(0,(remaining_epc_supply()+1)*rate-1)
+    maximum=min(supply_limit,lo,999_999_999_999)
     data={"ok":True,"direction":direction,"source_currency":source,"target_currency":target,
           "rate":rate,"minimum":minimum,"maximum":maximum,"max_convertible":maximum,
           "wallet_balance":wallet,"available":maximum>=minimum,
@@ -1836,7 +1875,7 @@ def exchange_quote():
                     # Always return a live preview; availability controls confirmation, not calculation.
                     data.update({"valid":False,"amount":amount,"converted":converted,"fee":fee,
                                  "total_debit":amount+fee,
-                                 "message":"تم حساب المقابل، لكن المبلغ يتجاوز رصيدك أو السيولة المتاحة."})
+                                 "message":"تم حساب المقابل، لكن رصيدك غير كافٍ لإتمام التحويل."})
                 else:
                     quote_id=secrets.token_urlsafe(24); issued=int(datetime.now(timezone.utc).timestamp()); d=db()
                     d.execute("DELETE FROM es_fx_quotes WHERE expires_at<?",(issued-86400,))
@@ -1857,7 +1896,6 @@ def exchange():
     u=user()
     def effective_rate(direction):
         return effective_fx_rate(direction)
-    def fund_balance(currency): return fx_reserve_balance(currency)
     def affordable_limit(wallet_amount):
         lo,hi=0,max(0,int(wallet_amount))
         while lo<hi:
@@ -1869,10 +1907,14 @@ def exchange():
         rate=effective_rate(direction)
         if rate<=0: return {"rate":rate,"minimum":1,"maximum":0,"currency":"URC" if direction=="URC_TO_SDG" else "SDG"}
         if direction=="URC_TO_SDG":
-            minimum=1; reserve_limit=fund_balance("SDG")//rate; wallet_amount=balance(u["username"],"URC"); currency="URC"
+            minimum=1; wallet_amount=balance(u["username"],"URC"); currency="URC"
+            supply_limit=999_999_999_999
         else:
-            minimum=rate; reserve_limit=max(0,(fund_balance("URC")+1)*rate-1); wallet_amount=balance(u["username"],"SDG"); currency="SDG"
-        return {"rate":rate,"minimum":minimum,"maximum":min(reserve_limit,affordable_limit(wallet_amount),999_999_999_999),"currency":currency}
+            minimum=rate; wallet_amount=balance(u["username"],"SDG"); currency="SDG"
+            supply_limit=max(0,(remaining_epc_supply()+1)*rate-1)
+        # The conversion itself is digital in both directions; never gate it
+        # on the cash payout reserve.
+        return {"rate":rate,"minimum":minimum,"maximum":min(supply_limit,affordable_limit(wallet_amount),999_999_999_999),"currency":currency}
     if request.method=="POST":
         csrf(); direction=(request.form.get("direction") or "").strip()
         quote_id=(request.form.get("quote_id") or "").strip()
@@ -1892,23 +1934,28 @@ def exchange():
             # The same live helper is used by quote generation and execution.
             limits=calculate_limit(direction)
             if amount<limits["minimum"] or amount>limits["maximum"]:
-                raise ValueError("تغيّر الرصيد أو السيولة المتاحة. حدّث السعر وحاول مجدداً.")
+                raise ValueError("تغيّر رصيدك أو المعروض الرقمي المتاح. حدّث السعر وحاول مجدداً.")
             rate=limits["rate"]; result=amount*rate if direction=="URC_TO_SDG" else amount//rate; fee=platform_fee(amount)
             if rate!=int(quote["rate"]) or result!=int(quote["result"]) or fee!=int(quote["fee"]):
                 raise ValueError("تغيّر سعر التحويل. حدّث السعر لمعاينة عرض جديد.")
             if result<=0 or result>9_000_000_000_000_000_000: raise ValueError("قيمة التحويل غير صالحة.")
             r=ref()
             if direction=="URC_TO_SDG":
-                post(r,[("user:"+u["username"],"URC",-amount),("fx:reserve","URC",amount),
-                        ("fx:reserve","SDG",-result),("user:"+u["username"],"SDG",result),
+                # URC converted to digital SDG is burned from circulation;
+                # the SDG credit is an internal digital issuance, not a cash payout.
+                post(r,[("user:"+u["username"],"URC",-amount),("burn:urc","URC",amount),
+                        ("user:"+u["username"],"SDG",result),("conversion:sdg","SDG",-result),
                         ("user:"+u["username"],"URC",-fee),("protection:fund","URC",fee)],
-                     "تحويل URC إلى SDG · عمولة التطبيق 3%")
+                     "تحويل رقمي URC إلى SDG · حرق URC · عمولة التطبيق 3%")
                 source_currency,target_currency="URC","SDG"
             else:
-                post(r,[("user:"+u["username"],"SDG",-amount),("fx:reserve","SDG",amount),
-                        ("fx:reserve","URC",-result),("user:"+u["username"],"URC",result),
+                # SDG is a digital balance too. Its conversion does not use
+                # the cash reserve; URC issuance remains bounded by the supply cap.
+                assert_epc_capacity(result)
+                post(r,[("user:"+u["username"],"SDG",-amount),("burn:sdg","SDG",amount),
+                        ("user:"+u["username"],"URC",result),("issuer:urc","URC",-result),
                         ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],
-                     "تحويل SDG إلى URC · عمولة التطبيق 3%")
+                     "تحويل رقمي SDG إلى URC · عمولة التطبيق 3%")
                 source_currency,target_currency="SDG","URC"
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,
                   direction+" rate="+str(rate)+";source_amount="+str(amount)+";target_amount="+str(result)+";fee="+str(fee))
@@ -2433,7 +2480,14 @@ def admin_withdrawals():
             row=d.execute("SELECT * FROM es_withdrawals WHERE id=? AND status='PENDING'",(wid,)).fetchone()
             if not row: raise ValueError("طلب السحب غير متاح للمراجعة")
             if action=="PAID":
-                post(row["reference"]+"P",[("payout:pending","SDG",-row["amount_sdg"]),("external:payout_settlements","SDG",row["amount_sdg"])],"تأكيد صرف طلب سحب")
+                if fx_reserve_balance("SDG") < int(row["amount_sdg"]):
+                    raise ValueError("سيولة SDG النقدية غير كافية لتنفيذ السحب.")
+                post(row["reference"]+"P",[
+                    ("payout:pending","SDG",-row["amount_sdg"]),
+                    ("external:payout_settlements","SDG",row["amount_sdg"]),
+                    ("fx:reserve","SDG",-row["amount_sdg"]),
+                    ("external:cash_payout","SDG",row["amount_sdg"])
+                ],"تأكيد صرف طلب سحب من السيولة النقدية")
                 status="PAID"
             elif action=="REJECTED":
                 post(row["reference"]+"X",[("payout:pending","SDG",-row["amount_sdg"]),("user:"+row["username"],"SDG",row["amount_sdg"])],"إعادة مبلغ طلب سحب مرفوض")
