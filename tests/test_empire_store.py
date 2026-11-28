@@ -168,6 +168,10 @@ class EmpireLedgerTests(unittest.TestCase):
             ("user:" + username, "SDG", 10000),
             ("external:test_withdraw_user_sdg", "SDG", -10000),
         ], "test withdrawal wallet funding")
+        post("TEST-DIGITAL-FX-POOL-NOT-CASH", [
+            ("fx:reserve", "SDG", 1000000),
+            ("external:test_digital_fx_pool", "SDG", -1000000),
+        ], "internal FX reserve is not physical cash")
         d.commit()
 
         blocked = client.post("/store/withdrawal", data={
@@ -285,7 +289,7 @@ class EmpireLedgerTests(unittest.TestCase):
         }, follow_redirects=True)
         self.assertEqual(executed.status_code, 200)
         self.assertEqual(balance("founder", "SDG"), 62000)
-        self.assertEqual(fx_reserve_balance("SDG"), 0)
+        self.assertEqual(fx_reserve_balance("SDG"), 1000000)
         self.assertEqual(balance("founder", "URC"), 89)
         self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='burn:urc' AND currency='URC'").fetchone()["n"], 10)
 
