@@ -856,7 +856,7 @@ def admin_urc_treasury():
             flash(str(exc))
             return redirect(url_for("empire.admin_urc_treasury"))
         target=db().execute(
-            "SELECT username,full_name,account_number,active FROM users WHERE username=? OR account_number=? LIMIT 1",
+            "SELECT username,full_name,account_number,active,role FROM users WHERE username=? OR account_number=? LIMIT 1",
             (recipient,recipient)
         ).fetchone()
         if not target or not target["active"] or target["role"]=="founder":
@@ -883,12 +883,10 @@ def admin_urc_treasury():
         return redirect(url_for("empire.admin_urc_treasury"))
     current=urc_treasury_balance()
     rows=db().execute("""
-        SELECT l.reference,l.delta,l.memo,l.created_at,l.account
-        FROM es_ledger l
-        WHERE l.currency='URC' AND l.reference IN (
-          SELECT DISTINCT reference FROM es_ledger WHERE account='treasury:urc' AND currency='URC'
-        )
-        ORDER BY l.id DESC LIMIT 100
+        SELECT reference,delta,memo,created_at,account
+        FROM es_ledger
+        WHERE account='treasury:urc' AND currency='URC'
+        ORDER BY id DESC LIMIT 100
     """).fetchall()
     body=render_template_string("""<section class='panel'>
       <span class='tag'>مركز المالك · صلاحية حصرية</span><h1>صندوق النقد الخاص – URC</h1>
@@ -1386,7 +1384,7 @@ def home():
     <section class="national-banner"><div class="banner-copy"><span>معاً نبني السودان الرقمي</span><strong>خدمات متكاملة .. أمان وثقة</strong></div><div class="banner-flag" aria-label="علم السودان"><i></i><i></i><i></i><b></b></div><div class="banner-crown">♛</div></section>
     <section class="panel recent-panel"><div class="section-heading"><div><span class="section-kicker">حسابك أولاً</span><h2>آخر العمليات</h2></div><a class="view-all" href="/store/wallet">عرض الكل ←</a></div>
     {% for x in rows %}<div class="transaction-row"><span class="transaction-symbol">{{'↗' if x['delta'] < 0 else '↙'}}</span><div class="transaction-info"><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}}</small></div><b class="transaction-value {{'out' if x['delta'] < 0 else 'in'}}" dir="ltr">{{'+' if x['delta'] > 0 else ''}}{{'{:,}'.format(x['delta'])}} {{x['currency']}}</b></div>{% else %}<div class="empty-state">ستظهر هنا آخر حركات محفظتك.</div>{% endfor %}</section>
-    {% if is_founder %}<section class="panel founder-shortcut"><h2>مركز المؤسس</h2><p>إدارة شاملة للمنصة والحسابات والأصول.</p><a class="btn" href="/store/admin">فتح لوحة تحكم المؤسس</a></section>{% endif %}""",rows=rows,is_founder=u["role"]=="founder")
+    {% if is_founder %}<section class="panel founder-shortcut"><h2>مركز المؤسس</h2><p>إدارة شاملة للمنصة والحسابات والأصول.</p><a class="btn" href="/store/admin">فتح لوحة تحكم المؤسس</a><a class="btn secondary" href="/store/admin/urc-treasury">صندوق النقد الخاص · URC</a></section>{% endif %}""",rows=rows,is_founder=u["role"]=="founder")
     return page("الرئيسية",body)
 
 
