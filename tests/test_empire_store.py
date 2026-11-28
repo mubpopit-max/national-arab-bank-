@@ -100,6 +100,8 @@ class EmpireLedgerTests(unittest.TestCase):
         first_quote = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=10")
         self.assertEqual(first_quote.status_code, 200)
         first_quote_data = first_quote.get_json()
+        self.assertEqual(cash_sdg_balance(), 0)
+        self.assertEqual(fx_reserve_balance("SDG"), 0)
         self.assertTrue(first_quote_data["valid"])
         self.assertEqual(first_quote_data["wallet_balance"], 100)
         self.assertEqual(first_quote_data["max_convertible"], 97)
@@ -111,6 +113,7 @@ class EmpireLedgerTests(unittest.TestCase):
         self.assertEqual(oversized["converted"], 1120000)
         self.assertEqual(oversized["wallet_balance"], 100)
         self.assertEqual(oversized["max_convertible"], 97)
+        self.assertNotIn("سيولة", oversized.get("message", ""))
 
         first = client.post("/store/exchange", data={
             "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
