@@ -1,7 +1,7 @@
 import unittest
 
 import app as app_module
-from empire_store import db, post, balance, assert_epc_capacity, fx_reserve_balance
+from empire_store import db, post, balance, assert_epc_capacity, fx_reserve_balance, cash_sdg_balance
 
 
 class EmpireLedgerTests(unittest.TestCase):
@@ -12,7 +12,8 @@ class EmpireLedgerTests(unittest.TestCase):
         d.execute("DELETE FROM es_ledger")
         d.execute("DELETE FROM es_wallets")
         d.execute("DELETE FROM es_payments")
-        d.execute("INSERT INTO es_settings(key,value) VALUES('epc_max_supply','10') "
+        d.execute("DELETE FROM es_withdrawals")
+        d.execute("DELETE FROM es_settings(key,value) VALUES('epc_max_supply','10') "
                   "ON CONFLICT(key) DO UPDATE SET value='10'")
 
     def tearDown(self):
@@ -147,6 +148,69 @@ class EmpireLedgerTests(unittest.TestCase):
             "WHERE account='protection:fund' AND currency IN ('SDG','URC')"
         ).fetchone()["n"]
         self.assertGreater(protection_fees, 0)
+        unbalanced = d.execute(
+            "SELECT reference,currency,SUM(delta) total FROM es_ledger "
+            "GROUP BY reference,currency HAVING total != 0"
+        ).fetchall()
+        self.assertEqual(unbalanced, [])
+
+    def test_cash_liquidity_is_required_only_for_external_sdg_withdrawals(self):
+        client = app_module.app.test_client()
+        login = client.post("/login", data={
+            "account_number": "5147234",
+            "password": "CI-only-password-123!",
+        }, follow_redirects=True)
+        self.assertEqual(login.status_code, 200)
+        with client.session_transaction() as session:
+            username = session["username"]
+            csrf_token = session["csrf"]
+
+        d = db()
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-WITHDRAW-USER-SDG", [
+            ("user:" + username, "SDG", 10000),
+            ("external:test_withdraw_user_sdg", "SDG", -10000),
+        ], "test withdrawal wallet funding")
+        d.commit()
+
+        blocked = client.post("/store/withdrawal", data={
+            "csrf": csrf_token, "amount": "500",
+            "payout_method": "BANK_TRANSFER", "payout_details": "Test bank account",
+        }, follow_redirects=True)
+        self.assertEqual(blocked.status_code, 200)
+        self.assertEqual(d.execute("SELECT COUNT(*) n FROM es_withdrawals").fetchone()["n"], 0)
+        self.assertEqual(balance(username, "SDG"), 10000)
+
+        d.execute("BEGIN IMMEDIATE")
+        post("TEST-CASH-WITHDRAWAL-RESERVE", [
+            ("cash:sdg_reserve", "SDG", 600),
+            ("external:test_physical_cash", "SDG", -600),
+        ], "confirmed physical cash for withdrawal")
+        d.commit()
+
+        accepted = client.post("/store/withdrawal", data={
+            "csrf": csrf_token, "amount": "500",
+            "payout_method": "BANK_TRANSFER", "payout_details": "Test bank account",
+        }, follow_redirects=True)
+        self.assertEqual(accepted.status_code, 200)
+        withdrawal = d.execute("SELECT * FROM es_withdrawals WHERE status='PENDING'").fetchone()
+        self.assertIsNotNone(withdrawal)
+        self.assertEqual(cash_sdg_balance(), 600)
+        self.assertEqual(balance(username, "SDG"), 9485)
+
+        over_reserved = client.post("/store/withdrawal", data={
+            "csrf": csrf_token, "amount": "200",
+            "payout_method": "BANK_TRANSFER", "payout_details": "Test bank account",
+        }, follow_redirects=True)
+        self.assertEqual(over_reserved.status_code, 200)
+        self.assertEqual(d.execute("SELECT COUNT(*) n FROM es_withdrawals").fetchone()["n"], 1)
+
+        paid = client.post("/store/admin/withdrawals", data={
+            "csrf": csrf_token, "id": str(withdrawal["id"]), "action": "PAID",
+        }, follow_redirects=True)
+        self.assertEqual(paid.status_code, 200)
+        self.assertEqual(cash_sdg_balance(), 100)
+        self.assertEqual(d.execute("SELECT status FROM es_withdrawals WHERE id=?", (withdrawal["id"],)).fetchone()["status"], "PAID")
         unbalanced = d.execute(
             "SELECT reference,currency,SUM(delta) total FROM es_ledger "
             "GROUP BY reference,currency HAVING total != 0"
