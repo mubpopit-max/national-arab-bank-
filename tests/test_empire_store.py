@@ -319,7 +319,7 @@ class EmpireLedgerTests(unittest.TestCase):
         self.assertEqual(client.get("/store/healthz").status_code, 200)
         manifest = client.get("/store/manifest.webmanifest")
         self.assertEqual(manifest.status_code, 200)
-        self.assertIn(b"/store/icon.svg?v=3", manifest.data)
+        self.assertIn(b"/store/icon.svg?v=4", manifest.data)
         icon = client.get("/store/icon.svg")
         self.assertEqual(icon.status_code, 200)
         self.assertIn(b"<svg", icon.data)
