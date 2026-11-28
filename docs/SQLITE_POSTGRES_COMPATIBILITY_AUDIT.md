@@ -20,6 +20,20 @@ This is a static source audit only. No production database was accessed and no m
 
 The two modules each create their own connection to the same `NAB_DATABASE` file using Flask's `g`. The store contains its own schema initialization and compatibility/migration logic. The bank has a separate schema initializer and column inspection. These cannot safely be replaced with a PostgreSQL URL by changing environment variables.
 
+## Confirmed Supabase target
+
+The owner supplied these non-secret settings from the Supabase dashboard:
+
+- Project ref: `agxldwryrzmhvcuytjoj`
+- Project URL: `https://agxldwryrzmhvcuytjoj.supabase.co`
+- PostgreSQL: 17.12
+- Shared Transaction Pooler host: `aws-0-eu-central-1.pooler.supabase.com`
+- Port: `6543`
+- Database: `postgres`
+- Pooler user: `postgres.agxldwryrzmhvcuytjoj`
+
+The password is not available in this session and is intentionally excluded from repository content. Direct connections use IPv6 by default; the transaction pooler is a candidate for IPv4-only hosting, but must be tested from Faable.
+
 ## PostgreSQL work that remains
 
 - Consolidate both modules onto one connection/transaction abstraction while retaining request-scoped lifecycle and consistent row mapping.
@@ -39,15 +53,12 @@ The two modules each create their own connection to the same `NAB_DATABASE` file
 - The Dockerfile and compose configuration use a local `/data` volume, but that does not establish that Faable's deployment has a persistent volume.
 - No Supabase Storage bucket, object-key schema, signed URL flow, or storage client integration is configured in the inspected repository.
 
-## Required production configuration
-
-The application must receive a PostgreSQL connection string and server-side storage credentials from the hosting provider's secret manager. The current repository has no confirmed Faable secret-manager connection available to this work session. Never commit or paste credentials into source control or chat.
-
 ## Release blockers
 
 1. No verified Faable deployment/secret-manager API is available to this session.
-2. No Supabase database password/connection URI or service-side storage key is available to the application.
+2. The Supabase database password and server-side Storage key are not available to the application.
 3. No consistent production SQLite backup has been obtained for a data-preserving migration.
 4. No production-like PostgreSQL instance is available here to run migration and financial concurrency checks.
+5. The current application code remains SQLite-specific; these connection details do not make it PostgreSQL-compatible.
 
 Therefore this audit intentionally does not introduce an untested PostgreSQL compatibility shim, does not change the running database configuration, and does not trigger deployment. The implementation is not complete until these blockers are resolved and the full migration is validated.
