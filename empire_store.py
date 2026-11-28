@@ -1222,7 +1222,7 @@ def app_icon():
 <path d="M112 457h288l-36 12H148Z" fill="#fff"/>
 <path d="M112 469h288l-36 13H148Z" fill="#111"/>
 <path d="M112 457l38 25h-38Z" fill="#16834b"/>
-<path d="M15 15h482v482H15z" fill="none" stroke="url(#gold)" stroke-width="9" rx="100"/>
+<rect x="15" y="15" width="482" height="482" rx="100" fill="none" stroke="url(#gold)" stroke-width="9"/>
 </svg>"""
     return svg,200,{"Content-Type":"image/svg+xml","Cache-Control":"public, max-age=31536000"}
 
