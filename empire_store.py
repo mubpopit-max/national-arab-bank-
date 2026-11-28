@@ -227,6 +227,13 @@ def init_db():
             'إيداع احتياطي SDG خارجي مؤكد من المالك'
           )
     """)
+    # Separate confirmed physical SDG cash from owner-funded digital FX inventory.
+    conn.execute("""
+        UPDATE es_ledger SET account='cash:sdg_reserve'
+        WHERE account='fx:reserve' AND currency='SDG' AND line_no=2
+          AND memo='إيداع احتياطي SDG خارجي مؤكد من المالك'
+          AND reference LIKE 'FXEXT%'
+    """)
     # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
     for key in ("fx_manual_rate","fx_market_rate"):
         current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
@@ -432,6 +439,22 @@ def fx_reserve_balance(currency):
         raise ValueError("رصيد احتياطي الصرف غير متوازن؛ أوقف النظام وراجع القيود.")
     return amount
 
+def cash_sdg_balance():
+    """Confirmed physical SDG cash available for external withdrawals."""
+    row=db().execute(
+        "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='cash:sdg_reserve' AND currency='SDG'"
+    ).fetchone()
+    amount=int(row["n"])
+    if amount<0:
+        raise ValueError("رصيد السيولة النقدية للسحب غير متوازن؛ أوقف السحب وراجع القيود.")
+    return amount
+
+def pending_sdg_withdrawals():
+    row=db().execute(
+        "SELECT COALESCE(SUM(amount_sdg),0) n FROM es_withdrawals WHERE status='PENDING'"
+    ).fetchone()
+    return int(row["n"])
+
 def seed_owner_assets():
     """Create the founder's opening URC allocation once; never alter bank account IDs."""
     tables={r["name"] for r in db().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
@@ -515,7 +538,7 @@ def encryption():
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
-    <meta name='theme-color' content='#f4f8fb'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg?v=2'>
+    <meta name='theme-color' content='#f4f8fb'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg?v=3'>
     <meta name='description' content='الإمبراطورية إستوري — وجهتك لشحن الألعاب والتجارة الرقمية.'>
     <title>{{title}} | الإمبراطورية إستوري</title>
     
@@ -1160,29 +1183,38 @@ def healthz():
 def manifest():
     return {"name":"الإمبراطورية إستوري","short_name":"Empire E-Story","start_url":"/store/","display":"standalone",
             "background_color":"#090909","theme_color":"#0b0b0b","lang":"ar","dir":"rtl",
-            "icons":[{"src":"/store/icon.svg?v=2","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]},200,{"Content-Type":"application/manifest+json"}
+            "icons":[{"src":"/store/icon.svg?v=3","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]},200,{"Content-Type":"application/manifest+json"}
 
 @empire_bp.get("/icon.svg")
 def app_icon():
-    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'>
-    <defs>
-      <linearGradient id='bg' x2='0' y2='1'><stop stop-color='#171014'/><stop offset='.58' stop-color='#08090d'/><stop offset='1' stop-color='#240b0a'/></linearGradient>
-      <linearGradient id='gold' x2='0' y2='1'><stop stop-color='#fff0a8'/><stop offset='.35' stop-color='#e9b84e'/><stop offset='.7' stop-color='#9d5b16'/><stop offset='1' stop-color='#ffe28a'/></linearGradient>
-      <linearGradient id='fire' x2='0' y2='1'><stop stop-color='#fff9b2'/><stop offset='.3' stop-color='#ffb21e'/><stop offset='.68' stop-color='#ed3515'/><stop offset='1' stop-color='#7d1010'/></linearGradient>
-      <radialGradient id='glow'><stop stop-color='#ff8b18' stop-opacity='.55'/><stop offset='1' stop-color='#ff2b12' stop-opacity='0'/></radialGradient>
-    </defs>
-    <rect width='512' height='512' rx='112' fill='url(#bg)'/><circle cx='256' cy='236' r='220' fill='url(#glow)'/>
-    <path d='M75 256 Q18 170 66 75 Q80 157 139 183 Q108 107 157 43 Q158 130 218 170 Q192 90 256 24 Q320 90 294 170 Q354 130 355 43 Q404 107 373 183 Q432 157 446 75 Q494 170 437 256 Q398 216 358 231 Q410 269 430 330 Q369 300 324 325 Q295 347 256 356 Q217 347 188 325 Q143 300 82 330 Q102 269 154 231 Q114 216 75 256Z' fill='url(#fire)' stroke='url(#gold)' stroke-width='7' stroke-linejoin='round'/>
-    <path d='M256 70 Q224 124 245 169 Q210 148 211 112 Q183 161 220 204 Q190 194 178 169 Q169 231 227 252 L256 274 L285 252 Q343 231 334 169 Q322 194 292 204 Q329 161 301 112 Q302 148 267 169 Q288 124 256 70Z' fill='#ff4a16' stroke='#ffd56d' stroke-width='5'/>
-    <path d='M252 188 L278 202 L267 220 L291 228 L256 252 L221 228 L245 220 L234 202Z' fill='#fff0a5'/>
-    <path d='M100 300 Q256 354 412 300 L386 365 Q256 407 126 365Z' fill='#101116' stroke='url(#gold)' stroke-width='8'/>
-    <path d='M132 312 L150 262 L190 288 L220 232 L256 286 L292 232 L322 288 L362 262 L380 312 L350 333 L162 333Z' fill='url(#gold)' stroke='#6f3b12' stroke-width='5' stroke-linejoin='round'/>
-    <path d='M157 333 H355 L340 362 H172Z' fill='#9e2017' stroke='url(#gold)' stroke-width='5'/><path d='M256 326 L274 346 L256 367 L238 346Z' fill='#fff0a5' stroke='#8d3a13' stroke-width='4'/>
-    <path d='M58 380 Q155 418 256 404 Q357 418 454 380 L436 437 Q347 474 256 458 Q165 474 76 437Z' fill='#111216' stroke='url(#gold)' stroke-width='6'/>
-    <path d='M83 393 Q160 421 256 410 Q352 421 429 393' fill='none' stroke='#d71928' stroke-width='17'/><path d='M83 412 Q160 440 256 429 Q352 440 429 412' fill='none' stroke='#fff' stroke-width='15'/><path d='M83 431 Q160 459 256 448 Q352 459 429 431' fill='none' stroke='#168447' stroke-width='15'/>
-    <path d='M256 454 L264 467 L279 469 L268 480 L271 495 L256 487 L241 495 L244 480 L233 469 L248 467Z' fill='url(#gold)'/>
-    <g fill='#ffd66b'><circle cx='73' cy='275' r='5'/><circle cx='439' cy='275' r='5'/><circle cx='111' cy='180' r='4'/><circle cx='401' cy='180' r='4'/><circle cx='183' cy='84' r='4'/><circle cx='329' cy='84' r='4'/></g>
-    <rect x='8' y='8' width='496' height='496' rx='105' fill='none' stroke='#d9a94a' stroke-width='5'/></svg>"""
+    svg="""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0a5"/><stop offset=".35" stop-color="#f6c64b"/><stop offset=".72" stop-color="#b87517"/><stop offset="1" stop-color="#ffe99a"/></linearGradient>
+ <linearGradient id="fire" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#8b0808"/><stop offset=".45" stop-color="#ed3217"/><stop offset="1" stop-color="#ffca45"/></linearGradient>
+ <radialGradient id="bg"><stop stop-color="#3a0907"/><stop offset=".62" stop-color="#130808"/><stop offset="1" stop-color="#050506"/></radialGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<path d="M40 345C-2 250 54 165 106 132c-14 57 7 83 38 99-6-58 24-115 71-157-8 60 14 88 41 109 24-57 72-92 113-107-20 60-5 100 35 130 24-18 41-43 50-77 43 90 17 174-20 220 7 44-8 86-31 120H112c-28-37-45-77-40-119Z" fill="url(#fire)" opacity=".92"/>
+<path d="M72 321c26-62 68-104 124-125l-34 54 65-20-41 49 68-16-53 52 81-14-66 48 71 7-82 25-89-15-48-45Z" fill="url(#gold)" stroke="#9b4a0b" stroke-width="5"/>
+<path d="M440 321c-26-62-68-104-124-125l34 54-65-20 41 49-68-16 53 52-81-14 66 48-71 7 82 25 89-15 48-45Z" fill="url(#gold)" stroke="#9b4a0b" stroke-width="5"/>
+<path d="M123 285l93-22-54 44 83-9-59 43 70 4-62 30-71-18-42-40Z" fill="#e94b1b" opacity=".9"/>
+<path d="M389 285l-93-22 54 44-83-9 59 43-70 4 62 30 71-18 42-40Z" fill="#e94b1b" opacity=".9"/>
+<path d="M256 161c-20 31-39 52-44 91-6 45 17 84 44 111 27-27 50-66 44-111-5-39-24-60-44-91Z" fill="url(#gold)" stroke="#8b4b13" stroke-width="5"/>
+<path d="M251 194c-25-14-54-7-68 8 25-4 42 4 53 18-27-2-43 9-55 27 29-8 51-3 66 13 10-17 27-24 50-21-8-20-25-37-46-45Z" fill="#ffdf76"/>
+<path d="M265 191c27-14 55-7 69 8-25-4-42 4-53 18 27-2 43 9 55 27-29-8-51-3-66 13-10-17-27-24-50-21 8-20 25-37 45-45Z" fill="#ffb42f"/>
+<path d="M272 217l47 8-34 18-13-26Z" fill="#f8d878"/>
+<circle cx="280" cy="211" r="5" fill="#1b0806"/><circle cx="281" cy="210" r="2" fill="#fff"/>
+<path d="M164 128l18-31 26 23 20-45 28 40 28-40 20 45 26-23 18 31-17 18H181Z" fill="url(#gold)" stroke="#6f3a0b" stroke-width="6"/>
+<path d="M180 148h152v16H180z" fill="#a55b12" stroke="#ffe38a" stroke-width="4"/>
+<path d="M256 66l10 20 22 3-16 15 4 22-20-11-20 11 4-22-16-15 22-3Z" fill="#fff0a0" filter="url(#glow)"/>
+<path d="M99 373c46 31 96 42 157 42s111-11 157-42l-22 44c-40 26-84 39-135 39s-95-13-135-39Z" fill="#d61d22" stroke="url(#gold)" stroke-width="6"/>
+<path d="M99 397c48 27 100 38 157 38s109-11 157-38v25c-45 28-97 40-157 40s-112-12-157-40Z" fill="#fff"/>
+<path d="M99 422c48 27 100 38 157 38s109-11 157-38v24c-45 28-97 40-157 40s-112-12-157-40Z" fill="#101014"/>
+<path d="M256 418l-42 43 42 24 42-24Z" fill="#16834b" stroke="url(#gold)" stroke-width="4"/>
+<rect x="15" y="15" width="482" height="482" rx="100" fill="none" stroke="url(#gold)" stroke-width="9"/>
+<rect x="27" y="27" width="458" height="458" rx="90" fill="none" stroke="#8e531b" stroke-width="2" opacity=".8"/>
+</svg>"""
     return svg,200,{"Content-Type":"image/svg+xml","Cache-Control":"public, max-age=31536000"}
 
 @empire_bp.get("/sw.js")
@@ -1274,11 +1306,10 @@ def withdrawal():
         encrypted=encryption().encrypt(details.encode()).decode()
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
-            fee=platform_fee(amount)
-            pending=int(d.execute("SELECT COALESCE(SUM(amount_sdg),0) n FROM es_withdrawals WHERE status='PENDING'").fetchone()["n"])
-            cash_available=max(0,fx_reserve_balance("SDG")-pending)
+            cash_available=cash_sdg_balance()-pending_sdg_withdrawals()
             if amount>cash_available:
-                raise ValueError("سيولة SDG النقدية المتاحة لا تكفي لطلب السحب.")
+                raise ValueError("السيولة النقدية المتاحة للسحب غير كافية حالياً.")
+            fee=platform_fee(amount)
             post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("protection:fund","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
             notify_protection_income(r,"SDG",fee,"رسوم طلب سحب")
             d.execute("INSERT INTO es_withdrawals(reference,username,amount_sdg,payout_method,payout_details_cipher,created_at) VALUES(?,?,?,?,?,?)",
@@ -2089,9 +2120,9 @@ def admin_exchange():
             d=db(); d.execute("BEGIN IMMEDIATE")
             try:
                 ledger_ref="FXEXT"+hashlib.sha256(external_ref.encode("utf-8")).hexdigest()[:24].upper()
-                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("fx:reserve","SDG",amount)],
+                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("cash:sdg_reserve","SDG",amount)],
                      "إيداع احتياطي SDG خارجي مؤكد من المالك")
-                audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",
+                audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",ledger_ref,
                       str(amount)+" SDG; external_reference="+external_ref)
                 d.commit()
             except Exception:
@@ -2120,12 +2151,16 @@ def admin_exchange():
         flash("تم حفظ سعر الصرف وإلغاء عروض الأسعار القديمة. السعر الجديد مطبق على العروض التالية.")
     is_founder=u["role"]=="founder"
     pools={c:fx_reserve_balance(c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
+    cash_total=cash_sdg_balance() if is_founder else 0
+    cash_pending=pending_sdg_withdrawals() if is_founder else 0
+    cash_available=max(0,cash_total-cash_pending)
     owner_row=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
     owner_username=owner_row["username"] if owner_row else u["username"]
     owner={c:balance(owner_username,c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
     return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف</h1><p class='muted'>احتياطي الصرف مستقل محاسبياً عن صندوق حماية المستخدمين؛ رسوم التطبيق وإيراداته لا تُستخدم لتغطية التحويلات.</p>
       {% if is_founder %}<div class='grid'><article class='panel'><small>أصول المالك URC</small><h2>{{'{:,}'.format(owner['URC'])}}</h2></article><article class='panel'><small>أصول المالك SDG</small><h2>{{'{:,}'.format(owner['SDG'])}}</h2></article>
-      <article class='panel'><small>احتياطي الصرف URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي الصرف SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article></div>{% endif %}
+      <article class='panel'><small>احتياطي الصرف URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي الصرف SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article>
+       <article class='panel'><small>السيولة النقدية للسحب SDG</small><h2>{{'{:,}'.format(cash_available)}}</h2><small>محجوز لطلبات معلقة: {{'{:,}'.format(cash_pending)}}</small></article></div>{% endif %}
       <h2>مصدر سعر الصرف</h2>{% if is_founder %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>طريقة التسعير</label><select name='fx_rate_mode'><option value='market' {% if values['fx_rate_mode']=='market' %}selected{% endif %}>سعر السوق المرجعي</option><option value='manual' {% if values['fx_rate_mode']=='manual' %}selected{% endif %}>سعر يدوي</option></select>
       <label>سعر السوق المرجعي (SDG لكل URC)</label><input name='fx_market_rate' type='number' min='1' value='{{values["fx_market_rate"]}}'>
@@ -2137,7 +2172,7 @@ def admin_exchange():
       <label>العملة</label><select name='currency'><option>URC</option><option>SDG</option></select><label>المبلغ من محفظة المالك</label><input name='amount' type='number' min='1' required><button>إضافة إلى احتياطي الصرف</button></form>
       <h2>تسجيل احتياطي SDG نقدي مستلم فعلياً</h2><p class='muted'>استخدم هذا الخيار فقط بعد استلام النقد فعلياً والتحقق منه خارج المنصة. يسجل النظام مرجع العملية في سجل التدقيق ولا ينشئ رصيداً للعميل.</p>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form>{% endif %}</section>""",
-      owner=owner,pools=pools,is_founder=is_founder,active_rate=int(setting("fx_market_rate" if setting("fx_rate_mode","manual")=="market" else "fx_manual_rate","5600")),values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","5600"),("fx_manual_rate","5600"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
+      owner=owner,pools=pools,is_founder=is_founder,active_rate=int(setting("fx_market_rate" if setting("fx_rate_mode","manual")=="market" else "fx_manual_rate","5600")),values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","5600"),("fx_manual_rate","5600"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},cash_available=cash_available,cash_pending=cash_pending,csrf=session.get("csrf","")))
 
 @empire_bp.route("/admin/protection-fund",methods=["GET","POST"])
 @login_required
@@ -2484,14 +2519,15 @@ def admin_withdrawals():
             row=d.execute("SELECT * FROM es_withdrawals WHERE id=? AND status='PENDING'",(wid,)).fetchone()
             if not row: raise ValueError("طلب السحب غير متاح للمراجعة")
             if action=="PAID":
-                if fx_reserve_balance("SDG") < int(row["amount_sdg"]):
-                    raise ValueError("سيولة SDG النقدية غير كافية لتنفيذ السحب.")
+                payout_amount=int(row["amount_sdg"])
+                if cash_sdg_balance()<payout_amount:
+                    raise ValueError("السيولة النقدية الفعلية غير كافية لتنفيذ طلب السحب.")
                 post(row["reference"]+"P",[
-                    ("payout:pending","SDG",-row["amount_sdg"]),
-                    ("external:payout_settlements","SDG",row["amount_sdg"]),
-                    ("fx:reserve","SDG",-row["amount_sdg"]),
-                    ("external:cash_payout","SDG",row["amount_sdg"])
-                ],"تأكيد صرف طلب سحب من السيولة النقدية")
+                    ("payout:pending","SDG",-payout_amount),
+                    ("external:payout_settlements","SDG",payout_amount),
+                    ("cash:sdg_reserve","SDG",-payout_amount),
+                    ("external:cash_payouts","SDG",payout_amount)
+                ],"تأكيد صرف طلب سحب من السيولة النقدية الفعلية")
                 status="PAID"
             elif action=="REJECTED":
                 post(row["reference"]+"X",[("payout:pending","SDG",-row["amount_sdg"]),("user:"+row["username"],"SDG",row["amount_sdg"])],"إعادة مبلغ طلب سحب مرفوض")
