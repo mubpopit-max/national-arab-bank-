@@ -35,6 +35,7 @@ jobs:
           assert "/store/wallet" in rules
           assert "/store/admin" in rules
           assert "/store/admin/withdrawals" in rules
+          assert "/store/admin/urc-treasury" in rules
           assert "/store/transfer-epc" in rules
           assert "/store/healthz" in rules
           with app.app.app_context():
