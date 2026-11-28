@@ -471,8 +471,19 @@ def pending_sdg_withdrawals():
     ).fetchone()
     return int(row["n"])
 
+def urc_treasury_balance():
+    """Authoritative URC balance held by the founder-only private monetary fund."""
+    row=db().execute(
+        "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='treasury:urc' AND currency='URC'"
+    ).fetchone()
+    amount=int(row["n"])
+    if amount<0:
+        raise ValueError("رصيد صندوق URC غير متوازن؛ أوقف العمليات وراجع القيود.")
+    return amount
+
+
 def seed_owner_assets():
-    """Create the founder's opening URC allocation once; never alter bank account IDs."""
+    """Place the fixed initial URC supply in the private treasury exactly once."""
     tables={r["name"] for r in db().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     if "users" not in tables:
         return False
@@ -482,17 +493,44 @@ def seed_owner_assets():
     owner=founder["username"]
     ensure_wallet(owner,"SDG")
     ensure_wallet(owner,"URC")
-    if setting("owner_urc_seeded","0")!="1":
-        if balance(owner,"URC")==0:
-            d=db()
-            d.execute("BEGIN IMMEDIATE")
-            try:
-                post("OWNER-URC-OPENING",[("user:"+owner,"URC",15000000),("issuer:urc","URC",-15000000)],"الرصيد الافتتاحي لأصول المالك")
-                d.commit()
-            except Exception:
-                d.rollback()
-                raise
-        db().execute("INSERT INTO es_settings(key,value) VALUES('owner_urc_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+    if setting("urc_private_treasury_seeded","0")!="1":
+        d=db()
+        d.execute("BEGIN IMMEDIATE")
+        try:
+            existing_treasury=d.execute(
+                "SELECT 1 FROM es_ledger WHERE account='treasury:urc' AND currency='URC' LIMIT 1"
+            ).fetchone()
+            if not existing_treasury:
+                legacy=d.execute(
+                    "SELECT COALESCE(SUM(delta),0) amount FROM es_ledger WHERE reference='OWNER-URC-OPENING' AND account=? AND currency='URC'",
+                    ("user:"+owner,)
+                ).fetchone()
+                legacy_amount=int(legacy["amount"])
+                any_urc=d.execute(
+                    "SELECT 1 FROM es_ledger WHERE currency='URC' LIMIT 1"
+                ).fetchone()
+                if legacy_amount:
+                    if legacy_amount!=15000000:
+                        raise RuntimeError("Legacy owner URC opening amount is not the fixed 15,000,000 supply; manual reconciliation required.")
+                    if balance(owner,"URC")<legacy_amount:
+                        raise RuntimeError("Founder URC balance is below the legacy opening allocation; treasury migration stopped.")
+                    post("URC-TREASURY-MOVE-OPENING",[
+                        ("user:"+owner,"URC",-legacy_amount),
+                        ("treasury:urc","URC",legacy_amount)
+                    ],"نقل الإصدار الافتتاحي من محفظة المالك إلى صندوق النقد الخاص")
+                elif not any_urc:
+                    post("URC-PRIVATE-TREASURY-OPENING",[
+                        ("treasury:urc","URC",15000000),
+                        ("issuer:urc","URC",-15000000)
+                    ],"الإصدار الأولي الثابت لعملة URC وإيداعه في صندوق النقد الخاص")
+                else:
+                    raise RuntimeError("URC ledger already contains entries but no recognized opening allocation; refusing to mint or move funds automatically.")
+            d.execute("INSERT INTO es_settings(key,value) VALUES('urc_private_treasury_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+            d.execute("INSERT INTO es_settings(key,value) VALUES('owner_urc_seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+            d.commit()
+        except Exception:
+            d.rollback()
+            raise
     return True
 
 def seed_game_products():
@@ -804,6 +842,68 @@ def loyalty():
       <section class='panel'><h2>كوبوناتي المتاحة</h2>{% for c in coupons %}<article class='transaction-row'><div class='transaction-info'><b>{{c['discount_percent']}}% خصم</b><small>{{c['created_at'][:16]}}</small></div><code>{{c['code']}}</code></article>{% else %}<p class='empty-state'>لا توجد كوبونات متاحة حالياً.</p>{% endfor %}</section>
       <section class='panel'><h2>سجل النقاط</h2>{% for x in ledger %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}} · {{x['reference']}}</small></div><b class='transaction-value {{'in' if x['points_delta']>0 else 'out'}}'>{{'+' if x['points_delta']>0 else ''}}{{x['points_delta']}} نقطة</b></article>{% else %}<div class='empty-state'>لم تُسجل نقاط في حسابك بعد.</div>{% endfor %}</section>""",points=points,member=member,ledger=ledger,coupons=coupons,csrf=session.get("csrf",""))
     return page("نقاط الولاء",body)
+
+@empire_bp.route("/admin/urc-treasury",methods=["GET","POST"])
+@login_required
+@founder_required
+def admin_urc_treasury():
+    if request.method=="POST":
+        csrf()
+        recipient=(request.form.get("recipient") or "").strip()
+        try:
+            amount=money_int(request.form.get("amount"))
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(url_for("empire.admin_urc_treasury"))
+        target=db().execute(
+            "SELECT username,full_name,account_number,active FROM users WHERE username=? OR account_number=? LIMIT 1",
+            (recipient,recipient)
+        ).fetchone()
+        if not target or not target["active"] or target["role"]=="founder":
+            flash("المستفيد غير موجود أو غير مؤهل لاستلام التحويل.")
+            return redirect(url_for("empire.admin_urc_treasury"))
+        d=db()
+        d.execute("BEGIN IMMEDIATE")
+        try:
+            available=urc_treasury_balance()
+            if amount>available:
+                raise ValueError("رصيد صندوق النقد الخاص غير كافٍ.")
+            reference="URC-TREASURY-DIST-"+secrets.token_hex(8).upper()
+            post(reference,[
+                ("treasury:urc","URC",-amount),
+                ("user:"+target["username"],"URC",amount)
+            ],"توزيع عملة URC من صندوق النقد الخاص بواسطة المالك")
+            audit(user()["username"],"URC_TREASURY_DISTRIBUTION","urc_treasury",reference,
+                  "recipient="+target["username"]+";amount="+str(amount))
+            d.commit()
+            flash("تم تحويل "+format(amount,",")+" URC من صندوق النقد الخاص بنجاح.")
+        except Exception as exc:
+            d.rollback()
+            flash(str(exc) if isinstance(exc,ValueError) else "تعذر تنفيذ التحويل؛ لم يتم اعتماد أي قيد.")
+        return redirect(url_for("empire.admin_urc_treasury"))
+    current=urc_treasury_balance()
+    rows=db().execute("""
+        SELECT l.reference,l.delta,l.memo,l.created_at,l.account
+        FROM es_ledger l
+        WHERE l.currency='URC' AND l.reference IN (
+          SELECT DISTINCT reference FROM es_ledger WHERE account='treasury:urc' AND currency='URC'
+        )
+        ORDER BY l.id DESC LIMIT 100
+    """).fetchall()
+    body=render_template_string("""<section class='panel'>
+      <span class='tag'>مركز المالك · صلاحية حصرية</span><h1>صندوق النقد الخاص – URC</h1>
+      <p>الصندوق المركزي لإصدار وتوزيع عملة URC. لا يُعد محفظة شخصية للمالك ولا يختلط بصندوق الحماية أو احتياطي الصرف.</p>
+      <div class='metric'><small>الرصيد المتاح في الصندوق</small><strong>{{'{:,}'.format(current)}} URC</strong><small>الإصدار الثابت المعتمد: 15,000,000 URC</small></div>
+      <form method='post' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'>
+        <h2>توزيع العملات</h2><label>اسم المستخدم أو رقم حساب المستفيد</label><input name='recipient' required maxlength='120' autocomplete='off'>
+        <label>الكمية (URC)</label><input name='amount' inputmode='numeric' pattern='[1-9][0-9]{0,11}' required>
+        <button type='submit'>اعتماد التحويل من الصندوق</button>
+      </form></section>
+      <section class='panel'><h2>سجل حركة الصندوق</h2>
+      {% for x in rows %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small>{{x['created_at'][:19]}} · {{x['reference']}}</small></div><b class='transaction-value {{'in' if x['delta']>0 else 'out'}}'>{{'+' if x['delta']>0 else ''}}{{'{:,}'.format(x['delta'])}} URC</b></article>{% else %}<div class='empty-state'>لا توجد حركات مسجلة بعد.</div>{% endfor %}
+      </section>""",current=current,rows=rows,csrf=session.get("csrf",""))
+    return page("صندوق النقد الخاص",body)
+
 
 @empire_bp.route("/admin/identity",methods=["GET","POST"])
 @login_required
