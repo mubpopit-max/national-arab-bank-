@@ -534,22 +534,37 @@ def assert_epc_capacity(quantity):
     if int(quantity)>remaining_epc_supply():
         raise ValueError("الكمية تتجاوز المعروض المتاح من URC")
 
+def _legacy_encryption():
+    """Reconstruct the original Fernet key so existing ciphertext stays readable."""
+    from flask import current_app
+    app_secret=current_app.secret_key
+    if not app_secret:
+        raise RuntimeError("A persistent FLASK_SECRET_KEY is required for encrypted data")
+    material=hashlib.sha256(("empire-estory-data-encryption-v1:"+str(app_secret)).encode("utf-8")).digest()
+    import base64
+    return Fernet(base64.urlsafe_b64encode(material))
+
+
 def encryption():
+    """Return the active write key. New ciphertext uses the dedicated persistent key."""
     key=os.getenv("EMPIRE_DATA_ENCRYPTION_KEY","").strip()
     if key:
         try:
             return Fernet(key.encode("ascii"))
         except (ValueError, UnicodeEncodeError) as exc:
             raise RuntimeError("EMPIRE_DATA_ENCRYPTION_KEY is invalid; configure a valid persistent Fernet key") from exc
-    # Fallback for managed hosts missing the dedicated secret. Keep FLASK_SECRET_KEY stable.
+    # Backward-compatible mode until the dedicated key is configured.
     from flask import current_app
-    app_secret=current_app.secret_key
-    if not app_secret:
-        raise RuntimeError("A persistent FLASK_SECRET_KEY is required for encrypted data")
     current_app.logger.warning("EMPIRE_DATA_ENCRYPTION_KEY is unset; using a key derived from FLASK_SECRET_KEY. Configure a dedicated persistent key.")
-    material=hashlib.sha256(("empire-estory-data-encryption-v1:"+str(app_secret)).encode("utf-8")).digest()
-    import base64
-    return Fernet(base64.urlsafe_b64encode(material))
+    return _legacy_encryption()
+
+
+def decrypt_encrypted(token):
+    """Read new ciphertext first, then legacy ciphertext encrypted before key rotation."""
+    try:
+        return encryption().decrypt(token)
+    except InvalidToken:
+        return _legacy_decrypt_encrypted(token)
 
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
@@ -1091,7 +1106,7 @@ def admin_ice_codes():
     for raw in raw_rows:
         item=dict(raw); item["plain_code"]=""
         if item["status"]=="AVAILABLE" and item["code_cipher"]:
-            try: item["plain_code"]=encryption().decrypt(item["code_cipher"].encode("utf-8")).decode("utf-8")
+            try: item["plain_code"]=decrypt_encrypted(item["code_cipher"].encode("utf-8")).decode("utf-8")
             except Exception: item["plain_code"]=""
         rows.append(item)
     body=render_template_string("""<section class='panel'><span class='tag'>آيس ستوري × الإمبراطورية إستوري</span><h1>أكواد العملاء المميزين</h1>
@@ -1541,7 +1556,7 @@ def fulfill_topup_from_inventory(d, order, stock, actor, note="automatic invento
     cost=int(order["cost_sdg"])
     if cost<0 or cost>int(order["amount_sdg"]):
         raise ValueError("تكلفة المورد لا يمكن أن تكون سالبة أو أعلى من سعر البيع.")
-    code=encryption().decrypt(stock["code_cipher"].encode("utf-8")).decode("utf-8")
+    code=decrypt_encrypted(stock["code_cipher"].encode("utf-8")).decode("utf-8")
     consumed=d.execute(
         "UPDATE es_game_code_inventory SET status='USED',used_order_ref=?,used_at=? WHERE id=? AND product_id=? AND status='AVAILABLE'",
         (order["reference"],now(),stock["id"],order["product_id"])
@@ -1659,7 +1674,7 @@ def orders():
     for row in market_rows:
         item=dict(row); item["delivery_text"]=""
         if item["buyer"]==u["username"] and item["status"]=="DELIVERED" and item["delivery_cipher"]:
-            try: item["delivery_text"]=encryption().decrypt(item["delivery_cipher"].encode()).decode()
+            try: item["delivery_text"]=decrypt_encrypted(item["delivery_cipher"].encode()).decode()
             except Exception: item["delivery_text"]="تعذر فك بيانات التسليم؛ تواصل مع الدعم."
         markets.append(item)
     top_rows=db().execute("SELECT t.*,p.title,p.game FROM es_topup_orders t JOIN es_products p ON p.id=t.product_id WHERE t.buyer=? OR t.agent=? ORDER BY t.id DESC LIMIT 100",(u["username"],u["username"])).fetchall()
@@ -1667,7 +1682,7 @@ def orders():
     for row in top_rows:
         item=dict(row); item["delivery_code_text"]=""
         if item["buyer"]==u["username"] and item["status"]=="COMPLETED" and item.get("delivery_cipher"):
-            try: item["delivery_code_text"]=encryption().decrypt(item["delivery_cipher"].encode()).decode()
+            try: item["delivery_code_text"]=decrypt_encrypted(item["delivery_cipher"].encode()).decode()
             except Exception: item["delivery_code_text"]="تعذر عرض الكود حالياً؛ تواصل مع الدعم."
         top.append(item)
     agent=db().execute("SELECT status FROM es_agents WHERE username=?",(u["username"],)).fetchone()
@@ -2576,7 +2591,7 @@ def admin_withdrawals():
     rows=[]
     for row in db().execute("SELECT * FROM es_withdrawals ORDER BY id DESC LIMIT 200").fetchall():
         item=dict(row)
-        try: item["payout_details"]=encryption().decrypt(item["payout_details_cipher"].encode()).decode()
+        try: item["payout_details"]=decrypt_encrypted(item["payout_details_cipher"].encode()).decode()
         except Exception: item["payout_details"]="تعذر فك بيانات الاستلام"
         rows.append(item)
     body=render_template_string("""<section class='panel'><h1>طلبات السحب</h1>{% for x in rows %}<article class='panel'><b>{{x['reference']}}</b> · {{x['username']}} · {{x['amount_sdg']}} SDG · {{x['payout_method']}} · {{x['status']}}<p>{{x['payout_details']}}</p>
@@ -2706,7 +2721,7 @@ def admin_topups():
                                 (int(inventory_id),order["product_id"])).fetchone()
                 if not stock:
                     raise ValueError("الكود المختار لم يعد متاحاً لهذه الباقة.")
-                code=encryption().decrypt(stock["code_cipher"].encode("utf-8")).decode("utf-8")
+                code=decrypt_encrypted(stock["code_cipher"].encode("utf-8")).decode("utf-8")
                 consumed=d.execute("UPDATE es_game_code_inventory SET status='USED',used_order_ref=?,used_at=? WHERE id=? AND status='AVAILABLE'",
                                    (r,now(),stock["id"])).rowcount
                 if consumed!=1:
