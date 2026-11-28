@@ -1,396 +1,76 @@
 package com.empire.estory;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.DownloadManager;
-import android.content.ActivityNotFoundException;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.graphics.Color;
-import android.graphics.Insets;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.Settings;
-import android.view.View;
-import android.view.Window;
-import android.view.WindowInsets;
-import android.webkit.CookieManager;
-import android.webkit.SslErrorHandler;
-import android.net.http.SslError;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.Toast;
-
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.content.SharedPreferences;
+import android.view.Gravity;
+import android.widget.*;
 import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import org.json.JSONArray;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
-    private static final String HOST = "national-arab-bank-d2siv.faable.link";
-    private static final String START_URL = "https://" + HOST + "/store/";
-    private static final String UPDATE_URL =
-        "https://raw.githubusercontent.com/mubpopit-max/national-arab-bank-/main/android/update.json";
-    private static final String PREFS = "empire_update_state";
-    private static final String PENDING_URL = "pending_apk_url";
-    private static final int FILE_CHOOSER_REQUEST = 4107;
+    private static final String API="https://national-arab-bank-d2siv.faable.link/store/api/v1";
+    private static final String PREF="empire_native", KEY="token";
+    private static final int BG=0xff090909, PANEL=0xff191919, GOLD=0xffd8b45e, WHITE=0xfff6f1e6;
+    private final ExecutorService worker=Executors.newSingleThreadExecutor();
+    private LinearLayout root, body;
+    private String token="";
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private WebView webView;
-    private ValueCallback<Uri[]> fileChooserCallback;
-    private int systemBottomInset = 0;
-    private long activeDownloadId = -1L;
-    private boolean receiverRegistered = false;
-
-    private final BroadcastReceiver downloadReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
-            long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
-            if (id != activeDownloadId) return;
-
-            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-            activeDownloadId = -1L;
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(PENDING_URL).apply();
-            Uri apkUri = manager.getUriForDownloadedFile(id);
-            if (apkUri == null) {
-                showBlockingError("تعذر تنزيل ملف التحديث كاملاً. أعد المحاولة.");
-                return;
-            }
-            installDownloadedApk(apkUri);
-        }
-    };
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        Window window = getWindow();
-        window.setStatusBarColor(Color.WHITE);
-        window.setNavigationBarColor(Color.WHITE);
-        window.getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        );
-        registerDownloadReceiver();
-        checkForMandatoryUpdate();
-    }
-
-    private void registerDownloadReceiver() {
-        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(downloadReceiver, filter);
-        }
-        receiverRegistered = true;
-    }
-
-    private void checkForMandatoryUpdate() {
-        showBlockingError("جارٍ التحقق من تحديث التطبيق...");
-        executor.execute(() -> {
-            HttpURLConnection connection = null;
-            try {
-                connection = (HttpURLConnection) new URL(UPDATE_URL).openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(12000);
-                connection.setReadTimeout(12000);
-                connection.setUseCaches(false);
-                connection.setRequestProperty("Cache-Control", "no-cache");
-                int status = connection.getResponseCode();
-                if (status != HttpURLConnection.HTTP_OK) {
-                    throw new IllegalStateException("Update service returned HTTP " + status);
-                }
-                StringBuilder body = new StringBuilder();
-                try (InputStream stream = connection.getInputStream();
-                     BufferedReader reader = new BufferedReader(new InputStreamReader(stream, "UTF-8"))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) body.append(line);
-                }
-                JSONObject data = new JSONObject(body.toString());
-                int latestCode = data.getInt("latestVersionCode");
-                String latestName = data.getString("latestVersionName");
-                String apkUrl = data.getString("apkUrl");
-                boolean mandatory = data.optBoolean("mandatory", false);
-                Uri parsed = Uri.parse(apkUrl);
-                if (!"https".equalsIgnoreCase(parsed.getScheme())
-                    || !"github.com".equalsIgnoreCase(parsed.getHost())
-                    || !apkUrl.endsWith(".apk")) {
-                    throw new IllegalStateException("Invalid APK download URL");
-                }
-
-                runOnUiThread(() -> {
-                    if (latestCode > BuildConfig.VERSION_CODE) {
-                        if (mandatory) showMandatoryUpdate(latestName, apkUrl);
-                        else showOptionalUpdate(latestName, apkUrl);
-                    } else {
-                        openStore();
-                    }
-                });
-            } catch (Exception error) {
-                runOnUiThread(this::openStore);
-            } finally {
-                if (connection != null) connection.disconnect();
-            }
-        });
-    }
-
-    private void showOptionalUpdate(String versionName, String apkUrl) {
-        new AlertDialog.Builder(this)
-            .setTitle("تحديث جديد متوفر")
-            .setMessage("يتوفر إصدار أحدث (" + versionName + "). يمكنك متابعة استخدام التطبيق الآن أو تنزيل التحديث.")
-            .setCancelable(true)
-            .setPositiveButton("تنزيل التحديث", (dialog, which) -> beginUpdate(apkUrl))
-            .setNegativeButton("لاحقاً", (dialog, which) -> openStore())
-            .setOnCancelListener(dialog -> openStore())
-            .show();
-    }
-
-    private void showMandatoryUpdate(String versionName, String apkUrl) {
-        new AlertDialog.Builder(this)
-            .setTitle("تحديث إلزامي متوفر")
-            .setMessage("يتوفر إصدار جديد (" + versionName + "). يجب تثبيته لمواصلة استخدام الإمبراطورية إستوري.")
-            .setCancelable(false)
-            .setPositiveButton("تحميل وتثبيت التحديث", (dialog, which) -> beginUpdate(apkUrl))
-            .show();
-    }
-
-    private void beginUpdate(String apkUrl) {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PENDING_URL, apkUrl).apply();
-        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
-            new AlertDialog.Builder(this)
-                .setTitle("السماح بالتثبيت")
-                .setMessage("اسمح لهذا التطبيق بتثبيت التحديث من مصدره، ثم ارجع إلى التطبيق لإكمال التثبيت.")
-                .setCancelable(false)
-                .setPositiveButton("فتح الإعدادات", (dialog, which) -> {
-                    Intent settings = new Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:" + getPackageName())
-                    );
-                    startActivity(settings);
-                })
-                .show();
-            return;
-        }
-        startApkDownload(apkUrl);
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        String pending = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PENDING_URL, null);
-        if (pending != null && (Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls())) {
-            startApkDownload(pending);
-        }
-    }
-
-    private void startApkDownload(String apkUrl) {
-        if (activeDownloadId != -1L) return;
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(PENDING_URL).apply();
-        DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
-        request.setTitle("تحديث الإمبراطورية إستوري");
-        request.setDescription("جارٍ تنزيل الإصدار الإلزامي");
-        request.setMimeType("application/vnd.android.package-archive");
-        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "empire-estory-update.apk");
-        activeDownloadId = manager.enqueue(request);
-        Toast.makeText(this, "بدأ تنزيل التحديث...", Toast.LENGTH_LONG).show();
-    }
-
-    private void installDownloadedApk(Uri apkUri) {
-        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
-            Toast.makeText(this, "يجب السماح بتثبيت التحديث من هذا المصدر.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        Intent install = new Intent(Intent.ACTION_VIEW);
-        install.setDataAndType(apkUri, "application/vnd.android.package-archive");
-        install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(install);
-        } catch (ActivityNotFoundException error) {
-            showBlockingError("لم يتم العثور على مثبت حزم Android على الجهاز.");
-        }
-    }
-
-    private void showBlockingError(String message) {
-        new AlertDialog.Builder(this)
-            .setTitle("الإمبراطورية إستوري")
-            .setMessage(message)
-            .setCancelable(false)
-            .setPositiveButton("إعادة المحاولة", (dialog, which) -> checkForMandatoryUpdate())
-            .show();
-    }
-
-    private void openStore() {
-        initializeWebView();
-        webView.loadUrl(START_URL);
-    }
-
-    private void initializeWebView() {
-        if (webView != null) return;
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.WHITE);
-        webView.setOnApplyWindowInsetsListener((view, insets) -> {
-            int left, top, right, bottom;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                left = bars.left; top = bars.top; right = bars.right; bottom = bars.bottom;
-            } else {
-                left = insets.getSystemWindowInsetLeft(); top = insets.getSystemWindowInsetTop();
-                right = insets.getSystemWindowInsetRight(); bottom = insets.getSystemWindowInsetBottom();
-            }
-            systemBottomInset = bottom;
-            view.setPadding(left, top, right, 0);
-            view.post(this::applyWebInsets);
-            return insets;
-        });
-        setContentView(webView);
-
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(false);
-        settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setSupportMultipleWindows(false);
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(true);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.setSafeBrowsingEnabled(true);
-
-        CookieManager cookies = CookieManager.getInstance();
-        cookies.setAcceptCookie(true);
-        cookies.setAcceptThirdPartyCookies(webView, false);
-        webView.setWebViewClient(new SecureWebViewClient());
-        webView.setWebChromeClient(new SecureWebChromeClient());
-        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
-            Uri downloadUri = Uri.parse(url);
-            if ("https".equalsIgnoreCase(downloadUri.getScheme())) openExternal(downloadUri);
-        });
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
-    }
-
-    private void applyWebInsets() {
-        if (webView == null) return;
-        String script = "document.documentElement.style.setProperty('--native-bottom-inset','"
-            + systemBottomInset + "px');";
-        webView.evaluateJavascript(script, null);
-    }
-
-    private boolean handleNavigation(Uri uri) {
-        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
-        String host = uri.getHost();
-        if ("https".equals(scheme) && HOST.equalsIgnoreCase(host)) return false;
-        if ("https".equals(scheme) || "mailto".equals(scheme) || "tel".equals(scheme)) {
-            openExternal(uri);
-            return true;
-        }
-        return true;
-    }
-
-    private void openExternal(Uri uri) {
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, uri));
-        } catch (ActivityNotFoundException ignored) {
-            Toast.makeText(this, "لا يوجد تطبيق مناسب لفتح الرابط.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private final class SecureWebViewClient extends WebViewClient {
-        @Override public void onPageFinished(WebView view, String url) {
-            super.onPageFinished(view, url);
-            applyWebInsets();
-        }
-        @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-            return handleNavigation(request.getUrl());
-        }
-        @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            return handleNavigation(Uri.parse(url));
-        }
-        @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-            handler.cancel();
-        }
-        @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-            if (request.isForMainFrame()) {
-                String html = "<!doctype html><html lang='ar' dir='rtl'><meta charset='utf-8'>"
-                    + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                    + "<body style='background:#090909;color:#f6f1e6;font-family:sans-serif;text-align:center;padding:48px 20px'>"
-                    + "<h2 style='color:#d8b45e'>تعذر الاتصال بالمتجر</h2>"
-                    + "<p>تحقق من اتصال الإنترنت ثم حاول مجدداً.</p>"
-                    + "<button style='padding:12px 24px;background:#d8b45e;border:0;border-radius:8px' "
-                    + "onclick=\"location.href='" + START_URL + "'\">إعادة المحاولة</button></body></html>";
-                view.loadDataWithBaseURL(START_URL, html, "text/html", "UTF-8", null);
-            }
-        }
-    }
-
-    private final class SecureWebChromeClient extends WebChromeClient {
-        @Override public boolean onShowFileChooser(
-            WebView view, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams
-        ) {
-            if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
-            fileChooserCallback = filePathCallback;
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("image/*");
-            try {
-                startActivityForResult(Intent.createChooser(intent, "اختر صورة"), FILE_CHOOSER_REQUEST);
-            } catch (ActivityNotFoundException error) {
-                fileChooserCallback = null;
-                filePathCallback.onReceiveValue(null);
-                Toast.makeText(MainActivity.this, "تعذر فتح معرض الصور.", Toast.LENGTH_SHORT).show();
-                return false;
-            }
-            return true;
-        }
-    }
-
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == FILE_CHOOSER_REQUEST && fileChooserCallback != null) {
-            Uri[] result = null;
-            if (resultCode == RESULT_OK && data != null && data.getData() != null) result = new Uri[]{data.getData()};
-            fileChooserCallback.onReceiveValue(result);
-            fileChooserCallback = null;
-        }
-    }
-
-    @Override protected void onSaveInstanceState(Bundle outState) {
-        if (webView != null) webView.saveState(outState);
-        super.onSaveInstanceState(outState);
-    }
-
-    @Override public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
-    }
-
-    @Override protected void onDestroy() {
-        if (receiverRegistered) {
-            try { unregisterReceiver(downloadReceiver); } catch (IllegalArgumentException ignored) {}
-        }
-        executor.shutdownNow();
-        if (fileChooserCallback != null) {
-            fileChooserCallback.onReceiveValue(null);
-            fileChooserCallback = null;
-        }
-        if (webView != null) {
-            webView.stopLoading();
-            webView.destroy();
-            webView = null;
-        }
-        super.onDestroy();
-    }
+    @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        token=getSharedPreferences(PREF,MODE_PRIVATE).getString(KEY,""); if(token.isEmpty())login();else dashboard();}
+    private void shell(String title){root=new LinearLayout(this);root.setOrientation(1);root.setBackgroundColor(BG);
+        TextView brand=label("♛  الإمبراطورية إستوري",21,GOLD,true);brand.setGravity(Gravity.CENTER);brand.setPadding(12,20,12,16);root.addView(brand);
+        TextView h=label(title,19,WHITE,true);h.setPadding(20,8,20,12);root.addView(h);
+        ScrollView sc=new ScrollView(this);body=new LinearLayout(this);body.setOrientation(1);body.setPadding(16,8,16,24);sc.addView(body);
+        root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);}
+    private TextView label(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(null,Typeface.BOLD);t.setPadding(8,7,8,7);return t;}
+    private void card(String title,String value){LinearLayout c=new LinearLayout(this);c.setOrientation(1);c.setPadding(14,10,14,10);c.setBackgroundColor(PANEL);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=9;body.addView(c,p);c.addView(label(title,13,GOLD,true));c.addView(label(value,21,WHITE,true));}
+    private EditText input(String hint,int type){EditText e=new EditText(this);e.setSingleLine(true);e.setHint(hint);e.setTextColor(WHITE);e.setHintTextColor(0xff999999);e.setInputType(type);
+        e.setBackgroundTintList(android.content.res.ColorStateList.valueOf(GOLD));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=12;body.addView(e,p);return e;}
+    private void button(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(BG);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(GOLD));b.setOnClickListener(v->r.run());
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=8;body.addView(b,p);}
+    private void login(){shell("تسجيل الدخول");body.addView(label("مرحباً بك في حسابك الرقمي",15,WHITE,false));
+        EditText id=input("رقم الحساب أو اسم المستخدم",android.text.InputType.TYPE_CLASS_TEXT);
+        EditText pw=input("كلمة المرور",android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        button("دخول آمن",()->{JSONObject j=new JSONObject();try{j.put("identity",id.getText().toString().trim());j.put("password",pw.getText().toString());}catch(Exception ignored){}
+            call("POST","/auth/login",null,j,result->{String t=result.optString("token","");if(t.isEmpty()){toast(result.optString("message","تعذر تسجيل الدخول"));return;}
+                token=t;getSharedPreferences(PREF,MODE_PRIVATE).edit().putString(KEY,t).apply();dashboard();});});}
+    private interface Done{void accept(JSONObject j);}
+    private void call(String method,String path,String bearer,JSONObject payload,Done done){worker.execute(()->{JSONObject result=new JSONObject();HttpURLConnection c=null;
+        try{c=(HttpURLConnection)new URL(API+path).openConnection();c.setRequestMethod(method);c.setConnectTimeout(12000);c.setReadTimeout(15000);c.setRequestProperty("Accept","application/json");
+            if(bearer!=null&&!bearer.isEmpty())c.setRequestProperty("Authorization","Bearer "+bearer);
+            if(payload!=null){c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json; charset=utf-8");try(OutputStream o=c.getOutputStream()){o.write(payload.toString().getBytes(StandardCharsets.UTF_8));}}
+            InputStream in=c.getResponseCode()<400?c.getInputStream():c.getErrorStream();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){StringBuilder s=new StringBuilder();String line;while((line=r.readLine())!=null)s.append(line);result=new JSONObject(s.toString());}
+        }catch(Exception ex){try{result.put("message","تعذر الاتصال بالخادم. تحقق من الإنترنت.");}catch(Exception ignored){}}
+        finally{if(c!=null)c.disconnect();}JSONObject answer=result;runOnUiThread(()->done.accept(answer));});}
+    private void dashboard(){shell("الرئيسية");body.addView(label("جارٍ تحميل بيانات الحساب...",14,WHITE,false));
+        call("GET","/dashboard",token,null,j->{if(!j.optBoolean("ok")){logout();toast(j.optString("message","يلزم تسجيل الدخول مجدداً"));return;}
+            JSONObject user=j.optJSONObject("user"),bal=j.optJSONObject("balances");shell("الرئيسية");
+            if(user!=null)body.addView(label("أهلاً، "+user.optString("full_name",""),17,WHITE,true));
+            if(bal!=null){card("رصيد SDG",fmt(bal.optLong("SDG"))+" SDG");card("رصيد URC",fmt(bal.optLong("URC"))+" URC");}
+            button("المحفظة",()->section("/wallet","المحفظة"));button("المعاملات السابقة",()->section("/history","سجل المعاملات"));
+            JSONArray recent=j.optJSONArray("recent");body.addView(label("آخر العمليات",16,GOLD,true));if(recent!=null)for(int i=0;i<recent.length();i++){JSONObject x=recent.optJSONObject(i);if(x!=null)card(x.optString("memo","عملية")+" · "+x.optString("created_at",""),fmt(x.optLong("delta"))+" "+x.optString("currency",""));}
+            button("تحديث",this::dashboard);button("تسجيل الخروج",this::logout);
+        });}
+    private void section(String path,String title){shell(title);body.addView(label("جارٍ التحميل...",14,WHITE,false));call("GET",path,token,null,j->{
+        if(!j.optBoolean("ok")){toast(j.optString("message","تعذر تحميل البيانات"));return;}shell(title);JSONObject b=j.optJSONObject("balances");
+        if(b!=null){card("SDG",fmt(b.optLong("SDG"))+" SDG");card("URC",fmt(b.optLong("URC"))+" URC");}
+        JSONArray rows=j.optJSONArray("entries");if(rows==null)rows=j.optJSONArray("items");if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject x=rows.optJSONObject(i);if(x==null)continue;
+            String value=x.has("delta")?fmt(x.optLong("delta"))+" "+x.optString("currency",""):fmt(x.optLong("amount"))+" "+x.optString("currency","");
+            card(x.optString("memo","عملية")+"\n"+x.optString("created_at",""),value);}
+        button("الرئيسية",this::dashboard);});}
+    private String fmt(long n){return String.format(java.util.Locale.US,"%,d",n);}
+    private void logout(){token="";getSharedPreferences(PREF,MODE_PRIVATE).edit().clear().apply();login();}
+    private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
+    @Override public void onBackPressed(){dashboard();}
+    @Override protected void onDestroy(){worker.shutdownNow();super.onDestroy();}
 }
