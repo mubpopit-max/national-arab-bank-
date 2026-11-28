@@ -1,7 +1,7 @@
 import unittest
 
 import app as app_module
-from empire_store import db, post, balance, assert_epc_capacity, fx_reserve_balance, cash_sdg_balance
+from empire_store import db, post, balance, assert_epc_capacity, fx_reserve_balance, cash_sdg_balance, seed_owner_assets, urc_treasury_balance
 
 
 class EmpireLedgerTests(unittest.TestCase):
@@ -18,6 +18,70 @@ class EmpireLedgerTests(unittest.TestCase):
 
     def tearDown(self):
         self.context.pop()
+
+    def test_fixed_urc_supply_seeds_private_treasury_once(self):
+        d = db()
+        founder = d.execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+        self.assertIsNotNone(founder, "CI fixture must include the founder account")
+        d.execute(
+            "INSERT INTO es_settings(key,value) VALUES('urc_private_treasury_seeded','0') "
+            "ON CONFLICT(key) DO UPDATE SET value='0'"
+        )
+
+        self.assertTrue(seed_owner_assets())
+        self.assertEqual(urc_treasury_balance(), 15_000_000)
+        self.assertEqual(balance(founder["username"], "URC"), 0)
+        self.assertEqual(
+            d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"],
+            -15_000_000,
+        )
+
+        self.assertTrue(seed_owner_assets())
+        self.assertEqual(urc_treasury_balance(), 15_000_000)
+        self.assertEqual(
+            d.execute("SELECT COUNT(*) n FROM es_ledger WHERE reference='URC-PRIVATE-TREASURY-OPENING'").fetchone()["n"],
+            2,
+        )
+
+    def test_legacy_owner_opening_moves_without_new_issuance(self):
+        d = db()
+        founder = d.execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
+        self.assertIsNotNone(founder, "CI fixture must include the founder account")
+        d.execute("BEGIN IMMEDIATE")
+        post("OWNER-URC-OPENING", [
+            ("user:" + founder["username"], "URC", 15_000_000),
+            ("issuer:urc", "URC", -15_000_000),
+        ], "legacy owner opening")
+        d.commit()
+        d.execute(
+            "INSERT INTO es_settings(key,value) VALUES('urc_private_treasury_seeded','0') "
+            "ON CONFLICT(key) DO UPDATE SET value='0'"
+        )
+
+        self.assertTrue(seed_owner_assets())
+        self.assertEqual(balance(founder["username"], "URC"), 0)
+        self.assertEqual(urc_treasury_balance(), 15_000_000)
+        self.assertEqual(
+            d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"],
+            -15_000_000,
+        )
+
+    def test_unknown_urc_ledger_blocks_automatic_minting(self):
+        d = db()
+        d.execute("BEGIN IMMEDIATE")
+        post("UNRECOGNIZED-URC-HISTORY", [
+            ("user:someone", "URC", 100),
+            ("external:unknown", "URC", -100),
+        ], "unrecognized historical URC activity")
+        d.commit()
+        d.execute(
+            "INSERT INTO es_settings(key,value) VALUES('urc_private_treasury_seeded','0') "
+            "ON CONFLICT(key) DO UPDATE SET value='0'"
+        )
+
+        with self.assertRaises(RuntimeError):
+            seed_owner_assets()
+        self.assertEqual(urc_treasury_balance(), 0)
 
     def test_balanced_credit_and_user_transfer(self):
         d = db()
