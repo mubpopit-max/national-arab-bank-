@@ -538,7 +538,7 @@ def encryption():
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
-    <meta name='theme-color' content='#f4f8fb'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg?v=3'>
+    <meta name='theme-color' content='#f4f8fb'><link rel='manifest' href='/store/manifest.webmanifest'><link rel='apple-touch-icon' href='/store/icon.svg?v=4'>
     <meta name='description' content='الإمبراطورية إستوري — وجهتك لشحن الألعاب والتجارة الرقمية.'>
     <title>{{title}} | الإمبراطورية إستوري</title>
     
@@ -1183,37 +1183,46 @@ def healthz():
 def manifest():
     return {"name":"الإمبراطورية إستوري","short_name":"Empire E-Story","start_url":"/store/","display":"standalone",
             "background_color":"#090909","theme_color":"#0b0b0b","lang":"ar","dir":"rtl",
-            "icons":[{"src":"/store/icon.svg?v=3","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]},200,{"Content-Type":"application/manifest+json"}
+            "icons":[{"src":"/store/icon.svg?v=4","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]},200,{"Content-Type":"application/manifest+json"}
 
 @empire_bp.get("/icon.svg")
 def app_icon():
     svg="""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
 <defs>
- <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0a5"/><stop offset=".35" stop-color="#f6c64b"/><stop offset=".72" stop-color="#b87517"/><stop offset="1" stop-color="#ffe99a"/></linearGradient>
- <linearGradient id="fire" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#8b0808"/><stop offset=".45" stop-color="#ed3217"/><stop offset="1" stop-color="#ffca45"/></linearGradient>
- <radialGradient id="bg"><stop stop-color="#3a0907"/><stop offset=".62" stop-color="#130808"/><stop offset="1" stop-color="#050506"/></radialGradient>
- <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff5b7"/><stop offset=".38" stop-color="#f7c64c"/><stop offset=".72" stop-color="#a85d16"/><stop offset="1" stop-color="#ffe99b"/></linearGradient>
+ <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#790b0b"/><stop offset=".48" stop-color="#e83216"/><stop offset="1" stop-color="#ffbd37"/></linearGradient>
+ <radialGradient id="night"><stop stop-color="#40100b"/><stop offset=".58" stop-color="#160908"/><stop offset="1" stop-color="#050506"/></radialGradient>
+ <filter id="shine"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs>
-<rect width="512" height="512" rx="112" fill="url(#bg)"/>
-<path d="M40 345C-2 250 54 165 106 132c-14 57 7 83 38 99-6-58 24-115 71-157-8 60 14 88 41 109 24-57 72-92 113-107-20 60-5 100 35 130 24-18 41-43 50-77 43 90 17 174-20 220 7 44-8 86-31 120H112c-28-37-45-77-40-119Z" fill="url(#fire)" opacity=".92"/>
-<path d="M72 321c26-62 68-104 124-125l-34 54 65-20-41 49 68-16-53 52 81-14-66 48 71 7-82 25-89-15-48-45Z" fill="url(#gold)" stroke="#9b4a0b" stroke-width="5"/>
-<path d="M440 321c-26-62-68-104-124-125l34 54-65-20 41 49-68-16 53 52-81-14 66 48-71 7 82 25 89-15 48-45Z" fill="url(#gold)" stroke="#9b4a0b" stroke-width="5"/>
-<path d="M123 285l93-22-54 44 83-9-59 43 70 4-62 30-71-18-42-40Z" fill="#e94b1b" opacity=".9"/>
-<path d="M389 285l-93-22 54 44-83-9 59 43-70 4 62 30 71-18 42-40Z" fill="#e94b1b" opacity=".9"/>
-<path d="M256 161c-20 31-39 52-44 91-6 45 17 84 44 111 27-27 50-66 44-111-5-39-24-60-44-91Z" fill="url(#gold)" stroke="#8b4b13" stroke-width="5"/>
-<path d="M251 194c-25-14-54-7-68 8 25-4 42 4 53 18-27-2-43 9-55 27 29-8 51-3 66 13 10-17 27-24 50-21-8-20-25-37-46-45Z" fill="#ffdf76"/>
-<path d="M265 191c27-14 55-7 69 8-25-4-42 4-53 18 27-2 43 9 55 27-29-8-51-3-66 13-10-17-27-24-50-21 8-20 25-37 45-45Z" fill="#ffb42f"/>
-<path d="M272 217l47 8-34 18-13-26Z" fill="#f8d878"/>
-<circle cx="280" cy="211" r="5" fill="#1b0806"/><circle cx="281" cy="210" r="2" fill="#fff"/>
-<path d="M164 128l18-31 26 23 20-45 28 40 28-40 20 45 26-23 18 31-17 18H181Z" fill="url(#gold)" stroke="#6f3a0b" stroke-width="6"/>
-<path d="M180 148h152v16H180z" fill="#a55b12" stroke="#ffe38a" stroke-width="4"/>
-<path d="M256 66l10 20 22 3-16 15 4 22-20-11-20 11 4-22-16-15 22-3Z" fill="#fff0a0" filter="url(#glow)"/>
-<path d="M99 373c46 31 96 42 157 42s111-11 157-42l-22 44c-40 26-84 39-135 39s-95-13-135-39Z" fill="#d61d22" stroke="url(#gold)" stroke-width="6"/>
-<path d="M99 397c48 27 100 38 157 38s109-11 157-38v25c-45 28-97 40-157 40s-112-12-157-40Z" fill="#fff"/>
-<path d="M99 422c48 27 100 38 157 38s109-11 157-38v24c-45 28-97 40-157 40s-112-12-157-40Z" fill="#101014"/>
-<path d="M256 418l-42 43 42 24 42-24Z" fill="#16834b" stroke="url(#gold)" stroke-width="4"/>
+<rect width="512" height="512" rx="108" fill="url(#night)"/>
+<path d="M45 370C5 290 36 198 111 137c-6 54 10 82 43 103-3-62 30-121 77-159-4 56 13 87 34 112 25-57 72-94 119-111-17 61-2 101 35 129 22-18 39-43 49-76 40 89 16 171-21 218l-35 105H102Z" fill="url(#flame)" opacity=".92"/>
+<g fill="url(#gold)" stroke="#8b4d12" stroke-width="5">
+ <path d="M54 211c53-49 105-53 157-25l-37 5 43 22-58-6 44 33-67-18 35 42-74-30-43-23Z"/>
+ <path d="M458 211c-53-49-105-53-157-25l37 5-43 22 58-6-44 33 67-18-35 42 74-30 43-23Z"/>
+ <path d="M71 265l94-40-34 34 65-5-50 31 52 9-69 18-45-20Z"/>
+ <path d="M441 265l-94-40 34 34-65-5 50 31-52 9 69 18 45-20Z"/>
+</g>
+<g fill="#eab94d" stroke="#6f3b0c" stroke-width="4">
+ <path d="M105 294c-9-39 14-74 52-81 34-6 60 17 65 48-5 42-31 69-63 72-27-1-47-15-54-39Z"/>
+ <path d="M407 294c9-39-14-74-52-81-34-6-60 17-65 48 5 42 31 69 63 72 27-1 47-15 54-39Z"/>
+</g>
+<g fill="#1a0b08" stroke="#f8d875" stroke-width="5">
+ <path d="M133 278l17-19 16 10 17-9 19 21-11 29-27 13-26-13Z"/>
+ <path d="M379 278l-17-19-16 10-17-9-19 21 11 29 27 13 26-13Z"/>
+</g>
+<path d="M256 128 357 158v105c0 72-45 112-101 139-56-27-101-67-101-139V158Z" fill="#08090d" stroke="url(#gold)" stroke-width="12"/>
+<path d="M256 148 339 172v88c0 56-34 89-83 114-49-25-83-58-83-114v-88Z" fill="#17100b" stroke="#9b671f" stroke-width="4"/>
+<text x="256" y="285" text-anchor="middle" font-family="Georgia,serif" font-size="126" font-weight="bold" fill="url(#gold)" stroke="#6e3d10" stroke-width="2">E</text>
+<path d="M153 118l18-31 26 22 20-43 39 39 39-39 20 43 26-22 18 31-18 25H171Z" fill="url(#gold)" stroke="#75420d" stroke-width="6"/>
+<path d="M175 142h162v17H175z" fill="#a45c14" stroke="#ffe89b" stroke-width="4"/>
+<circle cx="256" cy="119" r="12" fill="#d61f26" stroke="#ffe99b" stroke-width="4"/>
+<path d="M74 367c48 34 109 49 182 49s134-15 182-49l-22 49c-43 31-96 47-160 47s-117-16-160-47Z" fill="#0a0908" stroke="url(#gold)" stroke-width="6"/>
+<text x="256" y="408" text-anchor="middle" font-family="Georgia,serif" font-size="37" font-weight="bold" fill="#ffe18a">Empire E-Story</text>
+<path d="M112 457h288l-36 25H148Z" fill="#d71920" stroke="#f5ca61" stroke-width="3"/>
+<path d="M112 457h288l-36 12H148Z" fill="#fff"/>
+<path d="M112 469h288l-36 13H148Z" fill="#111"/>
+<path d="M112 457l38 25h-38Z" fill="#16834b"/>
 <rect x="15" y="15" width="482" height="482" rx="100" fill="none" stroke="url(#gold)" stroke-width="9"/>
-<rect x="27" y="27" width="458" height="458" rx="90" fill="none" stroke="#8e531b" stroke-width="2" opacity=".8"/>
 </svg>"""
     return svg,200,{"Content-Type":"image/svg+xml","Cache-Control":"public, max-age=31536000"}
 
@@ -1910,7 +1919,7 @@ def exchange_quote():
                     # Always return a live preview; availability controls confirmation, not calculation.
                     data.update({"valid":False,"amount":amount,"converted":converted,"fee":fee,
                                  "total_debit":amount+fee,
-                                 "message":"تم حساب المقابل، لكن رصيدك غير كافٍ لإتمام التحويل."})
+                                 "message":"تم حساب المقابل، لكن رصيد العملة المصدر غير كافٍ لإتمام التحويل."})
                 else:
                     quote_id=secrets.token_urlsafe(24); issued=int(datetime.now(timezone.utc).timestamp()); d=db()
                     d.execute("DELETE FROM es_fx_quotes WHERE expires_at<?",(issued-86400,))
@@ -2075,7 +2084,7 @@ async function update(){
   rateOut.textContent='سعر الصرف: '+fmt(data.rate)+' SDG لكل URC';
   if(!raw)return;
   if(data.converted!==undefined)result.textContent=fmt(data.converted)+' '+dst;
-  if(!data.valid){message.textContent=data.message||'الرصيد أو السيولة غير كافية.';return;}
+  if(!data.valid){message.textContent=data.message||'رصيد العملة المصدر غير كافٍ.';return;}
   quoteId.value=data.quote_id;submit.disabled=false;message.textContent='الرصيد كافٍ، يمكنك تنفيذ التحويل.';
  }catch(error){if(id!==requestNo)return;message.textContent=error.message;clearQuote();}
 }
