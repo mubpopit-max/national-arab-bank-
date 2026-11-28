@@ -227,6 +227,15 @@ def init_db():
             'إيداع احتياطي SDG خارجي مؤكد من المالك'
           )
     """)
+    # Keep historically confirmed physical SDG cash separate from internal FX inventory.
+    conn.execute("""
+        UPDATE es_ledger SET account='cash:sdg_reserve'
+        WHERE account='fx:reserve' AND currency='SDG' AND line_no=2
+          AND memo='إيداع احتياطي SDG خارجي مؤكد من المالك'
+          AND reference IN (
+            SELECT object_ref FROM es_audit WHERE action='FX_EXTERNAL_SDG_LIQUIDITY'
+          )
+    """)
     # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
     for key in ("fx_manual_rate","fx_market_rate"):
         current=conn.execute("SELECT value FROM es_settings WHERE key=?",(key,)).fetchone()
@@ -431,6 +440,22 @@ def fx_reserve_balance(currency):
     if amount < 0:
         raise ValueError("رصيد احتياطي الصرف غير متوازن؛ أوقف النظام وراجع القيود.")
     return amount
+
+def cash_sdg_balance():
+    """Confirmed physical SDG cash reserved for external user withdrawals only."""
+    row=db().execute(
+        "SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='cash:sdg_reserve' AND currency='SDG'"
+    ).fetchone()
+    amount=int(row["n"])
+    if amount < 0:
+        raise ValueError("رصيد السيولة النقدية للسحب غير متوازن؛ أوقف السحب وراجع القيود.")
+    return amount
+
+def pending_sdg_withdrawals():
+    row=db().execute(
+        "SELECT COALESCE(SUM(amount_sdg),0) n FROM es_withdrawals WHERE status='PENDING'"
+    ).fetchone()
+    return int(row["n"])
 
 def seed_owner_assets():
     """Create the founder's opening URC allocation once; never alter bank account IDs."""
@@ -1242,6 +1267,9 @@ def withdrawal():
         encrypted=encryption().encrypt(details.encode()).decode()
         r=ref(); d=db(); d.execute("BEGIN IMMEDIATE")
         try:
+            cash_available=cash_sdg_balance()-pending_sdg_withdrawals()
+            if amount>cash_available:
+                raise ValueError("السيولة النقدية المتاحة للسحب غير كافية حالياً.")
             fee=platform_fee(amount)
             post(r,[("user:"+u["username"],"SDG",-(amount+fee)),("payout:pending","SDG",amount),("protection:fund","SDG",fee)],"حجز طلب سحب مستحقات · عمولة التطبيق 3%")
             notify_protection_income(r,"SDG",fee,"رسوم طلب سحب")
@@ -1249,7 +1277,10 @@ def withdrawal():
                       (r,u["username"],amount,method,encrypted,now()))
             audit(u["username"],"WITHDRAWAL_REQUESTED","withdrawal",r)
             d.commit()
-        except Exception: d.rollback(); raise
+        except ValueError as exc:
+            d.rollback(); flash(str(exc)); return redirect(url_for("empire.withdrawal"))
+        except Exception:
+            d.rollback(); raise
         flash("تم حجز المبلغ ورفع طلب السحب للمراجعة. لا يعتبر مدفوعاً قبل تأكيد المالك.")
         return redirect(url_for("empire.wallet"))
     body=render_template_string("""<section class='panel'><h1>طلب سحب SDG</h1><p>أدخل المبلغ وبيانات الاستلام بدقة. سيحسب النظام الرسوم تلقائياً عند تنفيذ الطلب.</p>
@@ -1804,17 +1835,15 @@ def exchange_quote():
         rate=effective_fx_rate(direction)
     except (TypeError,ValueError):
         return jsonify({"ok":False,"message":"السعر غير متاح حالياً."}),503
-    source="URC" if direction=="URC_TO_SDG" else "SDG"; target="SDG" if source=="URC" else "URC"
-    reserve=fx_reserve_balance(target); wallet=max(0,int(balance(user()["username"],source)))
+    source="URC" if direction=="URC_TO_SDG" else "SDG"
+    wallet=max(0,int(balance(user()["username"],source)))
     minimum=1 if source=="URC" else max(1,rate)
-    reserve_limit=reserve//rate if source=="URC" and rate>0 else (max(0,(reserve+1)*rate-1) if rate>0 else 0)
-    if source=="URC" and rate>0: reserve_limit=min(reserve_limit,9_000_000_000_000_000_000//rate)
     lo,hi=0,wallet
     while lo<hi:
         mid=(lo+hi+1)//2
         if mid+platform_fee(mid)<=wallet: lo=mid
         else: hi=mid-1
-    maximum=min(reserve_limit,lo,999_999_999_999)
+    maximum=min(lo,999_999_999_999)
     data={"ok":True,"direction":direction,"source_currency":source,"target_currency":target,
           "rate":rate,"minimum":minimum,"maximum":maximum,"max_convertible":maximum,
           "wallet_balance":wallet,"available":maximum>=minimum,
@@ -1836,7 +1865,7 @@ def exchange_quote():
                     # Always return a live preview; availability controls confirmation, not calculation.
                     data.update({"valid":False,"amount":amount,"converted":converted,"fee":fee,
                                  "total_debit":amount+fee,
-                                 "message":"تم حساب المقابل، لكن المبلغ يتجاوز رصيدك أو السيولة المتاحة."})
+                                 "message":"تم حساب المبلغ المقابل، لكن رصيدك غير كافٍ لإتمام التحويل."})
                 else:
                     quote_id=secrets.token_urlsafe(24); issued=int(datetime.now(timezone.utc).timestamp()); d=db()
                     d.execute("DELETE FROM es_fx_quotes WHERE expires_at<?",(issued-86400,))
@@ -1869,10 +1898,10 @@ def exchange():
         rate=effective_rate(direction)
         if rate<=0: return {"rate":rate,"minimum":1,"maximum":0,"currency":"URC" if direction=="URC_TO_SDG" else "SDG"}
         if direction=="URC_TO_SDG":
-            minimum=1; reserve_limit=fund_balance("SDG")//rate; wallet_amount=balance(u["username"],"URC"); currency="URC"
+            minimum=1; wallet_amount=balance(u["username"],"URC"); currency="URC"
         else:
-            minimum=rate; reserve_limit=max(0,(fund_balance("URC")+1)*rate-1); wallet_amount=balance(u["username"],"SDG"); currency="SDG"
-        return {"rate":rate,"minimum":minimum,"maximum":min(reserve_limit,affordable_limit(wallet_amount),999_999_999_999),"currency":currency}
+            minimum=rate; wallet_amount=balance(u["username"],"SDG"); currency="SDG"
+        return {"rate":rate,"minimum":minimum,"maximum":min(affordable_limit(wallet_amount),999_999_999_999),"currency":currency}
     if request.method=="POST":
         csrf(); direction=(request.form.get("direction") or "").strip()
         quote_id=(request.form.get("quote_id") or "").strip()
@@ -1899,16 +1928,19 @@ def exchange():
             if result<=0 or result>9_000_000_000_000_000_000: raise ValueError("قيمة التحويل غير صالحة.")
             r=ref()
             if direction=="URC_TO_SDG":
-                post(r,[("user:"+u["username"],"URC",-amount),("fx:reserve","URC",amount),
-                        ("fx:reserve","SDG",-result),("user:"+u["username"],"SDG",result),
+                # Burn the converted URC and issue the matching internal SDG balance.
+                post(r,[("user:"+u["username"],"URC",-amount),("issuer:urc","URC",amount),
+                        ("issuer:sdg","SDG",-result),("user:"+u["username"],"SDG",result),
                         ("user:"+u["username"],"URC",-fee),("protection:fund","URC",fee)],
-                     "تحويل URC إلى SDG · عمولة التطبيق 3%")
+                     "حرق URC وإصدار رصيد SDG رقمي داخلي · عمولة التطبيق 3%")
                 source_currency,target_currency="URC","SDG"
             else:
-                post(r,[("user:"+u["username"],"SDG",-amount),("fx:reserve","SDG",amount),
-                        ("fx:reserve","URC",-result),("user:"+u["username"],"URC",result),
+                # SDG-to-URC is also an internal ledger conversion, never a cash payout.
+                assert_epc_capacity(result)
+                post(r,[("user:"+u["username"],"SDG",-amount),("issuer:sdg","SDG",amount),
+                        ("issuer:urc","URC",-result),("user:"+u["username"],"URC",result),
                         ("user:"+u["username"],"SDG",-fee),("protection:fund","SDG",fee)],
-                     "تحويل SDG إلى URC · عمولة التطبيق 3%")
+                     "حرق SDG رقمي وإصدار URC داخلياً · عمولة التطبيق 3%")
                 source_currency,target_currency="SDG","URC"
             audit(u["username"],"CURRENCY_EXCHANGE","exchange",r,
                   direction+" rate="+str(rate)+";source_amount="+str(amount)+";target_amount="+str(result)+";fee="+str(fee))
@@ -2038,7 +2070,7 @@ def admin_exchange():
             d=db(); d.execute("BEGIN IMMEDIATE")
             try:
                 ledger_ref="FXEXT"+hashlib.sha256(external_ref.encode("utf-8")).hexdigest()[:24].upper()
-                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("fx:reserve","SDG",amount)],
+                post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("cash:sdg_reserve","SDG",amount)],
                      "إيداع احتياطي SDG خارجي مؤكد من المالك")
                 audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",
                       str(amount)+" SDG; external_reference="+external_ref)
@@ -2433,7 +2465,15 @@ def admin_withdrawals():
             row=d.execute("SELECT * FROM es_withdrawals WHERE id=? AND status='PENDING'",(wid,)).fetchone()
             if not row: raise ValueError("طلب السحب غير متاح للمراجعة")
             if action=="PAID":
-                post(row["reference"]+"P",[("payout:pending","SDG",-row["amount_sdg"]),("external:payout_settlements","SDG",row["amount_sdg"])],"تأكيد صرف طلب سحب")
+                payout_amount=int(row["amount_sdg"])
+                if cash_sdg_balance()<payout_amount:
+                    raise ValueError("السيولة النقدية الفعلية غير كافية لتنفيذ طلب السحب.")
+                post(row["reference"]+"P",[
+                    ("payout:pending","SDG",-payout_amount),
+                    ("external:payout_settlements","SDG",payout_amount),
+                    ("cash:sdg_reserve","SDG",-payout_amount),
+                    ("external:cash_payouts","SDG",payout_amount)
+                ],"تأكيد صرف طلب سحب من السيولة النقدية الفعلية")
                 status="PAID"
             elif action=="REJECTED":
                 post(row["reference"]+"X",[("payout:pending","SDG",-row["amount_sdg"]),("user:"+row["username"],"SDG",row["amount_sdg"])],"إعادة مبلغ طلب سحب مرفوض")
@@ -2442,7 +2482,10 @@ def admin_withdrawals():
             d.execute("UPDATE es_withdrawals SET status=?,reviewer=?,reviewed_at=? WHERE id=?",(status,u["username"],now(),wid))
             audit(u["username"],"WITHDRAWAL_"+status,"withdrawal",row["reference"])
             d.commit()
-        except Exception: d.rollback(); raise
+        except ValueError as exc:
+            d.rollback(); flash(str(exc))
+        except Exception:
+            d.rollback(); raise
     rows=[]
     for row in db().execute("SELECT * FROM es_withdrawals ORDER BY id DESC LIMIT 200").fetchall():
         item=dict(row)
