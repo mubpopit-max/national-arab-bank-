@@ -6,13 +6,29 @@ This document governs the move from the existing shared SQLite database to the o
 
 Do not merge this branch or deploy it until the database and storage credentials have been configured in Faable's secret manager and a deployment preview has been verified.
 
+## Verified Supabase connection details
+
+The owner has confirmed the following project details from the Supabase dashboard:
+
+- Project: `Empire E-Story`
+- Project ref: `agxldwryrzmhvcuytjoj`
+- Project URL: `https://agxldwryrzmhvcuytjoj.supabase.co`
+- Project status: Healthy; PostgreSQL 17.12.
+- Selected connection option: **Shared Transaction Pooler**.
+- Pooler host: `aws-0-eu-central-1.pooler.supabase.com`
+- Pooler port: `6543`
+- Database: `postgres`
+- Pooler user: `postgres.agxldwryrzmhvcuytjoj`
+
+The database password has **not** been supplied to this work session and must not be pasted into chat or committed to Git. Direct connections use IPv6 by default; the shared transaction pooler is the current candidate for an IPv4-only host such as Faable. This selection still requires a connection test from Faable and driver/runtime compatibility validation. Do not assume that this alone completes the integration.
+
 ## Verified repository facts
 
 - The Flask application uses a SQLite file selected by `NAB_DATABASE`.
 - `app.py` and `empire_store.py` each open SQLite connections directly. They must be consolidated behind one shared database layer before PostgreSQL is enabled.
 - The store module creates and incrementally alters many commerce tables in the same database as the bank.
 - Image uploads currently use local filesystem directories. These are not durable on an ephemeral deployment filesystem.
-- The Supabase project reference supplied by the owner is `agxldwryrzmhvcuytjoj`.
+- No confirmed Faable secret-manager integration is available to this work session.
 
 ## Required implementation sequence
 
@@ -43,6 +59,7 @@ Do not merge this branch or deploy it until the database and storage credentials
    - Configure the PostgreSQL connection string, storage URL/bucket, and server-side storage key only in Faable's secret manager.
    - Never commit passwords, service-role keys, encryption keys, or production credentials.
    - Use a least-privilege database role for the application; keep administrative credentials out of runtime configuration.
+   - The expected connection URI shape is the Supabase Shared Transaction Pooler URI with the password inserted only in Faable's secret manager; do not store a real URI in this repository.
 
 6. **Validate before release**
    - Test schema initialization from an empty database.
