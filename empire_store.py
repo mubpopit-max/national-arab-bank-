@@ -1175,7 +1175,34 @@ def manifest():
 
 @empire_bp.get("/icon.svg")
 def app_icon():
-    svg="""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='#0b263d'/><circle cx='256' cy='256' r='206' fill='none' stroke='#d9b45b' stroke-width='18'/><rect x='106' y='155' width='300' height='202' rx='12' fill='#fff'/><path d='M106 167q0-12 12-12h276q12 0 12 12v55H106z' fill='#d92736'/><path d='M106 290h300v55q0 12-12 12H118q-12 0-12-12z' fill='#111820'/><path d='M106 155l135 101-135 101z' fill='#168447'/><path d='M256 203l15 24 29-8-4 30 25 16-25 16 4 30-29-8-15 24-15-24-29 8 4-30-25-16 25-16-4-30 29 8z' fill='#d9b45b'/></svg>"""
+    svg="""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0a5"/><stop offset=".35" stop-color="#f6c64b"/><stop offset=".72" stop-color="#b87517"/><stop offset="1" stop-color="#ffe99a"/></linearGradient>
+ <linearGradient id="fire" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#8b0808"/><stop offset=".45" stop-color="#ed3217"/><stop offset="1" stop-color="#ffca45"/></linearGradient>
+ <radialGradient id="bg"><stop stop-color="#3a0907"/><stop offset=".62" stop-color="#130808"/><stop offset="1" stop-color="#050506"/></radialGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<path d="M40 345C-2 250 54 165 106 132c-14 57 7 83 38 99-6-58 24-115 71-157-8 60 14 88 41 109 24-57 72-92 113-107-20 60-5 100 35 130 24-18 41-43 50-77 43 90 17 174-20 220 7 44-8 86-31 120H112c-28-37-45-77-40-119Z" fill="url(#fire)" opacity=".92"/>
+<path d="M72 321c26-62 68-104 124-125l-34 54 65-20-41 49 68-16-53 52 81-14-66 48 71 7-82 25-89-15-48-45Z" fill="url(#gold)" stroke="#9b4a0b" stroke-width="5"/>
+<path d="M440 321c-26-62-68-104-124-125l34 54-65-20 41 49-68-16 53 52-81-14 66 48-71 7 82 25 89-15 48-45Z" fill="url(#gold)" stroke="#9b4a0b" stroke-width="5"/>
+<path d="M123 285l93-22-54 44 83-9-59 43 70 4-62 30-71-18-42-40Z" fill="#e94b1b" opacity=".9"/>
+<path d="M389 285l-93-22 54 44-83-9 59 43-70 4 62 30 71-18 42-40Z" fill="#e94b1b" opacity=".9"/>
+<path d="M256 161c-20 31-39 52-44 91-6 45 17 84 44 111 27-27 50-66 44-111-5-39-24-60-44-91Z" fill="url(#gold)" stroke="#8b4b13" stroke-width="5"/>
+<path d="M251 194c-25-14-54-7-68 8 25-4 42 4 53 18-27-2-43 9-55 27 29-8 51-3 66 13 10-17 27-24 50-21-8-20-25-37-46-45Z" fill="#ffdf76"/>
+<path d="M265 191c27-14 55-7 69 8-25-4-42 4-53 18 27-2 43 9 55 27-29-8-51-3-66 13-10-17-27-24-50-21 8-20 25-37 45-45Z" fill="#ffb42f"/>
+<path d="M272 217l47 8-34 18-13-26Z" fill="#f8d878"/>
+<circle cx="280" cy="211" r="5" fill="#1b0806"/><circle cx="281" cy="210" r="2" fill="#fff"/>
+<path d="M164 128l18-31 26 23 20-45 28 40 28-40 20 45 26-23 18 31-17 18H181Z" fill="url(#gold)" stroke="#6f3a0b" stroke-width="6"/>
+<path d="M180 148h152v16H180z" fill="#a55b12" stroke="#ffe38a" stroke-width="4"/>
+<path d="M256 66l10 20 22 3-16 15 4 22-20-11-20 11 4-22-16-15 22-3Z" fill="#fff0a0" filter="url(#glow)"/>
+<path d="M99 373c46 31 96 42 157 42s111-11 157-42l-22 44c-40 26-84 39-135 39s-95-13-135-39Z" fill="#d61d22" stroke="url(#gold)" stroke-width="6"/>
+<path d="M99 397c48 27 100 38 157 38s109-11 157-38v25c-45 28-97 40-157 40s-112-12-157-40Z" fill="#fff"/>
+<path d="M99 422c48 27 100 38 157 38s109-11 157-38v24c-45 28-97 40-157 40s-112-12-157-40Z" fill="#101014"/>
+<path d="M256 418l-42 43 42 24 42-24Z" fill="#16834b" stroke="url(#gold)" stroke-width="4"/>
+<rect x="15" y="15" width="482" height="482" rx="100" fill="none" stroke="url(#gold)" stroke-width="9"/>
+<rect x="27" y="27" width="458" height="458" rx="90" fill="none" stroke="#8e531b" stroke-width="2" opacity=".8"/>
+</svg>"""
     return svg,200,{"Content-Type":"image/svg+xml"}
 
 @empire_bp.get("/sw.js")
