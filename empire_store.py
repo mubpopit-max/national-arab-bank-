@@ -1285,7 +1285,11 @@ def withdrawal():
                       (r,u["username"],amount,method,encrypted,now()))
             audit(u["username"],"WITHDRAWAL_REQUESTED","withdrawal",r)
             d.commit()
-        except Exception: d.rollback(); raise
+        except ValueError as exc:
+            d.rollback(); flash(str(exc)); return redirect(url_for("empire.withdrawal"))
+        except Exception:
+            d.rollback()
+            raise
         flash("تم حجز المبلغ ورفع طلب السحب للمراجعة. لا يعتبر مدفوعاً قبل تأكيد المالك.")
         return redirect(url_for("empire.wallet"))
     body=render_template_string("""<section class='panel'><h1>طلب سحب SDG</h1><p>أدخل المبلغ وبيانات الاستلام بدقة. سيحسب النظام الرسوم تلقائياً عند تنفيذ الطلب.</p>
@@ -2496,7 +2500,11 @@ def admin_withdrawals():
             d.execute("UPDATE es_withdrawals SET status=?,reviewer=?,reviewed_at=? WHERE id=?",(status,u["username"],now(),wid))
             audit(u["username"],"WITHDRAWAL_"+status,"withdrawal",row["reference"])
             d.commit()
-        except Exception: d.rollback(); raise
+        except ValueError as exc:
+            d.rollback(); flash(str(exc)); return redirect(url_for("empire.admin_withdrawals"))
+        except Exception:
+            d.rollback()
+            raise
     rows=[]
     for row in db().execute("SELECT * FROM es_withdrawals ORDER BY id DESC LIMIT 200").fetchall():
         item=dict(row)
