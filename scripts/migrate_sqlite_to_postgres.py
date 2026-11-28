@@ -54,15 +54,18 @@ def row_fingerprint(row: dict[str, Any]) -> str:
 
 
 def digest_rows(connection, table):
-    fingerprints = []
+    # Order-independent streaming digest: avoids holding the entire table in RAM.
+    count = 0
+    total = 0
+    xor_value = 0
     result = connection.execute(select(table))
     for row in result.mappings():
-        fingerprints.append(row_fingerprint(dict(row)))
-    fingerprints.sort()
-    digest = hashlib.sha256()
-    for item in fingerprints:
-        digest.update(item.encode("ascii"))
-    return len(fingerprints), digest.hexdigest()
+        value = int(row_fingerprint(dict(row)), 16)
+        count += 1
+        total = (total + value) % (1 << 256)
+        xor_value ^= value
+    payload = f"{count}:{total:064x}:{xor_value:064x}".encode("ascii")
+    return count, hashlib.sha256(payload).hexdigest()
 
 
 def source_path() -> Path:
@@ -89,8 +92,12 @@ def main() -> int:
         raise RuntimeError("Set DATABASE_URL or SUPABASE_DATABASE_URL in the environment")
 
     src_path = source_path()
-    source = create_engine(URL.create("sqlite", database=str(src_path)),
-                           connect_args={"timeout": 30})
+    source_url = URL.create(
+        "sqlite",
+        database=f"file:{src_path}",
+        query={"mode": "ro", "uri": "true"},
+    )
+    source = create_engine(source_url, connect_args={"timeout": 30})
     target = create_engine(database_url(target_raw), pool_pre_ping=True)
 
     try:
