@@ -2924,3 +2924,108 @@ def admin_phone_topups():
     return page("إدارة شحن الهاتف",body)
 
 
+
+# Native Android API v1: independent bearer-token authentication and read-only account data.
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from flask import current_app
+
+def _native_token_serializer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt="empire-native-api-v1")
+
+def _native_api_user():
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    try:
+        payload = _native_token_serializer().loads(auth[7:].strip(), max_age=1209600)
+    except (BadSignature, SignatureExpired):
+        return None
+    username = payload.get("sub") if isinstance(payload, dict) else None
+    if not isinstance(username, str) or not username:
+        return None
+    return db().execute(
+        "SELECT username,full_name,account_number,role,active FROM users WHERE username=? AND active=1",
+        (username,),
+    ).fetchone()
+
+def _native_auth_required(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        current = _native_api_user()
+        if not current:
+            return jsonify({"ok": False, "message": "انتهت الجلسة أو يلزم تسجيل الدخول."}), 401
+        return fn(current, *args, **kwargs)
+    return wrapped
+
+@empire_bp.post("/api/v1/auth/login")
+def native_api_login():
+    data = request.get_json(silent=True) or {}
+    identity = str(data.get("identity", "")).strip()[:254]
+    password = data.get("password", "")
+    if not identity or not isinstance(password, str) or not password or len(password) > 256:
+        return jsonify({"ok": False, "message": "أدخل بيانات الدخول."}), 400
+    row = db().execute(
+        "SELECT username,full_name,account_number,role,active,password_hash FROM users WHERE username=? OR account_number=? LIMIT 1",
+        (identity, identity),
+    ).fetchone()
+    valid = False
+    if row and row["active"]:
+        try:
+            valid = bcrypt.checkpw(password.encode("utf-8"), row["password_hash"].encode("utf-8"))
+        except (ValueError, TypeError):
+            valid = False
+    if not valid:
+        return jsonify({"ok": False, "message": "بيانات الدخول غير صحيحة."}), 401
+    token = _native_token_serializer().dumps({"sub": row["username"]})
+    return jsonify({"ok": True, "token": token, "expires_in": 1209600,
+                    "user": {"username": row["username"], "full_name": row["full_name"],
+                             "account_number": row["account_number"], "role": row["role"]}})
+
+@empire_bp.get("/api/v1/dashboard")
+@_native_auth_required
+def native_api_dashboard(current):
+    name = current["username"]
+    ensure_wallet(name, "SDG")
+    ensure_wallet(name, "URC")
+    recent = db().execute(
+        "SELECT reference,memo,currency,delta,created_at FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 8",
+        ("user:" + name,),
+    ).fetchall()
+    return jsonify({"ok": True,
+        "user": {"full_name": current["full_name"], "account_number": current["account_number"], "role": current["role"]},
+        "balances": {"SDG": balance(name, "SDG"), "URC": balance(name, "URC")},
+        "recent": [dict(x) for x in recent]})
+
+@empire_bp.get("/api/v1/wallet")
+@_native_auth_required
+def native_api_wallet(current):
+    name = current["username"]
+    ensure_wallet(name, "SDG")
+    ensure_wallet(name, "URC")
+    rows = db().execute(
+        "SELECT reference,memo,currency,delta,created_at FROM es_ledger WHERE account=? ORDER BY id DESC LIMIT 50",
+        ("user:" + name,),
+    ).fetchall()
+    return jsonify({"ok": True, "balances": {"SDG": balance(name, "SDG"), "URC": balance(name, "URC")},
+                    "entries": [dict(x) for x in rows]})
+
+@empire_bp.get("/api/v1/history")
+@_native_auth_required
+def native_api_history(current):
+    name = current["username"]
+    refs = db().execute(
+        """SELECT reference,MAX(created_at) created_at,MAX(memo) memo,MAX(id) last_id
+           FROM es_ledger WHERE account=? GROUP BY reference ORDER BY last_id DESC LIMIT 100""",
+        ("user:" + name,),
+    ).fetchall()
+    items = []
+    for row in refs:
+        moves = db().execute(
+            "SELECT currency,delta FROM es_ledger WHERE reference=? AND account=? ORDER BY line_no",
+            (row["reference"], "user:" + name),
+        ).fetchall()
+        principal = max(moves, key=lambda x: abs(int(x["delta"]))) if moves else None
+        items.append({"reference": row["reference"], "created_at": row["created_at"],
+                      "memo": row["memo"], "amount": abs(int(principal["delta"])) if principal else 0,
+                      "currency": principal["currency"] if principal else ""})
+    return jsonify({"ok": True, "items": items})
