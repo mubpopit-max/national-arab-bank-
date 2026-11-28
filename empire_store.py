@@ -232,9 +232,7 @@ def init_db():
         UPDATE es_ledger SET account='cash:sdg_reserve'
         WHERE account='fx:reserve' AND currency='SDG' AND line_no=2
           AND memo='إيداع احتياطي SDG خارجي مؤكد من المالك'
-          AND reference IN (
-            SELECT object_ref FROM es_audit WHERE action='FX_EXTERNAL_SDG_LIQUIDITY'
-          )
+          AND reference LIKE 'FXEXT%'
     """)
     # Apply the initial 5,600 SDG/URC rate only where no positive rate was configured.
     for key in ("fx_manual_rate","fx_market_rate"):
@@ -1863,6 +1861,7 @@ def exchange_quote():
     except (TypeError,ValueError):
         return jsonify({"ok":False,"message":"السعر غير متاح حالياً."}),503
     source="URC" if direction=="URC_TO_SDG" else "SDG"
+    target="SDG" if source=="URC" else "URC"
     wallet=max(0,int(balance(user()["username"],source)))
     minimum=1 if source=="URC" else max(1,rate)
     lo,hi=0,wallet
@@ -2052,7 +2051,7 @@ async function update(){
   rateOut.textContent='سعر الصرف: '+fmt(data.rate)+' SDG لكل URC';
   if(!raw)return;
   if(data.converted!==undefined)result.textContent=fmt(data.converted)+' '+dst;
-  if(!data.valid){message.textContent=data.message||'الرصيد أو السيولة غير كافية.';return;}
+  if(!data.valid){message.textContent=data.message||'رصيدك غير كافٍ لإتمام التحويل.';return;}
   quoteId.value=data.quote_id;submit.disabled=false;message.textContent='الرصيد كافٍ، يمكنك تنفيذ التحويل.';
  }catch(error){if(id!==requestNo)return;message.textContent=error.message;clearQuote();}
 }
@@ -2099,7 +2098,7 @@ def admin_exchange():
                 ledger_ref="FXEXT"+hashlib.sha256(external_ref.encode("utf-8")).hexdigest()[:24].upper()
                 post(ledger_ref,[("external:fx_cash_reserve","SDG",-amount),("cash:sdg_reserve","SDG",amount)],
                      "إيداع احتياطي SDG خارجي مؤكد من المالك")
-                audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",
+                audit(u["username"],"FX_EXTERNAL_SDG_LIQUIDITY","fx_pool",ledger_ref,
                       str(amount)+" SDG; external_reference="+external_ref)
                 d.commit()
             except Exception:
@@ -2128,12 +2127,16 @@ def admin_exchange():
         flash("تم حفظ سعر الصرف وإلغاء عروض الأسعار القديمة. السعر الجديد مطبق على العروض التالية.")
     is_founder=u["role"]=="founder"
     pools={c:fx_reserve_balance(c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
+    cash_total=cash_sdg_balance() if is_founder else 0
+    cash_pending=pending_sdg_withdrawals() if is_founder else 0
+    cash_available=max(0,cash_total-cash_pending)
     owner_row=db().execute("SELECT username FROM users WHERE role='founder' ORDER BY id LIMIT 1").fetchone()
     owner_username=owner_row["username"] if owner_row else u["username"]
     owner={c:balance(owner_username,c) for c in ("URC","SDG")} if is_founder else {"URC":0,"SDG":0}
     return page("إدارة الصرف",render_template_string("""<section class='panel'><h1>إدارة الصرف</h1><p class='muted'>احتياطي الصرف مستقل محاسبياً عن صندوق حماية المستخدمين؛ رسوم التطبيق وإيراداته لا تُستخدم لتغطية التحويلات.</p>
       {% if is_founder %}<div class='grid'><article class='panel'><small>أصول المالك URC</small><h2>{{'{:,}'.format(owner['URC'])}}</h2></article><article class='panel'><small>أصول المالك SDG</small><h2>{{'{:,}'.format(owner['SDG'])}}</h2></article>
-      <article class='panel'><small>احتياطي الصرف URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي الصرف SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article></div>{% endif %}
+      <article class='panel'><small>احتياطي الصرف URC</small><h2>{{'{:,}'.format(pools['URC'])}}</h2></article><article class='panel'><small>احتياطي الصرف SDG</small><h2>{{'{:,}'.format(pools['SDG'])}}</h2></article>
+       <article class='panel'><small>السيولة النقدية للسحب SDG</small><h2>{{'{:,}'.format(cash_available)}}</h2><small>محجوز لطلبات معلقة: {{'{:,}'.format(cash_pending)}}</small></article></div>{% endif %}
       <h2>مصدر سعر الصرف</h2>{% if is_founder %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'>
       <label>طريقة التسعير</label><select name='fx_rate_mode'><option value='market' {% if values['fx_rate_mode']=='market' %}selected{% endif %}>سعر السوق المرجعي</option><option value='manual' {% if values['fx_rate_mode']=='manual' %}selected{% endif %}>سعر يدوي</option></select>
       <label>سعر السوق المرجعي (SDG لكل URC)</label><input name='fx_market_rate' type='number' min='1' value='{{values["fx_market_rate"]}}'>
@@ -2145,7 +2148,7 @@ def admin_exchange():
       <label>العملة</label><select name='currency'><option>URC</option><option>SDG</option></select><label>المبلغ من محفظة المالك</label><input name='amount' type='number' min='1' required><button>إضافة إلى احتياطي الصرف</button></form>
       <h2>تسجيل احتياطي SDG نقدي مستلم فعلياً</h2><p class='muted'>استخدم هذا الخيار فقط بعد استلام النقد فعلياً والتحقق منه خارج المنصة. يسجل النظام مرجع العملية في سجل التدقيق ولا ينشئ رصيداً للعميل.</p>
       <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='action' value='external_liquidity'><label>المبلغ النقدي المستلم SDG</label><input name='amount' type='number' min='1' required><label>مرجع الإيداع أو الاستلام</label><input name='external_reference' minlength='4' maxlength='100' required><label><input type='checkbox' name='cash_confirmed' value='yes' required> أؤكد أن المبلغ استُلم نقداً وتم التحقق منه فعلياً</label><button>تسجيل الاحتياطي النقدي</button></form>{% endif %}</section>""",
-      owner=owner,pools=pools,is_founder=is_founder,active_rate=int(setting("fx_market_rate" if setting("fx_rate_mode","manual")=="market" else "fx_manual_rate","5600")),values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","5600"),("fx_manual_rate","5600"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},csrf=session.get("csrf","")))
+      owner=owner,pools=pools,is_founder=is_founder,active_rate=int(setting("fx_market_rate" if setting("fx_rate_mode","manual")=="market" else "fx_manual_rate","5600")),values={k:setting(k,d) for k,d in (("fx_rate_mode","manual"),("fx_market_rate","5600"),("fx_manual_rate","5600"),("fx_buy_spread_bps","0"),("fx_sell_spread_bps","0"))},cash_available=cash_available,cash_pending=cash_pending,csrf=session.get("csrf","")))
 
 @empire_bp.route("/admin/protection-fund",methods=["GET","POST"])
 @login_required
