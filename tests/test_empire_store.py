@@ -94,14 +94,6 @@ class EmpireLedgerTests(unittest.TestCase):
             ("user:" + username, "SDG", 100000),
             ("external:test_fx_user_sdg", "SDG", -100000),
         ], "test user SDG funding")
-        post("TEST-FX-RESERVE-SDG", [
-            ("fx:reserve", "SDG", 560000),
-            ("external:test_fx_reserve_sdg", "SDG", -560000),
-        ], "test SDG exchange reserve")
-        post("TEST-FX-RESERVE-URC", [
-            ("fx:reserve", "URC", 100),
-            ("external:test_fx_reserve_urc", "URC", -100),
-        ], "test URC exchange reserve")
         d.commit()
 
         first_quote = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=10")
@@ -111,8 +103,8 @@ class EmpireLedgerTests(unittest.TestCase):
         self.assertEqual(first_quote_data["wallet_balance"], 100)
         self.assertEqual(first_quote_data["max_convertible"], 97)
 
-        # An amount above the available limit still gets a conversion preview,
-        # while confirmation remains disabled because the wallet/reserve is insufficient.
+        # An amount above the wallet limit still gets a conversion preview,
+        # while confirmation remains disabled because the source wallet is insufficient.
         oversized = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=200").get_json()
         self.assertFalse(oversized["valid"])
         self.assertEqual(oversized["converted"], 1120000)
@@ -124,8 +116,10 @@ class EmpireLedgerTests(unittest.TestCase):
             "quote_id": first_quote_data["quote_id"],
         }, follow_redirects=True)
         self.assertEqual(first.status_code, 200)
-        self.assertEqual(fx_reserve_balance("SDG"), 504000)
+        self.assertEqual(fx_reserve_balance("SDG"), 0)
         self.assertEqual(balance(username, "SDG"), 156000)
+        self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"], 10)
+        self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:sdg' AND currency='SDG'").fetchone()["n"], -56000)
         balance_after_first = balance(username, "URC")
         replay = client.post("/store/exchange", data={
             "csrf": csrf_token, "direction": "URC_TO_SDG", "amount": "10",
@@ -143,8 +137,10 @@ class EmpireLedgerTests(unittest.TestCase):
             "quote_id": second_quote_data["quote_id"],
         }, follow_redirects=True)
         self.assertEqual(second.status_code, 200)
-        self.assertEqual(fx_reserve_balance("URC"), 100)
+        self.assertEqual(fx_reserve_balance("URC"), 0)
         self.assertEqual(balance(username, "URC"), 99)
+        self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:sdg' AND currency='SDG'").fetchone()["n"], 0)
+        self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"], 0)
 
         protection_fees = d.execute(
             "SELECT COALESCE(SUM(delta),0) n FROM es_ledger "
@@ -198,10 +194,6 @@ class EmpireLedgerTests(unittest.TestCase):
             ("user:founder", "URC", 100),
             ("external:test_fx_rate_user", "URC", -100),
         ], "test FX user funding")
-        post("TEST-FX-RATE-RESERVE", [
-            ("fx:reserve", "SDG", 1000000),
-            ("external:test_fx_rate_reserve", "SDG", -1000000),
-        ], "test FX reserve funding")
         d.commit()
 
         old_quote = client.get("/store/exchange/quote?direction=URC_TO_SDG&amount=10").get_json()
@@ -228,8 +220,10 @@ class EmpireLedgerTests(unittest.TestCase):
         }, follow_redirects=True)
         self.assertEqual(executed.status_code, 200)
         self.assertEqual(balance("founder", "SDG"), 62000)
-        self.assertEqual(fx_reserve_balance("SDG"), 938000)
+        self.assertEqual(fx_reserve_balance("SDG"), 0)
         self.assertEqual(balance("founder", "URC"), 89)
+        self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:urc' AND currency='URC'").fetchone()["n"], 10)
+        self.assertEqual(d.execute("SELECT COALESCE(SUM(delta),0) n FROM es_ledger WHERE account='issuer:sdg' AND currency='SDG'").fetchone()["n"], -62000)
 
     def test_urc_supply_cap_counts_issued_units(self):
         d = db()
