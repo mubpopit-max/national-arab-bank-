@@ -564,7 +564,7 @@ def decrypt_encrypted(token):
     try:
         return encryption().decrypt(token)
     except InvalidToken:
-        return _legacy_decrypt_encrypted(token)
+        return _legacy_encryption().decrypt(token)
 
 def page(title,body,**ctx):
     shell="""<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>
