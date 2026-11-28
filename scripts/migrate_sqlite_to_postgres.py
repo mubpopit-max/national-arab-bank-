@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import MetaData, create_engine, inspect, select, text
+from sqlalchemy import MetaData, create_engine, func, inspect, select, text
 from sqlalchemy.engine import URL, make_url
 
 
@@ -191,11 +191,11 @@ def main() -> int:
                     if not sequence:
                         continue
                     maximum = dst.execute(
-                        select(__import__("sqlalchemy").func.max(column))
+                        select(func.max(column))
                     ).scalar_one()
                     if maximum is not None:
                         dst.execute(
-                            text("SELECT setval(:sequence_name, :value, true)"),
+                            text("SELECT setval(CAST(:sequence_name AS regclass), :value, true)"),
                             {"sequence_name": sequence, "value": maximum},
                         )
 
