@@ -125,6 +125,22 @@ def init_db():
     CREATE TABLE IF NOT EXISTS es_loyalty_ledger(
       id INTEGER PRIMARY KEY, username TEXT NOT NULL, reference TEXT UNIQUE NOT NULL,
       points_delta INTEGER NOT NULL, memo TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS es_phone_topup_orders(
+      id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL, buyer TEXT NOT NULL,
+      network TEXT NOT NULL CHECK(network IN ('ZAIN','SUDANI','MTN')),
+      phone_number TEXT NOT NULL, recharge_amount_sdg INTEGER NOT NULL CHECK(recharge_amount_sdg>0),
+      payable_sdg INTEGER NOT NULL CHECK(payable_sdg>0), discount_percent INTEGER NOT NULL DEFAULT 0 CHECK(discount_percent IN (0,3,5,10)),
+      coupon_code TEXT, status TEXT NOT NULL DEFAULT 'PROCESSING' CHECK(status IN ('PROCESSING','COMPLETED')),
+      completed_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT);
+    CREATE INDEX IF NOT EXISTS es_phone_topup_status ON es_phone_topup_orders(status,id DESC);
+    CREATE INDEX IF NOT EXISTS es_phone_topup_buyer ON es_phone_topup_orders(buyer,id DESC);
+    CREATE TABLE IF NOT EXISTS es_discount_coupons(
+      id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, owner TEXT NOT NULL,
+      discount_percent INTEGER NOT NULL CHECK(discount_percent IN (3,5,10)),
+      source TEXT NOT NULL DEFAULT 'LOYALTY', status TEXT NOT NULL DEFAULT 'AVAILABLE'
+        CHECK(status IN ('AVAILABLE','USED','REVOKED')),
+      created_at TEXT NOT NULL, used_at TEXT, used_reference TEXT);
+    CREATE INDEX IF NOT EXISTS es_discount_coupon_owner ON es_discount_coupons(owner,status,id DESC);
     CREATE TABLE IF NOT EXISTS es_manager_permissions(
       username TEXT NOT NULL, permission TEXT NOT NULL, granted_by TEXT NOT NULL,
       created_at TEXT NOT NULL, PRIMARY KEY(username,permission));
@@ -779,9 +795,14 @@ def loyalty():
     member=db().execute("SELECT points,badge,joined_at FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
     points=int(member["points"]) if member else 0
     ledger=db().execute("SELECT reference,points_delta,memo,created_at FROM es_loyalty_ledger WHERE username=? ORDER BY id DESC LIMIT 100",(u["username"],)).fetchall()
-    body=render_template_string("""<section class='premium-banner'><span class='ice-badge'>★ برنامج الولاء</span><h1>نقاط الولاء</h1><strong class='loyalty-points'>{{'{:,}'.format(points)}}</strong><p>إجمالي نقاطك المتاحة</p>{% if member %}<span class='tag'>❄ عميل آيس ستوري مميز</span>{% else %}<p>يمكنك تفعيل عضوية آيس ستوري باستخدام الكود الحصري الذي تحصل عليه من آيس ستوري.</p><a class='btn' href='/store/ice-empire'>تفعيل عضوية آيس ستوري</a>{% endif %}</section>
-      <section class='panel'><h2>سجل النقاط</h2>{% for x in ledger %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}} · {{x['reference']}}</small></div><b class='transaction-value {{'in' if x['points_delta']>0 else 'out'}}'>{{'+' if x['points_delta']>0 else ''}}{{x['points_delta']}} نقطة</b></article>{% else %}<div class='empty-state'>لم تُسجل نقاط في حسابك بعد.</div>{% endfor %}</section>
-      <section class='panel'><h2>استبدال النقاط</h2><p>رصيد النقاط وسجل اكتسابها ظاهران هنا. لم يُفعّل الاستبدال بعد حتى نعتمد المكافآت وقيمة كل مكافأة وعدد النقاط المطلوب لها.</p></section>""",points=points,member=member,ledger=ledger)
+    coupons=db().execute("SELECT code,discount_percent,created_at FROM es_discount_coupons WHERE owner=? AND status='AVAILABLE' ORDER BY id DESC",(u["username"],)).fetchall()
+    body=render_template_string("""<section class='premium-banner'><span class='ice-badge'>★ برنامج الولاء</span><h1>نقاط الولاء</h1><strong class='loyalty-points'>{{'{:,}'.format(points)}}</strong><p>كل 1,000 نقطة تمنحك خيار استبدالها بـ 1 URC أو الحصول على كوبون خصم عشوائي.</p>
+      <div class='grid'><form method='post' action='/store/loyalty/redeem' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reward' value='URC'><button {% if points<1000 %}disabled{% endif %}>استبدال 1,000 نقطة بـ 1 URC</button></form>
+      <form method='post' action='/store/loyalty/redeem' class='panel'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reward' value='COUPON'><button {% if points<1000 %}disabled{% endif %}>استلام كوبون خصم عشوائي</button></form></div>
+      <p class='muted'>الكوبون العشوائي يمنح خصماً بنسبة 3% أو 5% أو 10%، ويُستخدم مرة واحدة في الخدمات التي تتيح الكوبونات.</p>
+      {% if member %}<span class='tag'>❄ عميل آيس ستوري مميز</span>{% else %}<p>يمكنك تفعيل عضوية آيس ستوري باستخدام الكود الحصري الذي تحصل عليه من آيس ستوري.</p><a class='btn' href='/store/ice-empire'>تفعيل عضوية آيس ستوري</a>{% endif %}</section>
+      <section class='panel'><h2>كوبوناتي المتاحة</h2>{% for c in coupons %}<article class='transaction-row'><div class='transaction-info'><b>{{c['discount_percent']}}% خصم</b><small>{{c['created_at'][:16]}}</small></div><code>{{c['code']}}</code></article>{% else %}<p class='empty-state'>لا توجد كوبونات متاحة حالياً.</p>{% endfor %}</section>
+      <section class='panel'><h2>سجل النقاط</h2>{% for x in ledger %}<article class='transaction-row'><div class='transaction-info'><b>{{x['memo']}}</b><small>{{x['created_at'][:16]}} · {{x['reference']}}</small></div><b class='transaction-value {{'in' if x['points_delta']>0 else 'out'}}'>{{'+' if x['points_delta']>0 else ''}}{{x['points_delta']}} نقطة</b></article>{% else %}<div class='empty-state'>لم تُسجل نقاط في حسابك بعد.</div>{% endfor %}</section>""",points=points,member=member,ledger=ledger,coupons=coupons,csrf=session.get("csrf",""))
     return page("نقاط الولاء",body)
 
 @empire_bp.route("/admin/identity",methods=["GET","POST"])
@@ -1255,6 +1276,7 @@ def home():
     <a class="service-card" href="/account/funding"><i class="service-icon funding"><svg><use href="#i-arrow-down"/></svg></i><strong>تغذية حسابي</strong></a>
     <a class="service-card" href="/store/profile"><i class="service-icon profile"><svg><use href="#i-user"/></svg></i><strong>ملفي الشخصي</strong></a>
     <a class="service-card" href="/store/topups"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>الألعاب</strong></a>
+    <a class="service-card" href="/store/phone-topup"><i class="service-icon games"><svg><use href="#i-game"/></svg></i><strong>شحن رصيد الهاتف</strong></a>
     <a class="service-card" href="/store/exchange"><i class="service-icon exchange"><svg><use href="#i-exchange"/></svg></i><strong>تحويل العملة</strong></a>
     <a class="service-card" href="/store/history"><i class="service-icon funding"><svg><use href="#i-bell"/></svg></i><strong>المعاملات السابقة</strong></a>
     <a class="service-card" href="/store/withdrawal"><i class="service-icon withdraw"><svg><use href="#i-arrow-down"/></svg></i><strong>السحب</strong></a>
@@ -2270,6 +2292,7 @@ def admin():
     {% if is_founder or 'exchange' in manager_permissions %}<a href='{{url_for('empire.admin_exchange')}}'><b>إدارة تحويل العملة</b><small>أسعار التحويل وأرصدة السيولة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>02 · تنفيذ الخدمات</span><h2>الطلبات والتسليم</h2></div><div class='grid admin-links'>
     {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_topups')}}'><b>أكواد شحن الألعاب</b><small>{{stats['topups']}} طلب قيد التنفيذ</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
+    {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_phone_topups')}}'><b>شحن رصيد الهاتف</b><small>طلبات زين وسوداني وMTN اليدوية</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_market_orders')}}'><b>طلبات المتجر والصفقات</b><small>{{stats['market_orders']}} صفقة مفتوحة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}
     {% if is_founder or 'orders' in manager_permissions %}<a href='{{url_for('empire.admin_disputes')}}'><b>النزاعات والشكاوى</b><small>مراجعة الحالات المفتوحة</small><span class='admin-open'>فتح القسم ←</span></a>{% endif %}</div></section>{% endif %}
     {% if is_founder or 'products' in manager_permissions or 'catalog' in manager_permissions or 'agents' in manager_permissions %}<section class='admin-section'><div class='admin-section-head'><span>03 · المنتجات والشركاء</span><h2>إدارة الكتالوج والوكلاء</h2></div><div class='grid admin-links'>
@@ -2754,3 +2777,150 @@ def register_empire_store(app):
     app.teardown_appcontext(close_db)
     with app.app_context():
         init_db()
+
+
+@empire_bp.route("/loyalty/redeem",methods=["POST"])
+@login_required
+def loyalty_redeem():
+    csrf()
+    u=user(); reward=(request.form.get("reward") or "").strip()
+    if reward not in ("URC","COUPON"): abort(400)
+    d=db(); d.execute("BEGIN IMMEDIATE")
+    try:
+        member=d.execute("SELECT points FROM es_loyalty_members WHERE username=?",(u["username"],)).fetchone()
+        if not member or int(member["points"])<1000:
+            raise ValueError("تحتاج إلى 1,000 نقطة على الأقل للاستبدال.")
+        stamp=now(); reference="LOY-"+secrets.token_hex(8).upper()
+        changed=d.execute("UPDATE es_loyalty_members SET points=points-1000,updated_at=? WHERE username=? AND points>=1000",(stamp,u["username"])).rowcount
+        if changed!=1: raise ValueError("تعذر خصم النقاط؛ حدّث الصفحة وحاول مجدداً.")
+        if reward=="URC":
+            assert_epc_capacity(1)
+            post(reference,[( "user:"+u["username"],"URC",1),("issuer:urc","URC",-1)],"استبدال 1,000 نقطة ولاء مقابل 1 URC")
+            memo="استبدال 1,000 نقطة مقابل 1 URC"
+            message="تم إضافة 1 URC إلى محفظتك مقابل 1,000 نقطة ولاء."
+        else:
+            percent=secrets.choice((3,5,10))
+            code="EMP-"+secrets.token_hex(5).upper()
+            d.execute("INSERT INTO es_discount_coupons(code,owner,discount_percent,source,status,created_at) VALUES(?,?,?,'LOYALTY','AVAILABLE',?)",
+                      (code,u["username"],percent,stamp))
+            memo="استبدال 1,000 نقطة بكوبون خصم عشوائي "+str(percent)+"%"
+            message="مبروك! حصلت على كوبون خصم "+str(percent)+"%: "+code+" · يستخدم مرة واحدة في الخدمات التي تتيح الكوبونات."
+        d.execute("INSERT INTO es_loyalty_ledger(username,reference,points_delta,memo,created_at) VALUES(?,?, -1000,?,?)",
+                  (u["username"],reference,memo,stamp))
+        d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                  (u["username"],"مكافأة نقاط الولاء",message,reference,stamp))
+        audit(u["username"],"LOYALTY_REDEEMED","loyalty",reference,reward)
+        d.commit(); flash(message)
+    except Exception as exc:
+        d.rollback(); flash(str(exc))
+    return redirect(url_for("empire.loyalty"))
+
+@empire_bp.route("/phone-topup",methods=["GET","POST"])
+@login_required
+def phone_topup():
+    u=user(); session.setdefault("csrf",secrets.token_urlsafe(32))
+    if request.method=="POST":
+        csrf()
+        network=(request.form.get("network") or "").strip()
+        phone=(request.form.get("phone_number") or "").strip()
+        try: amount=money_int(request.form.get("amount_sdg"))
+        except ValueError as exc:
+            flash(str(exc)); return redirect(url_for("empire.phone_topup"))
+        coupon_code=(request.form.get("coupon_code") or "").strip().upper()
+        if network not in ("ZAIN","SUDANI","MTN"):
+            flash("اختر شبكة اتصال صحيحة."); return redirect(url_for("empire.phone_topup"))
+        if not re.fullmatch(r"\+?[0-9]{9,15}",phone):
+            flash("رقم الهاتف غير صحيح. أدخل الرقم من 9 إلى 15 رقماً."); return redirect(url_for("empire.phone_topup"))
+        d=db(); d.execute("BEGIN IMMEDIATE")
+        try:
+            discount=0; coupon=None
+            if coupon_code:
+                coupon=d.execute("SELECT * FROM es_discount_coupons WHERE code=? AND owner=? AND status='AVAILABLE'",(coupon_code,u["username"])).fetchone()
+                if not coupon: raise ValueError("الكوبون غير صحيح أو سبق استخدامه أو لا يخص حسابك.")
+                discount=int(coupon["discount_percent"])
+            payable=amount if not discount else max(1,(amount*(100-discount)+99)//100)
+            if balance(u["username"],"SDG")<payable:
+                raise ValueError("رصيد SDG غير كافٍ لإرسال طلب الشحن.")
+            r=ref(); stamp=now()
+            post(r,[( "user:"+u["username"],"SDG",-payable),("clearing:phone_topups","SDG",payable)],
+                 "طلب شحن رصيد هاتف "+network+" إلى "+phone)
+            d.execute("""INSERT INTO es_phone_topup_orders
+              (reference,buyer,network,phone_number,recharge_amount_sdg,payable_sdg,discount_percent,coupon_code,status,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,?, 'PROCESSING',?,?)""",
+              (r,u["username"],network,phone,amount,payable,discount,coupon_code or None,stamp,stamp))
+            if coupon:
+                used=d.execute("UPDATE es_discount_coupons SET status='USED',used_at=?,used_reference=? WHERE id=? AND status='AVAILABLE'",
+                               (stamp,r,coupon["id"])).rowcount
+                if used!=1: raise ValueError("تعذر حجز الكوبون؛ ربما استُخدم في طلب آخر.")
+            network_name={"ZAIN":"زين","SUDANI":"سوداني","MTN":"MTN"}[network]
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (u["username"],"طلب شحن الهاتف قيد التنفيذ",
+                       "استلمنا طلب شحن "+network_name+" للرقم "+phone+" بقيمة "+format(amount,",")+" SDG. سيظهر مكتملًا بعد تأكيد الإدارة. المرجع: "+r,r,stamp))
+            audit(u["username"],"PHONE_TOPUP_CREATED","phone_topup",r,"network="+network+";payable="+str(payable))
+            d.commit(); flash("تم استلام طلبك وهو الآن قيد التنفيذ.")
+            return redirect(url_for("empire.phone_topup_orders"))
+        except Exception as exc:
+            d.rollback(); flash(str(exc))
+    coupons=db().execute("SELECT code,discount_percent FROM es_discount_coupons WHERE owner=? AND status='AVAILABLE' ORDER BY id DESC",(u["username"],)).fetchall()
+    body=render_template_string("""<section class='panel'><span class='tag'>شحن يدوي عبر الإدارة</span><h1>شحن رصيد الهاتف</h1><p>اختر الشبكة وأدخل رقم الهاتف وقيمة الشحن. يُخصم المبلغ من محفظة SDG ويظل الطلب قيد التنفيذ حتى تؤكد الإدارة إتمام الشحن.</p>
+      <form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><label>شبكة الاتصال</label><select name='network' required><option value=''>اختر الشبكة</option><option value='ZAIN'>زين</option><option value='SUDANI'>سوداني</option><option value='MTN'>MTN</option></select>
+      <label>رقم الهاتف</label><input name='phone_number' type='tel' inputmode='tel' maxlength='16' placeholder='09xxxxxxxx' required>
+      <label>مبلغ الشحن SDG</label><input name='amount_sdg' type='number' min='1' step='1' inputmode='numeric' required>
+      <label>كوبون الخصم (اختياري)</label><select name='coupon_code'><option value=''>بدون كوبون</option>{% for c in coupons %}<option value='{{c['code']}}'>{{c['code']}} · {{c['discount_percent']}}% خصم</option>{% endfor %}</select>
+      <button>إرسال طلب الشحن</button></form></section><section class='panel'><a class='btn secondary' href='/store/phone-topup/orders'>متابعة طلباتي</a></section>""",
+      csrf=session.get("csrf",""),coupons=coupons)
+    return page("شحن رصيد الهاتف",body)
+
+@empire_bp.get("/phone-topup/orders")
+@login_required
+def phone_topup_orders():
+    u=user()
+    rows=db().execute("SELECT * FROM es_phone_topup_orders WHERE buyer=? ORDER BY id DESC LIMIT 100",(u["username"],)).fetchall()
+    labels={"PROCESSING":"قيد التنفيذ","COMPLETED":"مكتمل"}
+    body=render_template_string("""<section class='panel'><h1>طلبات شحن الهاتف</h1>{% for x in rows %}<article class='panel'><div class='order-head'><b dir='ltr'>{{x['reference']}}</b><span class='tag'>{{labels[x['status']]}}</span></div>
+      <p>الشبكة: {{ {'ZAIN':'زين','SUDANI':'سوداني','MTN':'MTN'}[x['network']] }} · الرقم: <b dir='ltr'>{{x['phone_number']}}</b></p>
+      <p>قيمة الشحن: {{'{:,}'.format(x['recharge_amount_sdg'])}} SDG · المدفوع: {{'{:,}'.format(x['payable_sdg'])}} SDG</p>
+      {% if x['discount_percent'] %}<p>الخصم: {{x['discount_percent']}}%</p>{% endif %}<small>{{x['created_at']}}</small></article>{% else %}<p class='empty-state'>لا توجد طلبات شحن بعد.</p>{% endfor %}</section>""",rows=rows,labels=labels)
+    return page("طلباتي · شحن الهاتف",body)
+
+@empire_bp.route("/admin/phone-topups",methods=["GET","POST"])
+@login_required
+@admin_permission("orders")
+def admin_phone_topups():
+    session.setdefault("csrf",secrets.token_urlsafe(32))
+    d=db()
+    if request.method=="POST":
+        csrf(); reference=(request.form.get("reference") or "").strip()
+        d.execute("BEGIN IMMEDIATE")
+        try:
+            order=d.execute("SELECT * FROM es_phone_topup_orders WHERE reference=? AND status='PROCESSING'",(reference,)).fetchone()
+            if not order: raise ValueError("الطلب غير موجود أو سبق إكماله.")
+            stamp=now()
+            changed=d.execute("UPDATE es_phone_topup_orders SET status='COMPLETED',completed_by=?,completed_at=?,updated_at=? WHERE reference=? AND status='PROCESSING'",
+                              (user()["username"],stamp,stamp,reference)).rowcount
+            if changed!=1: raise ValueError("تم تحديث الطلب من إدارة أخرى.")
+            d.execute("INSERT INTO notifications(username,title,message,reference,is_read,created_at) VALUES(?,?,?,?,0,?)",
+                      (order["buyer"],"تم تنفيذ شحن رصيد هاتفك","أكدت الإدارة تنفيذ شحن "+{"ZAIN":"زين","SUDANI":"سوداني","MTN":"MTN"}[order["network"]]+" للرقم "+order["phone_number"]+". أصبحت حالة الطلب مكتمل. المرجع: "+reference,reference,stamp))
+            audit(user()["username"],"PHONE_TOPUP_COMPLETED","phone_topup",reference)
+            d.commit(); flash("تم تأكيد تنفيذ الطلب وإشعار العميل.")
+        except Exception as exc:
+            d.rollback(); flash(str(exc))
+        return redirect(url_for("empire.admin_phone_topups"))
+    status=(request.args.get("status") or "ALL").upper()
+    if status not in ("ALL","PROCESSING","COMPLETED"): abort(400)
+    query="SELECT t.*,u.full_name FROM es_phone_topup_orders t LEFT JOIN users u ON u.username=t.buyer"
+    params=()
+    if status!="ALL": query+=" WHERE t.status=?"; params=(status,)
+    query+=" ORDER BY t.id DESC LIMIT 300"
+    rows=d.execute(query,params).fetchall()
+    labels={"PROCESSING":"قيد التنفيذ","COMPLETED":"مكتمل"}
+    body=render_template_string("""<section class='panel'><h1>طلبات شحن رصيد الهاتف</h1><p>نفّذ الشحن يدوياً لدى شركة الاتصالات، ثم اضغط «تم التنفيذ». لن يرى العميل الحالة مكتمل قبل هذا التأكيد.</p>
+      <div class='admin-filters'><a href='/store/admin/phone-topups'>الكل</a><a href='/store/admin/phone-topups?status=PROCESSING'>قيد التنفيذ</a><a href='/store/admin/phone-topups?status=COMPLETED'>مكتملة</a></div>
+      {% for x in rows %}<article class='panel order-card'><div class='order-head'><b dir='ltr'>{{x['reference']}}</b><span class='tag'>{{labels[x['status']]}}</span></div>
+      <p>العميل: {{x['full_name'] or x['buyer']}}</p><p>الشبكة: {{ {'ZAIN':'زين','SUDANI':'سوداني','MTN':'MTN'}[x['network']] }} · رقم الهاتف: <b dir='ltr'>{{x['phone_number']}}</b></p>
+      <p>قيمة الشحن: {{'{:,}'.format(x['recharge_amount_sdg'])}} SDG · المحصل: {{'{:,}'.format(x['payable_sdg'])}} SDG</p>
+      {% if x['coupon_code'] %}<p>الكوبون: {{x['coupon_code']}} · الخصم {{x['discount_percent']}}%</p>{% endif %}<small>{{x['created_at']}}</small>
+      {% if x['status']=='PROCESSING' %}<form method='post'><input type='hidden' name='csrf' value='{{csrf}}'><input type='hidden' name='reference' value='{{x['reference']}}'><button>تم التنفيذ ✓</button></form>{% endif %}</article>{% else %}<p class='empty-state'>لا توجد طلبات.</p>{% endfor %}</section>""",rows=rows,labels=labels,csrf=session.get("csrf",""))
+    return page("إدارة شحن الهاتف",body)
+
+
